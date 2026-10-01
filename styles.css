@@ -557,6 +557,7 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
 .lock-card .field-error:empty { display: none; }
 .lock-card .panel-actions { margin-top: 12px; }
 .lock-card .panel-actions .btn { flex: 1; }
+#code-input { text-align: center; letter-spacing: 0.35em; font-size: 18px; }
 
 /* ---------- Toasts ---------- */
 .toasts {

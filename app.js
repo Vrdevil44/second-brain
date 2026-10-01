@@ -75,9 +75,10 @@
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json, only GET.
+      // Same origin: only graph.json and mfa.json, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
-      if (m === 'GET' && isGraph && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
+      if (m === 'GET' && (isGraph || isMfa) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       throw new Error('Blocked by privacy rule: ' + m + ' ' + u.pathname);
     }
 
@@ -207,6 +208,71 @@
       typeof o.salt === 'string' && typeof o.iv === 'string' && typeof o.data === 'string';
   }
 
+  // ---- TOTP (RFC 6238, SHA-1, 30s step, 6 digits) -----------------------------
+  // The second factor. The TOTP secret is published only inside mfa.json,
+  // AES-256-GCM encrypted with the password (see encrypt-mfa.mjs), so the
+  // page learns it only after a correct password, keeps it in memory for the
+  // code check, then drops it. The owner scans the matching QR code into
+  // their authenticator app once at setup.
+  function base32ToBytes(s) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    const clean = String(s).replace(/=+$/, '').toUpperCase();
+    let bits = 0, value = 0;
+    const out = [];
+    for (const ch of clean) {
+      const idx = alphabet.indexOf(ch);
+      if (idx < 0) throw new Error('bad base32');
+      value = (value << 5) | idx;
+      bits += 5;
+      if (bits >= 8) { out.push((value >>> (bits - 8)) & 0xff); bits -= 8; }
+    }
+    return new Uint8Array(out);
+  }
+
+  async function totpCode(secretBytes, counter) {
+    const key = await crypto.subtle.importKey(
+      'raw', secretBytes, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+    const msg = new ArrayBuffer(8);
+    const view = new DataView(msg);
+    view.setUint32(0, Math.floor(counter / 0x100000000));
+    view.setUint32(4, counter >>> 0);
+    const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg));
+    const offset = mac[mac.length - 1] & 0x0f;
+    const bin = ((mac[offset] & 0x7f) << 24) |
+      (mac[offset + 1] << 16) | (mac[offset + 2] << 8) | mac[offset + 3];
+    return String(bin % 1000000).padStart(6, '0');
+  }
+
+  // Accepts the previous, current, or next 30s window to tolerate clock skew.
+  async function verifyTotp(secretB32, code) {
+    let secretBytes;
+    try { secretBytes = base32ToBytes(secretB32); } catch (e) { return false; }
+    const counter = Math.floor(Date.now() / 30000);
+    for (const c of [counter - 1, counter, counter + 1]) {
+      if (await totpCode(secretBytes, c) === code) return true;
+    }
+    return false;
+  }
+
+  // Returns the TOTP secret when mfa.json is published and decrypts with the
+  // password; null when MFA is not configured (mfa.json missing). Throws on a
+  // wrong password exactly like a graph decrypt failure, so the caller can
+  // show the same "wrong password" message.
+  async function loadMfaSecret(password) {
+    let res;
+    try {
+      res = await guardedFetch('mfa.json', { cache: 'no-store' });
+    } catch (e) {
+      return null;
+    }
+    if (!res.ok) return null;
+    const menv = await res.json();
+    if (!isEnvelope(menv)) throw new Error('bad mfa envelope');
+    const mobj = await decryptEnvelope(menv, password);
+    if (!mobj || typeof mobj.secret !== 'string') throw new Error('bad mfa payload');
+    return mobj.secret;
+  }
+
   async function decryptEnvelope(env, password) {
     const subtle = crypto.subtle;
     const salt = b64ToBytes(env.salt);
@@ -222,20 +288,32 @@
   }
 
   // Shows the lock screen and resolves with the decrypted graph once the
-  // password is correct. Loops on wrong passwords; never stores the password.
+  // password (and, when MFA is configured, the TOTP code) is correct.
+  // Loops on wrong passwords/codes; never stores the password.
   async function unlockWithPassword(envelope) {
     const lock = $('#lockscreen');
+    const stepPw = $('#lock-step-password');
+    const stepCode = $('#lock-step-code');
     const input = $('#lock-input');
     const error = $('#lock-error');
     const btn = $('#lock-unlock');
+    const codeInput = $('#code-input');
+    const codeError = $('#code-error');
+    const codeBtn = $('#code-verify');
     lock.hidden = false;
+    stepPw.hidden = false;
+    stepCode.hidden = true;
+
+    // ---- Step 1: password -------------------------------------------------
+    let password = '';
+    let mfaSecret = null;
     let hint = '';
     for (;;) {
       error.textContent = hint;
       hint = '';
       input.value = '';
       setTimeout(() => input.focus(), 50);
-      const password = await new Promise((resolve) => {
+      password = await new Promise((resolve) => {
         const go = () => {
           const pw = input.value;
           input.value = '';
@@ -248,13 +326,52 @@
       });
       if (!password) { hint = 'Enter your password.'; continue; }
       try {
-        const data = await decryptEnvelope(envelope, password);
-        lock.hidden = true;
-        return data;
+        mfaSecret = await loadMfaSecret(password);
+        if (mfaSecret === null) {
+          // No MFA configured: validate the password against the graph itself.
+          await decryptEnvelope(envelope, password);
+        }
+        break;
       } catch (e) {
         hint = 'Wrong password. Try again.';
       }
     }
+
+    // ---- Step 2: TOTP rolling code (only when MFA is configured) ---------
+    if (mfaSecret !== null) {
+      stepPw.hidden = true;
+      stepCode.hidden = false;
+      let codeHint = '';
+      for (;;) {
+        codeError.textContent = codeHint;
+        codeHint = '';
+        codeInput.value = '';
+        setTimeout(() => codeInput.focus(), 50);
+        const code = await new Promise((resolve) => {
+          const go = () => {
+            const c = codeInput.value.trim();
+            codeInput.value = '';
+            codeBtn.onclick = null;
+            codeInput.onkeydown = null;
+            resolve(c);
+          };
+          codeBtn.onclick = go;
+          codeInput.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+        });
+        if (!/^\d{6}$/.test(code)) {
+          codeHint = 'Enter the 6-digit code from your authenticator app.';
+          continue;
+        }
+        if (await verifyTotp(mfaSecret, code)) break;
+        codeHint = 'Wrong code. Check your authenticator app and try again.';
+      }
+      mfaSecret = null; // drop it from memory once verified
+    }
+
+    const data = await decryptEnvelope(envelope, password);
+    password = '';
+    lock.hidden = true;
+    return data;
   }
 
   // ---- Load + sanitize graph.json -------------------------------------------
