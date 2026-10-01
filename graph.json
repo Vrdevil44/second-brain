@@ -1,0 +1,351 @@
+{
+  "version": 1,
+  "demo": true,
+  "generated": "2026-10-01T07:00:00Z",
+  "nodes": [
+    {
+      "id": "c-career",
+      "label": "Career & IT Craft",
+      "type": "cluster",
+      "size": 14
+    },
+    {
+      "id": "c-markets",
+      "label": "Markets & Trading",
+      "type": "cluster",
+      "size": 12
+    },
+    {
+      "id": "c-health",
+      "label": "Health & Energy",
+      "type": "cluster",
+      "size": 8
+    },
+    {
+      "id": "c-projects",
+      "label": "Side Projects",
+      "type": "cluster",
+      "size": 10
+    },
+    {
+      "id": "c-learning",
+      "label": "Learning & Certs",
+      "type": "cluster",
+      "size": 9
+    },
+    {
+      "id": "c-money",
+      "label": "Money & Taxes",
+      "type": "cluster",
+      "size": 7
+    },
+    {
+      "id": "i-msp-playbook",
+      "label": "MSP onboarding playbook",
+      "type": "idea",
+      "size": 4
+    },
+    {
+      "id": "i-automation",
+      "label": "Automate client checks",
+      "type": "idea",
+      "size": 3
+    },
+    {
+      "id": "t-promotion",
+      "label": "Senior specialist by Q4",
+      "type": "target",
+      "size": 2
+    },
+    {
+      "id": "i-docs",
+      "label": "Better handoff docs",
+      "type": "idea",
+      "size": 2
+    },
+    {
+      "id": "i-ema",
+      "label": "500 EMA intraday setup",
+      "type": "idea",
+      "size": 5
+    },
+    {
+      "id": "i-journal",
+      "label": "Trade journal habit",
+      "type": "idea",
+      "size": 3
+    },
+    {
+      "id": "t-portfolio",
+      "label": "Grow portfolio 20%",
+      "type": "target",
+      "size": 2
+    },
+    {
+      "id": "i-crypto",
+      "label": "BTC/ETH position sizing",
+      "type": "idea",
+      "size": 2
+    },
+    {
+      "id": "t-gym",
+      "label": "Gym 4x a week",
+      "type": "target",
+      "size": 3
+    },
+    {
+      "id": "i-sleep",
+      "label": "Sleep before midnight",
+      "type": "idea",
+      "size": 2
+    },
+    {
+      "id": "i-meals",
+      "label": "Meal prep Sundays",
+      "type": "idea",
+      "size": 2
+    },
+    {
+      "id": "i-second-brain",
+      "label": "Second brain portal",
+      "type": "idea",
+      "size": 5
+    },
+    {
+      "id": "i-voice",
+      "label": "Voice note capture",
+      "type": "idea",
+      "size": 2
+    },
+    {
+      "id": "t-ship",
+      "label": "Ship portal v1",
+      "type": "target",
+      "size": 2
+    },
+    {
+      "id": "i-dashboard",
+      "label": "Trading dashboard",
+      "type": "idea",
+      "size": 3
+    },
+    {
+      "id": "t-netsec",
+      "label": "Pass NetSec cert",
+      "type": "target",
+      "size": 3
+    },
+    {
+      "id": "i-labs",
+      "label": "Lab a day",
+      "type": "idea",
+      "size": 3
+    },
+    {
+      "id": "i-powershell",
+      "label": "PowerShell toolkit",
+      "type": "idea",
+      "size": 2
+    },
+    {
+      "id": "t-tfsa",
+      "label": "Max TFSA this year",
+      "type": "target",
+      "size": 2
+    },
+    {
+      "id": "i-budget",
+      "label": "Monthly budget review",
+      "type": "idea",
+      "size": 2
+    },
+    {
+      "id": "i-fhsa",
+      "label": "Open FHSA",
+      "type": "idea",
+      "size": 1
+    }
+  ],
+  "edges": [
+    {
+      "from": "c-career",
+      "to": "i-msp-playbook",
+      "strength": 0.95
+    },
+    {
+      "from": "c-career",
+      "to": "i-automation",
+      "strength": 0.85
+    },
+    {
+      "from": "c-career",
+      "to": "t-promotion",
+      "strength": 0.75
+    },
+    {
+      "from": "c-career",
+      "to": "i-docs",
+      "strength": 0.65
+    },
+    {
+      "from": "c-markets",
+      "to": "i-ema",
+      "strength": 0.95
+    },
+    {
+      "from": "c-markets",
+      "to": "i-journal",
+      "strength": 0.85
+    },
+    {
+      "from": "c-markets",
+      "to": "t-portfolio",
+      "strength": 0.75
+    },
+    {
+      "from": "c-markets",
+      "to": "i-crypto",
+      "strength": 0.65
+    },
+    {
+      "from": "c-health",
+      "to": "t-gym",
+      "strength": 0.95
+    },
+    {
+      "from": "c-health",
+      "to": "i-sleep",
+      "strength": 0.85
+    },
+    {
+      "from": "c-health",
+      "to": "i-meals",
+      "strength": 0.75
+    },
+    {
+      "from": "c-projects",
+      "to": "i-second-brain",
+      "strength": 0.95
+    },
+    {
+      "from": "c-projects",
+      "to": "i-voice",
+      "strength": 0.85
+    },
+    {
+      "from": "c-projects",
+      "to": "t-ship",
+      "strength": 0.75
+    },
+    {
+      "from": "c-projects",
+      "to": "i-dashboard",
+      "strength": 0.65
+    },
+    {
+      "from": "c-learning",
+      "to": "t-netsec",
+      "strength": 0.95
+    },
+    {
+      "from": "c-learning",
+      "to": "i-labs",
+      "strength": 0.85
+    },
+    {
+      "from": "c-learning",
+      "to": "i-powershell",
+      "strength": 0.75
+    },
+    {
+      "from": "c-money",
+      "to": "t-tfsa",
+      "strength": 0.95
+    },
+    {
+      "from": "c-money",
+      "to": "i-budget",
+      "strength": 0.85
+    },
+    {
+      "from": "c-money",
+      "to": "i-fhsa",
+      "strength": 0.75
+    },
+    {
+      "from": "c-career",
+      "to": "c-learning",
+      "strength": 0.8
+    },
+    {
+      "from": "c-markets",
+      "to": "c-money",
+      "strength": 0.75
+    },
+    {
+      "from": "c-projects",
+      "to": "c-markets",
+      "strength": 0.5
+    },
+    {
+      "from": "c-projects",
+      "to": "c-career",
+      "strength": 0.4
+    },
+    {
+      "from": "c-health",
+      "to": "c-career",
+      "strength": 0.3
+    },
+    {
+      "from": "i-automation",
+      "to": "i-powershell",
+      "strength": 0.7
+    },
+    {
+      "from": "i-dashboard",
+      "to": "i-ema",
+      "strength": 0.65
+    },
+    {
+      "from": "i-dashboard",
+      "to": "i-journal",
+      "strength": 0.5
+    },
+    {
+      "from": "i-second-brain",
+      "to": "i-voice",
+      "strength": 0.6
+    },
+    {
+      "from": "t-netsec",
+      "to": "i-labs",
+      "strength": 0.9
+    },
+    {
+      "from": "t-portfolio",
+      "to": "t-tfsa",
+      "strength": 0.55
+    },
+    {
+      "from": "i-docs",
+      "to": "i-msp-playbook",
+      "strength": 0.7
+    },
+    {
+      "from": "i-sleep",
+      "to": "t-gym",
+      "strength": 0.45
+    },
+    {
+      "from": "t-promotion",
+      "to": "t-netsec",
+      "strength": 0.6
+    },
+    {
+      "from": "i-budget",
+      "to": "t-portfolio",
+      "strength": 0.35
+    }
+  ]
+}

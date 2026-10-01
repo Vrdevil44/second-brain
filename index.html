@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!--
+    Content Security Policy: scripts and styles only from this site, and the
+    only network destinations allowed are this site (for graph.json) and
+    api.github.com (for the dump uploads and the connection test).
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#07080d">
+  <title>Second Brain</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307080d'/%3E%3Ccircle cx='10' cy='12' r='4' fill='%238b7cff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%2338d6c4'/%3E%3Ccircle cx='17' cy='22' r='3.5' fill='%23ffb547'/%3E%3Cpath d='M10 12L22 11M10 12L17 22M22 11L17 22' stroke='%23ffffff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <canvas id="graph" aria-label="Knowledge graph. Drag to pan, scroll or pinch to zoom, click a node for details." role="img"></canvas>
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>Second Brain</h1>
+        <p class="brand-sub" id="graph-meta">Loading graph…</p>
+      </div>
+      <span class="badge badge-demo" id="demo-badge" hidden>Demo data</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-primary" id="open-dump" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Dump</span>
+      </button>
+      <button class="btn btn-icon" id="open-settings" type="button" aria-label="Settings" title="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <span class="status-dot" id="token-dot" aria-hidden="true"></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Legend -->
+  <aside class="legend" aria-label="Legend">
+    <span class="legend-item"><i class="dot dot-cluster"></i>Cluster</span>
+    <span class="legend-item"><i class="dot dot-idea"></i>Idea</span>
+    <span class="legend-item"><i class="dot dot-target"></i>Target</span>
+  </aside>
+
+  <!-- Zoom controls -->
+  <div class="zoom-controls" role="group" aria-label="Zoom">
+    <button class="btn btn-icon" id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in (+)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="btn btn-icon" id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out (-)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+    </button>
+    <button class="btn btn-icon" id="zoom-fit" type="button" aria-label="Fit graph to screen" title="Fit to screen (F)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
+
+  <!-- Graph status (loading / error) -->
+  <div class="graph-status" id="graph-status" role="status"></div>
+
+  <!-- Node details side panel -->
+  <aside class="panel node-panel" id="node-panel" aria-labelledby="node-title" hidden>
+    <div class="panel-head">
+      <span class="type-pill" id="node-type"></span>
+      <button class="btn btn-icon btn-ghost" id="close-node" type="button" aria-label="Close details">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <h2 id="node-title"></h2>
+    <dl class="stats">
+      <div><dt>Items</dt><dd id="node-count">0</dd></div>
+      <div><dt>Connections</dt><dd id="node-degree">0</dd></div>
+    </dl>
+    <h3 class="section-title">Connected to</h3>
+    <ul class="neighbors" id="node-neighbors"></ul>
+    <p class="muted small" id="node-empty" hidden>No connections yet.</p>
+  </aside>
+
+  <!-- Dump slide-over -->
+  <div class="scrim" id="dump-scrim" hidden></div>
+  <section class="panel dump-panel" id="dump-panel" aria-labelledby="dump-title" role="dialog" aria-modal="true" hidden>
+    <div class="panel-head">
+      <h2 id="dump-title">New dump</h2>
+      <button class="btn btn-icon btn-ghost" id="close-dump" type="button" aria-label="Close dump panel">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div id="dump-form-wrap">
+      <p class="muted small">Notes, links and files go straight into the private repo's <code>daily-dump/</code> folder. The nightly organizer sorts them into the graph.</p>
+
+      <div class="callout callout-warn" id="dump-token-warning" hidden>
+        <span>Dumping needs a GitHub token.</span>
+        <button class="btn btn-small" type="button" id="dump-open-settings">Open settings</button>
+      </div>
+
+      <label class="field-label" for="dump-text">Notes &amp; links</label>
+      <textarea id="dump-text" maxlength="50000" rows="8" placeholder="Brain-dump anything: ideas, targets, progress, links…"></textarea>
+      <div class="field-foot">
+        <span class="field-error" id="text-error" role="alert"></span>
+        <span class="counter" id="text-counter">0 / 50,000</span>
+      </div>
+
+      <span class="field-label" id="files-label">Files</span>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-labelledby="files-label" aria-describedby="dropzone-hint">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+        <p><strong>Drop files here</strong> or <span class="link-like">browse</span></p>
+        <p class="muted small" id="dropzone-hint">Up to 5 files, 25 MB each. Images, video, audio, documents, zip.</p>
+        <input type="file" id="file-input" multiple hidden
+               accept=".jpg,.jpeg,.png,.gif,.webp,.svg,.mp4,.webm,.mov,.mp3,.wav,.m4a,.ogg,.pdf,.txt,.md,.markdown,.doc,.docx,.csv,.zip">
+      </div>
+      <ul class="file-errors" id="file-errors" role="alert"></ul>
+      <ul class="file-list" id="file-list"></ul>
+
+      <div class="form-error" id="submit-error" role="alert"></div>
+
+      <div class="panel-actions">
+        <button class="btn btn-ghost" type="button" id="dump-clear">Clear</button>
+        <button class="btn btn-primary" type="button" id="dump-submit">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="label">Send to brain</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="success" id="dump-success" hidden>
+      <div class="success-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </div>
+      <h3>Dump saved</h3>
+      <p class="muted" id="success-detail"></p>
+      <p><a id="success-commit" href="#" target="_blank" rel="noopener noreferrer">View commit on GitHub</a></p>
+      <button class="btn btn-primary" type="button" id="dump-new">New dump</button>
+    </div>
+  </section>
+
+  <!-- Settings modal -->
+  <div class="modal-backdrop" id="settings-modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="panel-head">
+        <h2 id="settings-title">Settings</h2>
+        <button class="btn btn-icon btn-ghost" id="close-settings" type="button" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <label class="field-label" for="token-input">GitHub personal access token</label>
+      <div class="input-row">
+        <input id="token-input" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… or github_pat_…">
+        <button class="btn btn-small btn-ghost" type="button" id="token-toggle" aria-pressed="false">Show</button>
+      </div>
+      <div class="field-error" id="token-error" role="alert"></div>
+
+      <ul class="note-list small muted">
+        <li>Dumping requires the token. The graph works without it.</li>
+        <li>Stored only in this browser's localStorage and sent only to <code>api.github.com</code>.</li>
+        <li>Use a fine-grained token limited to <code>Vrdevil44/about-vibhu</code> with <em>Contents: Read and write</em>.</li>
+      </ul>
+
+      <div class="connection" id="connection-status" role="status"></div>
+
+      <div class="panel-actions">
+        <button class="btn btn-ghost" type="button" id="token-clear">Remove token</button>
+        <button class="btn" type="button" id="token-test">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="label">Test connection</span>
+        </button>
+        <button class="btn btn-primary" type="button" id="token-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
