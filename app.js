@@ -59,7 +59,12 @@
     cluster: '#8b7cff',
     idea: '#38d6c4',
     target: '#ffb547',
+    person: '#ff7eb6',
+    project: '#6aa7ff',
+    topic: '#9be564',
   };
+  // Node types the renderer knows. Anything else renders as 'unknown'.
+  const NODE_TYPES = Object.keys(TYPE_COLORS);
   const UNKNOWN_COLOR = '#8a8ea3';
 
   const $ = (sel) => document.querySelector(sel);
@@ -410,7 +415,7 @@
       if (!n || (typeof n.id !== 'string' && typeof n.id !== 'number')) continue;
       const id = String(n.id);
       if (graph.byId.has(id)) continue;
-      const type = ['cluster', 'idea', 'target'].includes(n.type) ? n.type : 'unknown';
+      const type = NODE_TYPES.includes(n.type) ? n.type : 'unknown';
       const size = clamp(Number(n.size) || 1, 1, 1000);
       const label = String(n.label == null ? id : n.label).slice(0, 120);
       const node = {

@@ -213,6 +213,9 @@ a:hover { color: #b0a6ff; }
 .dot-cluster { background: var(--cluster); box-shadow: 0 0 10px var(--cluster); }
 .dot-idea { background: var(--idea); box-shadow: 0 0 10px var(--idea); }
 .dot-target { background: var(--target); box-shadow: 0 0 10px var(--target); }
+.dot-person { background: #ff7eb6; box-shadow: 0 0 10px #ff7eb6; }
+.dot-project { background: #6aa7ff; box-shadow: 0 0 10px #6aa7ff; }
+.dot-topic { background: #9be564; box-shadow: 0 0 10px #9be564; }
 .dot-unknown { background: var(--text-3); }
 
 .zoom-controls {
