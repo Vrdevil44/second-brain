@@ -18,6 +18,23 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Password gate: the published graph.json is AES-256-GCM encrypted.
+       Nothing renders until the visitor unlocks it with the password. -->
+  <div class="lockscreen" id="lockscreen" hidden>
+    <div class="modal lock-card" role="dialog" aria-modal="true" aria-labelledby="lock-title">
+      <h2 id="lock-title">Second Brain</h2>
+      <p class="muted">This brain is encrypted. Enter your password to unlock it.</p>
+      <div class="field-error" id="lock-error" role="alert"></div>
+      <div class="input-row">
+        <input id="lock-input" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
+      </div>
+      <div class="panel-actions">
+        <button class="btn btn-primary" id="lock-unlock" type="button">Unlock</button>
+      </div>
+      <p class="muted small">The password never leaves this browser. Wrong passwords can't decrypt anything.</p>
+    </div>
+  </div>
+
   <canvas id="graph" aria-label="Knowledge graph. Drag to pan, scroll or pinch to zoom, click a node for details." role="img"></canvas>
 
   <!-- Top bar -->

@@ -7,6 +7,10 @@
  * or `organized/`. The ONLY data it may load is `graph.json`, which holds
  * sanitized cluster data (labels, types, sizes and links, no raw notes).
  *
+ * The published graph.json is AES-256-GCM encrypted (see encrypt-graph.mjs).
+ * It is decrypted in the visitor's browser with a password that is typed in,
+ * used once, and never stored or transmitted anywhere.
+ *
  * The only network requests this page is allowed to make are:
  *   1. GET  graph.json                         (same origin, sanitized data)
  *   2. GET  https://api.github.com/user        (settings: test connection)
@@ -186,6 +190,73 @@
   let needsDraw = true;
   let viewAnim = null;
 
+  // ---- Encrypted graph loading ------------------------------------------------
+  // The published graph.json is an AES-256-GCM envelope:
+  //   {"v":1,"salt":<b64>,"iv":<b64>,"data":<b64>}   (GCM auth tag appended)
+  // Key derivation: PBKDF2-SHA256(password, salt, 200000) -> 256-bit key.
+  // The password is typed by the visitor, used once, and never stored.
+  function b64ToBytes(b64) {
+    const bin = atob(b64);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function isEnvelope(o) {
+    return !!o && o.v === 1 &&
+      typeof o.salt === 'string' && typeof o.iv === 'string' && typeof o.data === 'string';
+  }
+
+  async function decryptEnvelope(env, password) {
+    const subtle = crypto.subtle;
+    const salt = b64ToBytes(env.salt);
+    const iv = b64ToBytes(env.iv);
+    const data = b64ToBytes(env.data);
+    const base = await subtle.importKey(
+      'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await subtle.deriveKey(
+      { name: 'PBKDF2', salt: salt, iterations: 200000, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+    const pt = await subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, data);
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+
+  // Shows the lock screen and resolves with the decrypted graph once the
+  // password is correct. Loops on wrong passwords; never stores the password.
+  async function unlockWithPassword(envelope) {
+    const lock = $('#lockscreen');
+    const input = $('#lock-input');
+    const error = $('#lock-error');
+    const btn = $('#lock-unlock');
+    lock.hidden = false;
+    let hint = '';
+    for (;;) {
+      error.textContent = hint;
+      hint = '';
+      input.value = '';
+      setTimeout(() => input.focus(), 50);
+      const password = await new Promise((resolve) => {
+        const go = () => {
+          const pw = input.value;
+          input.value = '';
+          btn.onclick = null;
+          input.onkeydown = null;
+          resolve(pw);
+        };
+        btn.onclick = go;
+        input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+      });
+      if (!password) { hint = 'Enter your password.'; continue; }
+      try {
+        const data = await decryptEnvelope(envelope, password);
+        lock.hidden = true;
+        return data;
+      } catch (e) {
+        hint = 'Wrong password. Try again.';
+      }
+    }
+  }
+
   // ---- Load + sanitize graph.json -------------------------------------------
   async function loadGraph() {
     const status = $('#graph-status');
@@ -193,7 +264,10 @@
     try {
       const res = await guardedFetch(CONFIG.graphUrl, { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
+      const body = await res.json();
+      // Published site serves the encrypted envelope; a plain graph object
+      // means local preview — load it directly.
+      const data = isEnvelope(body) ? await unlockWithPassword(body) : body;
       buildGraph(data);
       status.textContent = '';
       status.classList.remove('error');
