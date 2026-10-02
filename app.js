@@ -9,7 +9,8 @@
  *
  * The published graph.json is AES-256-GCM encrypted (see encrypt-graph.mjs).
  * It is decrypted in the visitor's browser with a password that is typed in,
- * used once, and never stored or transmitted anywhere.
+ * used once, and never stored or transmitted anywhere. Optionally ("remember
+ * this device") a NON-EXTRACTABLE derived key is kept in IndexedDB for 24 h.
  *
  * The only network requests this page is allowed to make are:
  *   1. GET  graph.json                         (same origin, sanitized data)
@@ -110,6 +111,10 @@
 
   // ---------------------------------------------------------------------------
   // Token storage (localStorage only)
+  // Optional hardening NOT done: wrapping the PAT with the session key. getToken()
+  // is read synchronously in several places and the session key only exists for
+  // remembered devices, so it isn't trivial. The CSP + no-innerHTML rule is the
+  // XSS defence instead.
   // ---------------------------------------------------------------------------
   const TOKEN_RE = /^(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})$/;
 
@@ -278,24 +283,236 @@
     return mobj.secret;
   }
 
-  async function decryptEnvelope(env, password) {
+  // Derives the envelope's data key. Same PBKDF2-SHA256 / 200k / salt as ever,
+  // so the envelope format is unchanged and old clients still decrypt it. The
+  // key is NON-EXTRACTABLE: page JS can use it but can never read its bytes.
+  // 'encrypt' is only used to seal the remembered-device record (see below).
+  async function deriveDataKey(env, password) {
     const subtle = crypto.subtle;
-    const salt = b64ToBytes(env.salt);
-    const iv = b64ToBytes(env.iv);
-    const data = b64ToBytes(env.data);
     const base = await subtle.importKey(
       'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-    const key = await subtle.deriveKey(
-      { name: 'PBKDF2', salt: salt, iterations: 200000, hash: 'SHA-256' },
-      base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-    const pt = await subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, data);
+    return subtle.deriveKey(
+      { name: 'PBKDF2', salt: b64ToBytes(env.salt), iterations: 200000, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['decrypt', 'encrypt']);
+  }
+
+  async function decryptWithKey(env, key) {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(env.iv) }, key, b64ToBytes(env.data));
     return JSON.parse(new TextDecoder().decode(pt));
+  }
+
+  async function decryptEnvelope(env, password) {
+    return decryptWithKey(env, await deriveDataKey(env, password));
+  }
+
+  // ---- Remember this device (24 h) ------------------------------------------
+  // After a FULL unlock (password + TOTP when MFA is on) and only if the box is
+  // ticked, the non-extractable data key is stored in IndexedDB (structured
+  // clone) with a deviceId, a fingerprint and a fixed expiry. The record is
+  // sealed with that key (AES-GCM, expiry in the authenticated data), so edits
+  // are detected. The 24 h is a page policy plus tamper detection, NOT a hard
+  // cryptographic expiry: there is no server to enforce one. The fingerprint is
+  // a convenience tripwire, not a security control. Nothing here is ever
+  // logged, put in a URL, or kept in localStorage except the random deviceId.
+  const SESSION_MS = 24 * 60 * 60 * 1000;
+  const IDB_NAME = 'secondBrain';
+  const IDB_STORE = 'session';
+  const DEVICE_KEY = 'secondBrain.deviceId';
+  const IDLE_KEY = 'secondBrain.idleMinutes';
+  const DEFAULT_IDLE_MIN = 30;
+  const MISMATCH_LIMIT = 2; // this many stable factors differing => wipe
+
+  function idb() {
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open(IDB_NAME, 1);
+      open.onupgradeneeded = () => open.result.createObjectStore(IDB_STORE);
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
+    });
+  }
+  async function idbRun(mode, fn) {
+    const db = await idb();
+    try {
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, mode);
+        const req = fn(tx.objectStore(IDB_STORE));
+        tx.oncomplete = () => resolve(req && req.result);
+        tx.onerror = tx.onabort = () => reject(tx.error);
+      });
+    } finally { db.close(); }
+  }
+  const idbGet = () => idbRun('readonly', (st) => st.get('current'));
+  const idbPut = (rec) => idbRun('readwrite', (st) => st.put(rec, 'current'));
+  const idbDelete = () => idbRun('readwrite', (st) => st.delete('current'));
+
+  function getDeviceId() { try { return localStorage.getItem(DEVICE_KEY) || ''; } catch { return ''; } }
+
+  async function wipeSession() {
+    try { localStorage.removeItem(DEVICE_KEY); } catch { /* storage blocked */ }
+    try { await idbDelete(); } catch { /* nothing stored / IDB blocked */ }
+    sessionExpiresAt = 0;
+  }
+
+  async function sha256Hex(text) {
+    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function canvasHash() {
+    const c = document.createElement('canvas');
+    c.width = 220; c.height = 40;
+    const g = c.getContext('2d');
+    g.textBaseline = 'top';
+    g.font = '16px sans-serif';
+    g.fillStyle = '#8b7cff'; g.fillRect(4, 4, 90, 24);
+    g.fillStyle = '#222'; g.fillText('Second Brain ✓ fp', 8, 8);
+    return sha256Hex(c.toDataURL());
+  }
+
+  // Stable factors only (no UA minor version, timezone or dpr: those change on
+  // browser updates, monitor changes, travel and display scaling).
+  // canvas === null means "unstable in this browser": excluded for good.
+  async function computeFingerprint(allowCanvas = true) {
+    const nav = navigator;
+    const fp = {
+      platform: String((nav.userAgentData && nav.userAgentData.platform) || nav.platform || ''),
+      language: String(nav.language || ''),
+      cores: Number(nav.hardwareConcurrency) || 0,
+      screen: [Math.max(screen.width, screen.height), Math.min(screen.width, screen.height)].join('x'),
+      canvas: null,
+    };
+    if (allowCanvas) fp.canvas = await canvasHash();
+    return fp;
+  }
+
+  async function createFingerprint() {
+    const fp = await computeFingerprint(true);
+    // Privacy modes randomize canvas output per call; if two runs differ, drop it.
+    if (fp.canvas !== await canvasHash()) fp.canvas = null;
+    return fp;
+  }
+
+  // Throws on any failure: callers treat a throw as a mismatch (fail closed).
+  async function fingerprintMismatches(stored) {
+    const now = await computeFingerprint(stored.canvas !== null);
+    let n = 0;
+    for (const f of ['platform', 'language', 'cores', 'screen']) if (now[f] !== stored[f]) n++;
+    if (stored.canvas !== null && now.canvas !== stored.canvas) n++;
+    return n;
+  }
+
+  const sealAad = (deviceId, createdAt, expiresAt) =>
+    new TextEncoder().encode(deviceId + '|' + createdAt + '|' + expiresAt);
+
+  async function createSession(key) {
+    const deviceId = crypto.randomUUID();
+    const createdAt = Date.now();
+    const expiresAt = createdAt + SESSION_MS;
+    const fingerprint = await createFingerprint();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const body = new TextEncoder().encode(JSON.stringify({ deviceId, createdAt, expiresAt, fingerprint }));
+    const ct = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv, additionalData: sealAad(deviceId, createdAt, expiresAt) }, key, body);
+    localStorage.setItem(DEVICE_KEY, deviceId);
+    try {
+      await idbPut({ v: 1, deviceId, createdAt, expiresAt, key, seal: { iv, ct } });
+    } catch (e) {
+      try { localStorage.removeItem(DEVICE_KEY); } catch { /* ignore */ }
+      throw e;
+    }
+    sessionExpiresAt = expiresAt;
+  }
+
+  // Returns { data } on success, or { notice } (and the session is wiped).
+  async function tryRememberedUnlock(envelope) {
+    let rec;
+    try { rec = await idbGet(); } catch { return { notice: '' }; }
+    if (!rec) return { notice: '' };
+    const fail = async (notice) => { await wipeSession(); return { notice }; };
+    try {
+      if (!rec.key || !rec.seal || typeof rec.expiresAt !== 'number' || typeof rec.createdAt !== 'number') {
+        return fail('This device\'s saved session was damaged, so it was cleared. Please unlock again.');
+      }
+      if (Date.now() >= rec.expiresAt) {
+        return fail('Your 24 hours are up. Please unlock again.');
+      }
+      if (!getDeviceId() || getDeviceId() !== rec.deviceId) {
+        return fail('This browser doesn\'t match the remembered device, so it was cleared. Please unlock again.');
+      }
+      let sealed;
+      try {
+        const pt = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: rec.seal.iv, additionalData: sealAad(rec.deviceId, rec.createdAt, rec.expiresAt) },
+          rec.key, rec.seal.ct);
+        sealed = JSON.parse(new TextDecoder().decode(pt));
+      } catch {
+        return fail('This device\'s saved session didn\'t check out, so it was cleared. Please unlock again.');
+      }
+      if (sealed.deviceId !== rec.deviceId || sealed.expiresAt !== rec.expiresAt ||
+          sealed.createdAt !== rec.createdAt || rec.expiresAt - rec.createdAt > SESSION_MS + 60000) {
+        return fail('This device\'s saved session didn\'t check out, so it was cleared. Please unlock again.');
+      }
+      let mismatches;
+      try { mismatches = await fingerprintMismatches(sealed.fingerprint); } catch { mismatches = MISMATCH_LIMIT; }
+      if (mismatches >= MISMATCH_LIMIT) {
+        return fail('This browser looks different from when you unlocked it, so the remembered session was cleared. Please unlock again.');
+      }
+      let data;
+      try { data = await decryptWithKey(envelope, rec.key); } catch {
+        return fail('The brain was republished (the password may have changed), so the remembered session was cleared. Please unlock again.');
+      }
+      sessionExpiresAt = rec.expiresAt;
+      return { data };
+    } catch {
+      return fail('Couldn\'t restore the remembered session. Please unlock again.');
+    }
+  }
+
+  // ---- Locking: Lock now, idle auto-lock, cross-tab -------------------------
+  let sessionExpiresAt = 0;
+  let lockWatch = false;
+  const lockChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('secondBrain.session') : null;
+
+  function idleMinutes() {
+    let v = NaN;
+    try { v = parseInt(localStorage.getItem(IDLE_KEY), 10); } catch { /* ignore */ }
+    return Number.isFinite(v) ? clamp(v, 1, 480) : DEFAULT_IDLE_MIN;
+  }
+
+  // Wipes the stored key and reloads: the in-memory graph is dropped and the
+  // lock screen shows on the next load. Other tabs are told to do the same.
+  async function lockNow() {
+    await wipeSession();
+    if (lockChannel) lockChannel.postMessage('lock');
+    window.location.reload();
+  }
+
+  if (lockChannel) {
+    lockChannel.onmessage = (e) => {
+      if (e.data === 'lock' && $('#lockscreen').hidden) window.location.reload();
+    };
+  }
+
+  function startLockWatch() {
+    if (lockWatch) return;
+    lockWatch = true;
+    let last = Date.now();
+    const touch = () => { last = Date.now(); };
+    for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) {
+      window.addEventListener(ev, touch, { passive: true });
+    }
+    const check = () => {
+      if (Date.now() - last > idleMinutes() * 60000) return lockNow();
+      if (sessionExpiresAt && Date.now() >= sessionExpiresAt) return lockNow();
+    };
+    setInterval(check, 15000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   }
 
   // Shows the lock screen and resolves with the decrypted graph once the
   // password (and, when MFA is configured, the TOTP code) is correct.
   // Loops on wrong passwords/codes; never stores the password.
-  async function unlockWithPassword(envelope) {
+  async function unlockWithPassword(envelope, notice) {
     const lock = $('#lockscreen');
     const stepPw = $('#lock-step-password');
     const stepCode = $('#lock-step-code');
@@ -312,7 +529,8 @@
     // ---- Step 1: password -------------------------------------------------
     let password = '';
     let mfaSecret = null;
-    let hint = '';
+    let hint = notice || '';
+    let remember = false;
     for (;;) {
       error.textContent = hint;
       hint = '';
@@ -321,6 +539,7 @@
       password = await new Promise((resolve) => {
         const go = () => {
           const pw = input.value;
+          remember = $('#lock-remember').checked;
           input.value = '';
           btn.onclick = null;
           input.onkeydown = null;
@@ -373,9 +592,15 @@
       mfaSecret = null; // drop it from memory once verified
     }
 
-    const data = await decryptEnvelope(envelope, password);
-    password = '';
+    const key = await deriveDataKey(envelope, password);
+    const data = await decryptWithKey(envelope, key);
+    password = ''; // dropped from our variables; JS can't guarantee the string is wiped
     lock.hidden = true;
+    if (remember) {
+      try { await createSession(key); } catch (e) {
+        toast('Couldn\'t remember this device (browser storage is blocked).', 'err');
+      }
+    }
     return data;
   }
 
@@ -389,7 +614,12 @@
       const body = await res.json();
       // Published site serves the encrypted envelope; a plain graph object
       // means local preview — load it directly.
-      const data = isEnvelope(body) ? await unlockWithPassword(body) : body;
+      let data = body;
+      if (isEnvelope(body)) {
+        const r = await tryRememberedUnlock(body);
+        data = r.data || await unlockWithPassword(body, r.notice);
+        startLockWatch();
+      }
       buildGraph(data);
       status.textContent = '';
       status.classList.remove('error');
@@ -1297,12 +1527,13 @@
     });
   }
 
-  function apiErrorMessage(status, body) {
+  function apiErrorMessage(status, body, opts) {
     const msg = body && body.message ? String(body.message) : '';
     if (status === 0) return 'Network error. Check your connection and try again.';
-    if (status === 401) return 'GitHub rejected the token (401). Update it in Settings.';
+    if (status === 401) return 'GitHub rejected this token — it expired or was revoked. Paste a new one.';
     if (status === 403) {
       if (/rate limit/i.test(msg)) return 'GitHub rate limit hit. Wait a few minutes and retry.';
+      if (status === 403 && opts && opts.test) return 'GitHub refused the token (403): rate limit, or it is missing a permission. Check it has Contents: Read and write on about-vibhu.';
       return 'The token doesn\'t have write access (403). It needs Contents: Read and write on about-vibhu.';
     }
     if (status === 404) return 'Repo not found (404). The token can\'t see Vrdevil44/about-vibhu.';
@@ -1489,12 +1720,82 @@
   // ===========================================================================
   const tokenInput = $('#token-input');
 
+  const EXPIRY_KEY = 'secondBrain.tokenExpiry';
+
+  // Write/read/remove probe: tells us if this browser will really keep the token.
+  function storageWorks() {
+    try {
+      const k = 'secondBrain.probe';
+      localStorage.setItem(k, '1');
+      const ok = localStorage.getItem(k) === '1';
+      localStorage.removeItem(k);
+      return ok;
+    } catch { return false; }
+  }
+
+  function renderSession() {
+    const sec = $('#device-section');
+    sec.hidden = !lockWatch; // only when the published (encrypted) graph is in use
+    if (sec.hidden) return;
+    $('#session-status').textContent = sessionExpiresAt
+      ? 'Remembered until ' + new Date(sessionExpiresAt).toLocaleString() + '. Anyone using this unlocked browser can open the portal.'
+      : 'Not remembered: you type the password every time you open the portal.';
+    $('#forget-device').hidden = !sessionExpiresAt;
+    $('#idle-minutes').value = idleMinutes();
+  }
+
+  function renderTokenExpiry(iso) {
+    const box = $('#token-expiry');
+    if (!iso) { box.textContent = ''; box.className = 'connection'; return; }
+    const d = new Date(iso);
+    if (isNaN(d)) { box.textContent = ''; box.className = 'connection'; return; }
+    const days = Math.ceil((d - Date.now()) / 86400000);
+    box.textContent = 'Token expires on ' + d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
+      (days <= 7 ? ' (' + (days > 0 ? days + ' day' + (days === 1 ? '' : 's') + ' left' : 'expired') + '). Make a new one soon.' : '.');
+    box.className = 'connection ' + (days <= 7 ? 'err' : 'ok');
+  }
+
+  // GET /user with the token: OK + expiry date, or one distinct message per failure.
+  // GitHub reports the expiry in the github-authentication-token-expiration
+  // header; if the browser doesn't expose it we simply don't show a date.
+  async function checkToken(t) {
+    try {
+      const res = await guardedFetch(CONFIG.apiBase + '/user', { headers: githubHeaders(t), cache: 'no-store' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, message: apiErrorMessage(res.status, body, { test: true }) };
+      const exp = res.headers.get('github-authentication-token-expiration');
+      const parsed = exp ? new Date(exp.replace(' UTC', 'Z').replace(' ', 'T')) : null;
+      const iso = parsed && !isNaN(parsed) ? parsed.toISOString() : '';
+      return { ok: true, login: body.login, expiry: iso };
+    } catch (e) {
+      return { ok: false, message: 'Couldn\'t reach GitHub (network error). Check your connection and try again.' };
+    }
+  }
+
   function openSettings() {
     tokenInput.value = getToken();
     $('#token-error').textContent = '';
     setConnection('', '');
+    let stored = '';
+    try { stored = localStorage.getItem(EXPIRY_KEY) || ''; } catch { /* ignore */ }
+    renderTokenExpiry(stored);
+    $('#storage-warning').hidden = storageWorks();
+    renderSession();
     $('#settings-modal').hidden = false;
     setTimeout(() => tokenInput.focus(), 30);
+    const t = getToken();
+    if (t) {
+      checkToken(t).then((r) => {
+        if (tokenInput.value.trim() !== t || $('#settings-modal').hidden) return;
+        if (r.ok) {
+          try { if (r.expiry) localStorage.setItem(EXPIRY_KEY, r.expiry); } catch { /* ignore */ }
+          renderTokenExpiry(r.expiry);
+          setConnection('Token OK' + (r.login ? ' (@' + r.login + ')' : '') + '.', 'ok');
+        } else {
+          setConnection(r.message, 'err');
+        }
+      });
+    }
   }
   function closeSettings() {
     $('#settings-modal').hidden = true;
@@ -1511,6 +1812,14 @@
     c.textContent = msg;
     c.className = 'connection' + (kind ? ' ' + kind : '');
   }
+
+  $('#lock-now').addEventListener('click', lockNow);
+  $('#forget-device').addEventListener('click', lockNow);
+  $('#idle-minutes').addEventListener('change', (e) => {
+    const v = clamp(parseInt(e.target.value, 10) || DEFAULT_IDLE_MIN, 1, 480);
+    e.target.value = v;
+    try { localStorage.setItem(IDLE_KEY, String(v)); } catch { /* ignore */ }
+  });
 
   $('#open-settings').addEventListener('click', openSettings);
   $('#close-settings').addEventListener('click', closeSettings);
@@ -1530,6 +1839,7 @@
     const err = tokenFormatError(t);
     if (err) { $('#token-error').textContent = err; return; }
     if (!setToken(t)) { $('#token-error').textContent = 'Couldn\'t save: this browser is blocking localStorage.'; return; }
+    try { localStorage.removeItem(EXPIRY_KEY); } catch { /* ignore */ }
     refreshTokenDot();
     refreshTokenWarning();
     toast('Token saved in this browser', 'ok');
@@ -1538,6 +1848,8 @@
 
   $('#token-clear').addEventListener('click', () => {
     setToken('');
+    try { localStorage.removeItem(EXPIRY_KEY); } catch { /* ignore */ }
+    renderTokenExpiry('');
     tokenInput.value = '';
     refreshTokenDot();
     refreshTokenWarning();
@@ -1553,12 +1865,13 @@
     btn.classList.add('loading');
     setConnection('Checking…', '');
     try {
-      const res = await guardedFetch(CONFIG.apiBase + '/user', { headers: githubHeaders(t), cache: 'no-store' });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(apiErrorMessage(res.status, body));
-      setConnection('Connected as @' + body.login + '. Remember to Save.', 'ok');
-    } catch (e) {
-      setConnection(e.message === 'Failed to fetch' ? apiErrorMessage(0) : e.message, 'err');
+      const r = await checkToken(t);
+      if (r.ok) {
+        renderTokenExpiry(r.expiry);
+        setConnection('Connected as @' + r.login + '. Remember to Save.', 'ok');
+      } else {
+        setConnection(r.message, 'err');
+      }
     } finally {
       btn.disabled = false;
       btn.classList.remove('loading');

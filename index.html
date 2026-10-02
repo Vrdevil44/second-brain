@@ -15,7 +15,7 @@
   <meta name="theme-color" content="#07080d">
   <title>Second Brain</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307080d'/%3E%3Ccircle cx='10' cy='12' r='4' fill='%238b7cff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%2338d6c4'/%3E%3Ccircle cx='17' cy='22' r='3.5' fill='%23ffb547'/%3E%3Cpath d='M10 12L22 11M10 12L17 22M22 11L17 22' stroke='%23ffffff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=e91aff4">
+  <link rel="stylesheet" href="styles.css?v=33a3659">
 </head>
 <body>
   <!-- Password gate: the published graph.json is AES-256-GCM encrypted.
@@ -29,6 +29,10 @@
         <div class="input-row">
           <input id="lock-input" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password">
         </div>
+        <label class="check-row" for="lock-remember">
+          <input id="lock-remember" type="checkbox">
+          <span>Remember this device for 24 hours</span>
+        </label>
         <div class="panel-actions">
           <button class="btn btn-primary" id="lock-unlock" type="button">Unlock</button>
         </div>
@@ -193,10 +197,12 @@
 
       <ul class="note-list small muted">
         <li>Dumping requires the token. The graph works without it.</li>
-        <li>Stored only in this browser's localStorage and sent only to <code>api.github.com</code>.</li>
-        <li>Use a fine-grained token limited to <code>Vrdevil44/about-vibhu</code> with <em>Contents: Read and write</em>.</li>
+        <li>Stored only in this browser's localStorage (so it doesn't follow you to another browser) and sent only to <code>api.github.com</code>.</li>
+        <li>Use a fine-grained token limited to <code>Vrdevil44/about-vibhu</code> with <em>Contents: Read and write</em> and a 1-year expiry.</li>
       </ul>
 
+      <div class="callout callout-warn" id="storage-warning" role="alert" hidden>This browser won't remember the token (storage blocked).</div>
+      <div class="connection" id="token-expiry" role="status"></div>
       <div class="connection" id="connection-status" role="status"></div>
 
       <div class="panel-actions">
@@ -207,11 +213,24 @@
         </button>
         <button class="btn btn-primary" type="button" id="token-save">Save</button>
       </div>
+
+      <div id="device-section" hidden>
+        <h3 class="section-title">This device</h3>
+        <p class="muted small" id="session-status"></p>
+        <label class="field-label" for="idle-minutes">Lock after minutes of no activity</label>
+        <div class="input-row">
+          <input id="idle-minutes" type="number" min="1" max="480" step="1" inputmode="numeric">
+        </div>
+        <div class="panel-actions">
+          <button class="btn btn-ghost" type="button" id="forget-device">Forget this device</button>
+          <button class="btn" type="button" id="lock-now">Lock now</button>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=e91aff4" defer></script>
+  <script src="app.js?v=33a3659" defer></script>
 </body>
 </html>

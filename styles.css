@@ -539,7 +539,14 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
 .connection.ok { color: var(--success); border-color: rgba(61, 220, 151, 0.3); background: rgba(61, 220, 151, 0.06); }
 .connection.err { color: var(--danger); border-color: rgba(255, 107, 125, 0.3); background: rgba(255, 107, 125, 0.06); }
 
+#device-section { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 4px; }
+#device-section .muted { margin: 4px 0 10px; }
+#storage-warning { margin-top: 12px; }
+#idle-minutes { width: 100px; flex: none; }
+
 /* ---------- Password lock screen ---------- */
+.check-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 13.5px; cursor: pointer; }
+.check-row input { width: auto; flex: none; margin: 0; }
 .lockscreen {
   position: fixed;
   inset: 0;
