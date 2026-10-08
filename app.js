@@ -604,6 +604,69 @@
     return data;
   }
 
+  // ---- View mode (3D universe / 2D fallback) ----------------------------------
+  // In-memory only. The 3D scripts are injected strictly after unlock+decrypt;
+  // nothing 3D-related is referenced from index.html.
+  let viewMode = '3d';
+  let graphData = null;
+  let graph2dBuilt = false;
+  const scriptLoads = new Map();
+
+  function loadScriptOnce(src) {
+    if (!scriptLoads.has(src)) {
+      scriptLoads.set(src, new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = () => resolve();
+        s.onerror = () => { scriptLoads.delete(src); reject(new Error('Failed to load ' + src)); };
+        document.head.append(s);
+      }));
+    }
+    return scriptLoads.get(src);
+  }
+
+  async function renderView() {
+    if (!graphData) return;
+    const toggle = $('#view-toggle');
+    const box = $('#universe');
+    if (viewMode === '3d') {
+      try {
+        await loadScriptOnce('vendor/3d-force-graph.min.js');
+        await loadScriptOnce('universe.js?v=7dbf174');
+        if (!window.BrainUniverse) throw new Error('3D module unavailable');
+        document.body.classList.add('view-3d');
+        box.hidden = false;
+        window.BrainUniverse.init(box, graphData, {
+          onMeta: (text) => { $('#graph-meta').textContent = text; },
+        });
+        $('#demo-badge').hidden = !graphData.demo;
+        if (toggle) { toggle.textContent = '2D'; toggle.title = 'Switch to 2D view'; }
+        return;
+      } catch (err) {
+        console.error(err);
+        toast('3D view unavailable, showing 2D.', 'err');
+        viewMode = '2d';
+        document.body.classList.remove('view-3d');
+        box.hidden = true;
+      }
+    }
+    if (toggle) { toggle.textContent = '3D'; toggle.title = 'Switch to 3D view'; }
+    if (!graph2dBuilt) { buildGraph(graphData); graph2dBuilt = true; }
+    else { resize(); fitView(false); requestRender(); }
+  }
+
+  async function setViewMode(mode) {
+    if (mode === viewMode || !graphData) return;
+    if (viewMode === '3d' && window.BrainUniverse) window.BrainUniverse.destroy();
+    $('#universe').hidden = true;
+    document.body.classList.remove('view-3d');
+    viewMode = mode;
+    await renderView();
+  }
+
+  const viewToggle = $('#view-toggle');
+  if (viewToggle) viewToggle.addEventListener('click', () => { setViewMode(viewMode === '3d' ? '2d' : '3d'); });
+
   // ---- Load + sanitize graph.json -------------------------------------------
   async function loadGraph() {
     const status = $('#graph-status');
@@ -620,10 +683,11 @@
         data = r.data || await unlockWithPassword(body, r.notice);
         startLockWatch();
       }
-      buildGraph(data);
+      graphData = data; // decrypted graph stays in memory only
+      await renderView();
       status.textContent = '';
       status.classList.remove('error');
-      if (!graph.nodes.length) status.textContent = 'The graph is empty. Dump something and the nightly organizer will fill it in.';
+      if (!Array.isArray(data && data.nodes) || !data.nodes.length) status.textContent = 'The graph is empty. Dump something and the nightly organizer will fill it in.';
     } catch (err) {
       console.error(err);
       status.classList.add('error');
@@ -818,11 +882,13 @@
   let rafId = 0;
   function requestRender() {
     needsDraw = true;
+    if (viewMode !== '2d') return; // 2D loop is parked while the 3D universe is active
     if (!rafId) rafId = requestAnimationFrame(frame);
   }
 
   function frame(t) {
     rafId = 0;
+    if (viewMode !== '2d') return;
     if (viewAnim) stepViewAnim(t);
     if (sim.running) {
       tick();
