@@ -658,7 +658,7 @@
       .nodeRelSize(4)
       .nodeOpacity(0.92)
       .nodeResolution(10)
-      .nodeLabel((n) => escHtml(n.name)) // tooltip is rendered as HTML: escape untrusted text
+      .nodeLabel(() => '') // P2-T7: hover tooltip disabled — it was the only DOM change on node hover and a prime suspect for the hover shift-down; node names show in the click panel
       .linkColor('color')
       .linkOpacity(0.55)
       .linkWidth(0.6)
