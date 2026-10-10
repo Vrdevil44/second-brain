@@ -91,11 +91,14 @@
     if (u.origin === CONFIG.apiBase) {
       if (m === 'GET' && u.pathname === '/user') return;
       if (m === 'PUT' && u.pathname.startsWith(DUMP_PATH_PREFIX) && !u.pathname.includes('..')) return;
+      // Updates log: recent commits (private repo, needs token).
+      if (m === 'GET' && /^\/repos\/[^/]+\/dream-brain\/commits/.test(u.pathname)) return;
       // Sync-now: dispatch the workflow and poll its status.
       const wf = `/repos/${CONFIG.owner}/dream-brain/actions/`;
       if (m === 'POST' && u.pathname === wf + 'workflows/sync.yml/dispatches') return;
       if (m === 'GET' && u.pathname === wf + 'workflows/sync.yml/runs') return;
       if (m === 'GET' && /^\/repos\/[^/]+\/dream-brain\/actions\/runs\/\d+$/.test(u.pathname)) return;
+      if (m === 'GET' && /^\/repos\/[^/]+\/dream-brain\/actions\/runs\/\d+\/jobs$/.test(u.pathname)) return;
     }
     throw new Error('Blocked by privacy rule: ' + m + ' ' + u.origin + u.pathname);
   }
@@ -637,7 +640,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=52be038');
+        await loadScriptOnce('universe.js?v=3cd8bcc');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1377,9 +1380,25 @@
       },
     });
 
+    // Get current node count for diffing.
+    async function getNodeCount() {
+      try {
+        const res = await fetch(CONFIG.graphUrl, { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return {
+          count: data.nodes ? data.nodes.length : 0,
+          ids: new Set((data.nodes || []).map((n) => n.id)),
+        };
+      } catch { return null; }
+    }
+
     try {
-      // 1. Dispatch the workflow directly.
+      // 0. Snapshot before.
       label.textContent = 'Starting…';
+      const before = await getNodeCount();
+
+      // 1. Dispatch the workflow directly.
       const disp = await api('/repos/Vrdevil44/dream-brain/actions/workflows/sync.yml/dispatches', {
         method: 'POST',
         body: JSON.stringify({ ref: 'master' }),
@@ -1387,10 +1406,10 @@
       if (!disp.ok) throw new Error('GitHub API ' + disp.status);
 
       // 2. Find the run we just triggered.
-      label.textContent = 'Syncing…';
       btn.classList.add('syncing');
       let runId = null;
       for (let i = 0; i < 6 && !runId; i++) {
+        label.textContent = 'Queued…';
         await new Promise((r) => setTimeout(r, 3000));
         try {
           const runs = await api('/repos/Vrdevil44/dream-brain/actions/workflows/sync.yml/runs?per_page=5');
@@ -1403,23 +1422,65 @@
       }
       if (!runId) throw new Error('Could not find the triggered run');
 
-      // 3. Poll until complete (10 min timeout).
+      // 3. Poll jobs for step-by-step progress.
       const deadline = Date.now() + 10 * 60 * 1000;
       let status = '', conclusion = '';
+      const seenSteps = new Set();
       while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 8000));
+        await new Promise((r) => setTimeout(r, 5000));
         try {
-          const st = await api(`/repos/Vrdevil44/dream-brain/actions/runs/${runId}`);
-          if (!st.ok) continue;
-          const data = await st.json();
-          status = data.status;
-          conclusion = data.conclusion;
+          const jobsRes = await api(`/repos/Vrdevil44/dream-brain/actions/runs/${runId}/jobs`);
+          if (!jobsRes.ok) continue;
+          const jobsData = await jobsRes.json();
+          const job = (jobsData.jobs || [])[0];
+          if (!job) continue;
+
+          status = job.status;
+          conclusion = job.conclusion;
+
+          // Show current step.
+          const steps = job.steps || [];
+          const current = steps.find((s) => s.status === 'in_progress');
+          const completed = steps.filter((s) => s.status === 'completed').length;
+          if (current) {
+            if (!seenSteps.has(current.name)) {
+              seenSteps.add(current.name);
+            }
+            label.textContent = `${completed + 1}/${steps.length}: ${current.name.slice(0, 24)}…`;
+          } else if (status === 'in_progress') {
+            label.textContent = `Syncing… ${completed}/${steps.length} steps`;
+          }
+
           if (status === 'completed') break;
         } catch { /* keep polling */ }
       }
       btn.classList.remove('syncing');
-      if (status === 'completed') {
-        toast(conclusion === 'success' ? 'Sync complete.' : 'Sync finished: ' + conclusion, conclusion === 'success' ? 'ok' : 'err');
+
+      if (status === 'completed' && conclusion === 'success') {
+        // 4. Diff nodes.
+        await new Promise((r) => setTimeout(r, 3000)); // Let Pages rebuild.
+        const after = await getNodeCount();
+        let newIds = [];
+        if (before && after) {
+          newIds = [...after.ids].filter((id) => !before.ids.has(id));
+          const diff = after.count - before.count;
+          if (diff > 0) {
+            toast(`Sync complete: ${diff} new node${diff === 1 ? '' : 's'} added.`, 'ok');
+            // Mark fresh for 60s glow.
+            if (window.BrainUniverse && window.BrainUniverse.markFresh) {
+              window.BrainUniverse.markFresh(newIds);
+            }
+            // Reload graph to show new nodes.
+            loadGraph();
+            loadUpdatesLog();
+          } else {
+            toast('Sync complete: no new nodes.', 'ok');
+          }
+        } else {
+          toast('Sync complete.', 'ok');
+        }
+      } else if (status === 'completed') {
+        toast('Sync finished: ' + conclusion, 'err');
       } else {
         toast('Sync still running — check Actions on GitHub.', 'ok');
       }
@@ -2065,11 +2126,23 @@
   async function loadUpdatesLog() {
     const list = $('#updates-list');
     if (!list) return;
+    const token = getToken();
     try {
-      // Public repo — no auth needed for recent commits.
-      const res = await fetch('https://api.github.com/repos/Vrdevil44/dream-brain/commits?per_page=8');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const commits = await res.json();
+      let commits;
+      if (token) {
+        // Private repo — use the token.
+        const res = await guardedFetch(CONFIG.apiBase + '/repos/Vrdevil44/dream-brain/commits?per_page=8', {
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Accept': 'application/vnd.github+json',
+          },
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        commits = await res.json();
+      } else {
+        list.innerHTML = '<li class="muted">Add your GitHub token in Settings to see updates.</li>';
+        return;
+      }
       list.innerHTML = '';
       for (const c of commits.slice(0, 8)) {
         const li = document.createElement('li');
