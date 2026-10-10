@@ -632,7 +632,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=6d5c340');
+        await loadScriptOnce('universe.js?v=c12fc5c');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1350,22 +1350,34 @@
   $('#dump-open-settings').addEventListener('click', openSettings);
 
   // ---- Sync now ---------------------------------------------------------------
-  // Asks the dev house for an on-demand sync: creates a `sync-now` issue the
-  // VM cron picks up (ingest dumps → merge → rebuild graph → republish).
-  // Issues go to the active brain repo (dream-brain), not the CONFIG repo.
+  // On-demand sync: creates a `sync-now` issue, then polls it with a progress
+  // dial. The dev-house cron (every 2 min) picks it up, runs the pipeline
+  // (only if there are changes — cheap when idle), and closes the issue with
+  // a summary. The dial resolves when the issue closes.
   $('#sync-now').addEventListener('click', async () => {
     const token = getToken();
     if (!token) { toast('Add your GitHub token in Settings first.', 'err'); openSettings(); return; }
     const btn = $('#sync-now');
+    if (btn.disabled) return;
     btn.disabled = true;
+    const label = btn.querySelector('span');
+    const origLabel = label.textContent;
+
+    const api = (path, opts = {}) => guardedFetch(CONFIG.apiBase + path, {
+      ...opts,
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+        ...(opts.headers || {}),
+      },
+    });
+
     try {
-      const res = await guardedFetch(CONFIG.apiBase + '/repos/Vrdevil44/dream-brain/issues', {
+      // 1. File the request.
+      label.textContent = 'Requesting…';
+      const res = await api('/repos/Vrdevil44/dream-brain/issues', {
         method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + token,
-          'Content-Type': 'application/json',
-          'Accept': 'application/vnd.github+json',
-        },
         body: JSON.stringify({
           title: '[sync-now] ' + new Date().toISOString(),
           body: 'On-demand sync requested from the portal. Dev house: ingest daily-dump/, merge, rebuild graph, republish portal, then close this issue with a summary.',
@@ -1373,10 +1385,46 @@
         }),
       });
       if (!res.ok) throw new Error('GitHub API ' + res.status);
-      toast('Sync requested — the dev house will pick it up shortly.', 'ok');
+      const issue = await res.json();
+      const issueNum = issue.number;
+
+      // 2. Progress dial: poll until the issue closes (or 10 min timeout).
+      label.textContent = 'Syncing…';
+      btn.classList.add('syncing');
+      const deadline = Date.now() + 10 * 60 * 1000;
+      let done = false;
+      let summary = '';
+      while (Date.now() < deadline && !done) {
+        await new Promise((r) => setTimeout(r, 8000));
+        try {
+          const st = await api(`/repos/Vrdevil44/dream-brain/issues/${issueNum}`);
+          if (!st.ok) continue;
+          const data = await st.json();
+          if (data.state === 'closed') {
+            done = true;
+            // Grab the closing comment for the summary.
+            try {
+              const cm = await api(`/repos/Vrdevil44/dream-brain/issues/${issueNum}/comments?per_page=100`);
+              if (cm.ok) {
+                const comments = await cm.json();
+                const last = comments[comments.length - 1];
+                if (last) summary = last.body.slice(0, 200);
+              }
+            } catch { /* summary optional */ }
+          }
+        } catch { /* keep polling on transient errors */ }
+      }
+      btn.classList.remove('syncing');
+      if (done) {
+        toast('Sync complete.' + (summary ? ' ' + summary : ''), 'ok');
+      } else {
+        toast('Sync is still running — check the sync-now issue on GitHub.', 'ok');
+      }
     } catch (err) {
+      btn.classList.remove('syncing');
       toast('Sync request failed: ' + err.message, 'err');
     } finally {
+      label.textContent = origLabel;
       btn.disabled = false;
     }
   });

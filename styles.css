@@ -800,6 +800,11 @@ body.view-3d .node-panel { display: none; }
 }
 .u-tip[hidden] { display: none; }
 
+/* Sync-now progress dial */
+#sync-now.syncing svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#sync-now:disabled { opacity: .7; cursor: wait; }
+
 @media (max-width: 640px) {
   .u-left { width: calc(100vw - 36px); bottom: auto; max-height: 40vh; top: 76px; }
   .u-legend { display: none; }
