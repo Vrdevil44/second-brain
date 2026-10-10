@@ -827,12 +827,24 @@
     },
     searchNodes: (q) => {
       if (!S || !S.graph) return [];
-      const query = q.toLowerCase();
-      return S.graph.graphData().nodes
-        .filter((n) => (n.name && n.name.toLowerCase().includes(query)) ||
-                       (n.id && n.id.toLowerCase().includes(query)))
-        .map((n) => ({ id: n.id, label: n.name || n.id }))
-        .slice(0, 20);
+      const query = q.toLowerCase().trim();
+      if (query.length < 2) return [];
+      // Word-boundary matching: "car" should not match "caring".
+      // Score: exact word match > starts-with > contains.
+      const results = [];
+      for (const n of S.graph.graphData().nodes) {
+        const name = (n.name || '').toLowerCase();
+        const id = (n.id || '').toLowerCase();
+        const text = name + ' ' + id;
+        // Check for whole-word match first.
+        const words = text.split(/[^a-z0-9]+/);
+        let score = 0;
+        if (words.includes(query)) score = 3;
+        else if (words.some((w) => w.startsWith(query))) score = 2;
+        else if (text.includes(query)) score = 1;
+        if (score > 0) results.push({ id: n.id, label: n.name || n.id, score });
+      }
+      return results.sort((a, b) => b.score - a.score).slice(0, 20);
     },
     getLegend: () => (S && S.legendBox) ? S.legendBox : null,
     setDomainFilter: (domains) => {

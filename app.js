@@ -640,7 +640,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=04c99f4');
+        await loadScriptOnce('universe.js?v=dc18461');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -894,6 +894,14 @@
     if (!rafId) rafId = requestAnimationFrame(frame);
   }
 
+  // Filter 2D graph by hidden node types (from mobile legend).
+  window.apply2dTypeFilter = function() {
+    if (!window._hiddenTypes) window._hiddenTypes = new Set();
+    // The 2D renderer checks node visibility in the draw loop.
+    // Store the filter and trigger a re-render.
+    requestRender();
+  };
+
   function frame(t) {
     rafId = 0;
     if (viewMode !== '2d') return;
@@ -969,6 +977,8 @@
 
     // Nodes: glow halo + core
     for (const n of graph.nodes) {
+      // Skip hidden types (mobile legend filter).
+      if (window._hiddenTypes && window._hiddenTypes.has(n.type)) continue;
       const rgb = RGB[n.type];
       const dim = focus && !focusSet.has(n.id);
       const isFocus = n === focus;
@@ -2294,20 +2304,43 @@
     const extras = $('#mobile-settings-extras');
     if (extras) {
       extras.hidden = false;
-      // Wire view toggle.
+      // Wire view toggle (label switches 2D/3D).
       const viewBtn = $('#settings-view-toggle');
       const mainViewBtn = $('#view-toggle');
       if (viewBtn && mainViewBtn) {
-        viewBtn.addEventListener('click', () => mainViewBtn.click());
+        const updateViewLabel = () => {
+          const is3d = document.body.classList.contains('view-3d');
+          viewBtn.textContent = is3d ? 'Switch to 2D' : 'Switch to 3D';
+        };
+        updateViewLabel();
+        viewBtn.addEventListener('click', () => {
+          mainViewBtn.click();
+          setTimeout(updateViewLabel, 100);
+        });
+        // Also update when the main button is clicked elsewhere.
+        mainViewBtn.addEventListener('click', () => setTimeout(updateViewLabel, 100));
       }
-      // Wire sync.
+      // Wire sync (show progress in settings panel).
       const syncBtn = $('#settings-sync-now');
       const mainSyncBtn = $('#sync-now');
       if (syncBtn && mainSyncBtn) {
         syncBtn.addEventListener('click', () => {
-          // Close settings first, then trigger sync.
-          const modal = $('#settings-modal');
-          if (modal) modal.hidden = true;
+          // Don't close settings — show progress here.
+          // Trigger the main sync but mirror its label updates.
+          const mainLabel = mainSyncBtn.querySelector('span');
+          const syncLabel = syncBtn.querySelector('span') || syncBtn;
+          const origText = syncLabel.textContent;
+          // Poll the main button's label and mirror it.
+          const mirror = setInterval(() => {
+            if (mainSyncBtn.disabled) {
+              syncLabel.textContent = mainLabel ? mainLabel.textContent : 'Syncing…';
+              syncBtn.disabled = true;
+            } else {
+              syncLabel.textContent = origText;
+              syncBtn.disabled = false;
+              clearInterval(mirror);
+            }
+          }, 500);
           mainSyncBtn.click();
         });
       }
@@ -2318,22 +2351,19 @@
     const container = $('#brand-domains');
     if (!container) return;
     container.innerHTML = '';
-    // Reuse the real legend from the universe (colors, counts, toggle behavior).
+
+    // Try the 3D universe legend first.
     if (window.BrainUniverse && window.BrainUniverse.getLegend) {
       const legend = window.BrainUniverse.getLegend();
       if (legend) {
-        // Clone it so the original stays intact.
         const clone = legend.cloneNode(true);
-        // Re-wire the toggle buttons in the clone.
         const origRows = legend.querySelectorAll('.u-legend-row');
         const cloneRows = clone.querySelectorAll('.u-legend-row');
         cloneRows.forEach((cloneRow, i) => {
           const origRow = origRows[i];
           if (origRow) {
-            // Copy the pressed state.
             cloneRow.setAttribute('aria-pressed', origRow.getAttribute('aria-pressed'));
             cloneRow.classList.toggle('u-off', origRow.classList.contains('u-off'));
-            // Clicking the clone triggers the original.
             cloneRow.addEventListener('click', () => origRow.click());
           }
         });
@@ -2341,8 +2371,57 @@
         return;
       }
     }
-    // Fallback: simple message if legend not available.
-    container.innerHTML = '<p class="muted">Legend not available in this view.</p>';
+
+    // Fallback for 2D view: build legend from node types.
+    if (typeof graphData !== 'undefined' && graphData && graphData.nodes) {
+      const TYPE_COLORS_2D = {
+        cluster: '#8b7cff', idea: '#38d6c4', target: '#ffb547',
+        person: '#ff7eb6', project: '#6aa7ff', topic: '#9be564',
+      };
+      const tCount = new Map();
+      for (const n of graphData.nodes) {
+        const t = n.type || 'unknown';
+        tCount.set(t, (tCount.get(t) || 0) + 1);
+      }
+      const box = document.createElement('div');
+      box.className = 'u-legend';
+      const title = document.createElement('h3');
+      title.className = 'u-legend-title';
+      title.textContent = 'Types';
+      box.appendChild(title);
+      // Track hidden types.
+      if (!window._hiddenTypes) window._hiddenTypes = new Set();
+      for (const [type, color] of Object.entries(TYPE_COLORS_2D)) {
+        const count = tCount.get(type) || 0;
+        if (count === 0) continue;
+        const btn = document.createElement('button');
+        btn.className = 'u-legend-row' + (window._hiddenTypes.has(type) ? ' u-off' : '');
+        btn.type = 'button';
+        btn.setAttribute('aria-pressed', window._hiddenTypes.has(type) ? 'false' : 'true');
+        const sw = document.createElement('i');
+        sw.className = 'u-swatch';
+        sw.style.background = color;
+        const name = document.createElement('span');
+        name.className = 'u-legend-name';
+        name.textContent = type;
+        const cnt = document.createElement('small');
+        cnt.className = 'u-legend-count';
+        cnt.textContent = count;
+        btn.append(sw, name, cnt);
+        btn.addEventListener('click', () => {
+          const isOff = btn.classList.toggle('u-off');
+          btn.setAttribute('aria-pressed', isOff ? 'false' : 'true');
+          if (isOff) window._hiddenTypes.add(type);
+          else window._hiddenTypes.delete(type);
+          if (typeof apply2dTypeFilter === 'function') apply2dTypeFilter();
+        });
+        box.appendChild(btn);
+      }
+      container.appendChild(box);
+      return;
+    }
+
+    container.innerHTML = '<p class="muted">Legend not available.</p>';
   }
 
   function toggleMobileSearch() {
@@ -2395,9 +2474,12 @@
 
     overlay.appendChild(input);
     overlay.appendChild(results);
-    overlay.appendChild(close);
     document.body.appendChild(overlay);
     input.focus();
+    // Close when tapping outside the search box (like updates pill).
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
   }
 
   // ===========================================================================
