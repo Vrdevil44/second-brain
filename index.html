@@ -15,7 +15,7 @@
   <meta name="theme-color" content="#07080d">
   <title>Second Brain</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307080d'/%3E%3Ccircle cx='10' cy='12' r='4' fill='%238b7cff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%2338d6c4'/%3E%3Ccircle cx='17' cy='22' r='3.5' fill='%23ffb547'/%3E%3Cpath d='M10 12L22 11M10 12L17 22M22 11L17 22' stroke='%23ffffff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=10164da">
+  <link rel="stylesheet" href="styles.css?v=8b59099">
 </head>
 <body>
   <!-- Password gate: the published graph.json is AES-256-GCM encrypted.
@@ -92,6 +92,14 @@
     <span class="legend-item"><i class="dot dot-person"></i>Person</span>
     <span class="legend-item"><i class="dot dot-project"></i>Project</span>
     <span class="legend-item"><i class="dot dot-topic"></i>Topic</span>
+  </aside>
+
+  <!-- Latest updates log -->
+  <aside class="updates-log" aria-label="Latest updates" id="updates-log">
+    <h3>Latest updates</h3>
+    <ul id="updates-list">
+      <li class="muted">Loading…</li>
+    </ul>
   </aside>
 
   <!-- Zoom controls -->
@@ -240,6 +248,6 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=10164da" defer></script>
+  <script src="app.js?v=8b59099" defer></script>
 </body>
 </html>

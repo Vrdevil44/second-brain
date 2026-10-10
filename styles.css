@@ -209,6 +209,41 @@ a:hover { color: #b0a6ff; }
   z-index: 5;
 }
 .legend-item { display: inline-flex; align-items: center; gap: 7px; }
+
+/* Latest updates log — below the legend */
+.updates-log {
+  position: fixed;
+  left: 18px;
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 52px);
+  width: 280px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 1px var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+  z-index: 5;
+}
+.updates-log h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-3);
+}
+.updates-log ul { margin: 0; padding: 0; list-style: none; }
+.updates-log li {
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+  line-height: 1.4;
+}
+.updates-log li:first-child { border-top: none; }
+.updates-log .u-time { color: var(--text-3); font-size: 11px; }
+.updates-log .muted { color: var(--text-3); }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot-cluster { background: var(--cluster); box-shadow: 0 0 10px var(--cluster); }
 .dot-idea { background: var(--idea); box-shadow: 0 0 10px var(--idea); }

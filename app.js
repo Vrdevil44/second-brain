@@ -637,7 +637,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=10164da');
+        await loadScriptOnce('universe.js?v=8b59099');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2060,10 +2060,55 @@
   });
 
   // ===========================================================================
+  // Latest updates log
+  // ===========================================================================
+  async function loadUpdatesLog() {
+    const list = $('#updates-list');
+    if (!list) return;
+    try {
+      // Public repo — no auth needed for recent commits.
+      const res = await fetch('https://api.github.com/repos/Vrdevil44/dream-brain/commits?per_page=8');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const commits = await res.json();
+      list.innerHTML = '';
+      for (const c of commits.slice(0, 8)) {
+        const li = document.createElement('li');
+        const msg = (c.commit.message || '').split('\n')[0].slice(0, 80);
+        const time = new Date(c.commit.author.date).toLocaleString('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+        });
+        li.innerHTML = '<div></div><div class="u-time"></div>';
+        li.querySelector('div').textContent = msg;
+        li.querySelector('.u-time').textContent = time;
+        // Clicking focuses the graph (new nodes glow if just synced).
+        li.style.cursor = 'pointer';
+        li.title = 'Click to view in graph';
+        li.addEventListener('click', () => {
+          // Try to extract F-IDs from the commit message and focus the first.
+          const m = msg.match(/F-\d+/g);
+          if (m && window.BrainUniverse) {
+            for (const fid of m) {
+              if (window.BrainUniverse.focusNode(fid)) {
+                toast('Focused ' + fid, 'ok');
+                return;
+              }
+            }
+          }
+          toast('No graph node found for this update', 'err');
+        });
+        list.appendChild(li);
+      }
+    } catch (err) {
+      list.innerHTML = '<li class="muted">Could not load updates.</li>';
+    }
+  }
+
+  // ===========================================================================
   // Boot
   // ===========================================================================
   resize();
   updateCounter();
   refreshTokenDot();
   loadGraph();
+  loadUpdatesLog();
 })();

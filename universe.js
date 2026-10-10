@@ -10,6 +10,34 @@
 (function () {
   'use strict';
 
+  // ---- Fresh nodes (new/updated in last 60s) -----------------------------------
+  // Nodes that just arrived via sync glow brightly for 60 seconds so they're
+  // unmissable, regardless of when you logged in.
+  const freshNodes = new Map(); // id -> timestamp
+  const FRESH_MS = 60 * 1000;
+  const FRESH_COLOR = '#ffffff';
+
+  function markFresh(ids) {
+    const now = Date.now();
+    for (const id of ids) freshNodes.set(id, now);
+    // Schedule cleanup + recolor after the glow expires.
+    setTimeout(() => {
+      let changed = false;
+      for (const [id, ts] of freshNodes) {
+        if (now - ts >= FRESH_MS - 100) { freshNodes.delete(id); changed = true; }
+      }
+      if (changed && S.graph) S.graph.refresh();
+    }, FRESH_MS + 500);
+    if (S.graph) S.graph.refresh();
+  }
+
+  function isFresh(id) {
+    const ts = freshNodes.get(id);
+    if (!ts) return false;
+    if (Date.now() - ts > FRESH_MS) { freshNodes.delete(id); return false; }
+    return true;
+  }
+
   // ---- Palettes ---------------------------------------------------------------
   // Domains: Okabe-Ito colorblind-safe palette (the dark blue and black are
   // skipped; they vanish on a dark background).
@@ -65,6 +93,8 @@
 
   // f = focus factor (1 = normal, DIM = outside the focused neighborhood).
   function nodeColor(n, f) {
+    // Fresh nodes (just synced) glow white-hot for 60s — unmissable.
+    if (isFresh(n.id)) return FRESH_COLOR;
     const c = DOMAIN_COLORS[n.domain] || FALLBACK_NODE;
     const a = (n.status === 'superseded' ? 0.35 : 1) * (f == null ? 1 : f);
     return a === 1 ? c : hexToRgba(c, a);
@@ -786,5 +816,21 @@
     getOpacity: (id) => focusOpacity(id),
     getSelectedId: () => (S ? S.selected : null),
     getPanelRows,
+    markFresh,
+    focusNode: (id) => {
+      if (!S || !S.graph) return false;
+      const node = S.graph.graphData().nodes.find((n) => n.id === id);
+      if (!node) return false;
+      // Move camera to the node and select it.
+      const dist = 120;
+      const pos = {
+        x: (node.x || 0) + dist * 0.5,
+        y: (node.y || 0) + dist * 0.3,
+        z: (node.z || 0) + dist,
+      };
+      S.graph.cameraPosition(pos, { x: node.x || 0, y: node.y || 0, z: node.z || 0 }, 900);
+      tapNode(id);
+      return true;
+    },
   };
 })();
