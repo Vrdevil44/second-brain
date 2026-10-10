@@ -729,6 +729,7 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
   .brand-domains.open { display: block; }
   /* The cloned legend inherits u-legend styles; ensure it displays well on mobile */
   .brand-domains .u-legend {
+    display: block;
     position: static;
     max-height: none;
     box-shadow: none;
