@@ -632,7 +632,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=8301fab');
+        await loadScriptOnce('universe.js?v=075ddc2');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1349,6 +1349,38 @@
   $('#dump-scrim').addEventListener('click', () => { if (!dump.uploading) closeDump(); });
   $('#dump-open-settings').addEventListener('click', openSettings);
 
+  // ---- Sync now ---------------------------------------------------------------
+  // Asks the dev house for an on-demand sync: creates a `sync-now` issue the
+  // VM cron picks up (ingest dumps → merge → rebuild graph → republish).
+  // Issues go to the active brain repo (dream-brain), not the CONFIG repo.
+  $('#sync-now').addEventListener('click', async () => {
+    const token = getToken();
+    if (!token) { toast('Add your GitHub token in Settings first.', 'err'); openSettings(); return; }
+    const btn = $('#sync-now');
+    btn.disabled = true;
+    try {
+      const res = await guardedFetch(CONFIG.apiBase + '/repos/Vrdevil44/dream-brain/issues', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json',
+          'Accept': 'application/vnd.github+json',
+        },
+        body: JSON.stringify({
+          title: '[sync-now] ' + new Date().toISOString(),
+          body: 'On-demand sync requested from the portal. Dev house: ingest daily-dump/, merge, rebuild graph, republish portal, then close this issue with a summary.',
+          labels: ['sync-now'],
+        }),
+      });
+      if (!res.ok) throw new Error('GitHub API ' + res.status);
+      toast('Sync requested — the dev house will pick it up shortly.', 'ok');
+    } catch (err) {
+      toast('Sync request failed: ' + err.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   function refreshTokenWarning() {
     $('#dump-token-warning').hidden = !!getToken();
   }
@@ -1502,6 +1534,13 @@
       ul.append(li);
     }
     dropzone.classList.toggle('disabled', dump.uploading || dump.files.length >= MAX_FILES);
+    // When files are present, the text area is their comment — make that explicit.
+    const hasFiles = dump.files.length > 0;
+    $('#dump-text-label').textContent = hasFiles ? 'Comment for these files' : 'Notes & links';
+    $('#dump-comment-hint').hidden = !hasFiles;
+    textEl.placeholder = hasFiles
+      ? 'What are these files about? The brain files them using your words…'
+      : 'Brain-dump anything: ideas, targets, progress, links…';
   }
 
   function updateFileProgress(f) {
@@ -1702,6 +1741,11 @@
         const res = await putWithRetry(token, session.folder + '/note.md', utf8ToBase64(header + text + '\n'), 'dump: ' + session.slug + ' (note)');
         session.noteDone = true;
         session.lastCommit = res && res.commit;
+        // v3: when files are present, the text is their comment — save it
+        // explicitly as comment.md so the ingest applies it as cmt:.
+        if (dump.files.length) {
+          await putWithRetry(token, session.folder + '/comment.md', utf8ToBase64(text + '\n'), 'dump: ' + session.slug + ' (comment)');
+        }
       }
 
       for (const f of dump.files) {

@@ -15,7 +15,7 @@
   <meta name="theme-color" content="#07080d">
   <title>Second Brain</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307080d'/%3E%3Ccircle cx='10' cy='12' r='4' fill='%238b7cff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%2338d6c4'/%3E%3Ccircle cx='17' cy='22' r='3.5' fill='%23ffb547'/%3E%3Cpath d='M10 12L22 11M10 12L17 22M22 11L17 22' stroke='%23ffffff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=8301fab">
+  <link rel="stylesheet" href="styles.css?v=075ddc2">
 </head>
 <body>
   <!-- Password gate: the published graph.json is AES-256-GCM encrypted.
@@ -72,6 +72,10 @@
       <button class="btn btn-primary" id="open-dump" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span>Dump</span>
+      </button>
+      <button class="btn" id="sync-now" type="button" title="Ask the dev house to sync now (ingest dumps, rebuild graph)" aria-label="Sync now">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg>
+        <span>Sync</span>
       </button>
       <button class="btn btn-icon" id="open-settings" type="button" aria-label="Settings" title="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -142,8 +146,9 @@
         <button class="btn btn-small" type="button" id="dump-open-settings">Open settings</button>
       </div>
 
-      <label class="field-label" for="dump-text">Notes &amp; links</label>
+      <label class="field-label" for="dump-text" id="dump-text-label">Notes &amp; links</label>
       <textarea id="dump-text" maxlength="50000" rows="8" placeholder="Brain-dump anything: ideas, targets, progress, links…"></textarea>
+      <p class="muted small" id="dump-comment-hint" hidden>This comment will be attached to the file(s) below — the brain uses it to file them correctly.</p>
       <div class="field-foot">
         <span class="field-error" id="text-error" role="alert"></span>
         <span class="counter" id="text-counter">0 / 50,000</span>
@@ -235,6 +240,6 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=8301fab" defer></script>
+  <script src="app.js?v=075ddc2" defer></script>
 </body>
 </html>
