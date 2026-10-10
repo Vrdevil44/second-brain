@@ -641,7 +641,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=f109d8d');
+        await loadScriptOnce('universe.js?v=ef5d8dc');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2429,24 +2429,23 @@
   }
 
   function toggleMobileSearch() {
-    let overlay = $('#mobile-search-overlay');
-    if (overlay) {
-      overlay.remove();
+    let panel = $('#mobile-search-panel');
+    if (panel) {
+      panel.remove();
       return;
     }
-    overlay = document.createElement('div');
-    overlay.id = 'mobile-search-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:50;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);padding:12px;overflow-y:auto;';
+    // Compact dropdown below the topbar — tap outside to dismiss.
+    panel = document.createElement('div');
+    panel.id = 'mobile-search-panel';
+    panel.style.cssText = 'position:fixed;top:56px;left:12px;right:12px;z-index:50;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.5);max-height:45vh;display:flex;flex-direction:column;overflow:hidden;';
     const input = document.createElement('input');
     input.type = 'search';
     input.placeholder = 'Search facts…';
-    input.style.cssText = 'width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;margin-bottom:12px;';
+    input.style.cssText = 'width:100%;padding:12px 14px;border:none;border-bottom:1px solid var(--border);background:transparent;color:var(--text);font-size:16px;outline:none;';
     const results = document.createElement('div');
     results.id = 'mobile-search-results';
-    const close = document.createElement('button');
-    close.textContent = '✕ Close';
-    close.style.cssText = 'width:100%;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--text-2);font-size:14px;cursor:pointer;margin-top:12px;';
-    close.addEventListener('click', () => overlay.remove());
+    results.style.cssText = 'overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;';
+    results.classList.add('no-scrollbar');
 
     input.addEventListener('input', () => {
       const q = input.value.toLowerCase().trim();
@@ -2459,12 +2458,13 @@
       }
       for (const m of matches.slice(0, 20)) {
         const div = document.createElement('div');
-        div.style.cssText = 'padding:12px;border-bottom:1px solid var(--border);cursor:pointer;';
+        div.style.cssText = 'padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;';
         div.innerHTML = '<div style="font-weight:600;font-size:14px;"></div><div class="muted" style="font-size:12px;"></div>';
         div.querySelector('div').textContent = m.label || m.id;
         div.querySelector('.muted').textContent = m.id;
         div.addEventListener('click', () => {
-          overlay.remove();
+          panel.remove();
+          document.removeEventListener('click', outsideCloser, true);
           if (window.BrainUniverse && window.BrainUniverse.focusNode) {
             window.BrainUniverse.focusNode(m.id);
           }
@@ -2472,18 +2472,23 @@
         results.appendChild(div);
       }
       if (matches.length === 0) {
-        results.innerHTML = '<div class="muted" style="padding:20px;text-align:center;">No matches</div>';
+        results.innerHTML = '<div class="muted" style="padding:16px;text-align:center;">No matches</div>';
       }
     });
 
-    overlay.appendChild(input);
-    overlay.appendChild(results);
-    document.body.appendChild(overlay);
+    panel.appendChild(input);
+    panel.appendChild(results);
+    document.body.appendChild(panel);
     input.focus();
-    // Close when tapping outside the search box (like updates pill).
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) overlay.remove();
-    });
+    // Tap outside the panel to dismiss.
+    const outsideCloser = (e) => {
+      if (!panel.contains(e.target)) {
+        panel.remove();
+        document.removeEventListener('click', outsideCloser, true);
+      }
+    };
+    // Delay so the opening tap doesn't immediately close it.
+    setTimeout(() => document.addEventListener('click', outsideCloser, true), 100);
   }
 
   // ===========================================================================

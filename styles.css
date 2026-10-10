@@ -968,3 +968,6 @@ body.view-3d .node-panel { display: none; }
   .updates-log:not(.expanded) { display: none; }
   .updates-log.expanded { display: block; }
 }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
