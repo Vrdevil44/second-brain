@@ -218,6 +218,8 @@ a:hover { color: #b0a6ff; }
   width: 280px;
   max-height: 220px;
   overflow-y: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
   padding: 10px 14px;
   border-radius: 12px;
   background: var(--surface);
@@ -228,6 +230,7 @@ a:hover { color: #b0a6ff; }
   color: var(--text-2);
   z-index: 5;
 }
+.updates-log::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
 .updates-log h3 {
   margin: 0 0 8px;
   font-size: 11px;

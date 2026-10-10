@@ -640,7 +640,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=3cd8bcc');
+        await loadScriptOnce('universe.js?v=e30ac15');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2156,17 +2156,54 @@
         // Clicking focuses the graph (new nodes glow if just synced).
         li.style.cursor = 'pointer';
         li.title = 'Click to view in graph';
-        li.addEventListener('click', () => {
-          // Try to extract F-IDs from the commit message and focus the first.
-          const m = msg.match(/F-\d+/g);
-          if (m && window.BrainUniverse) {
-            for (const fid of m) {
+        li.addEventListener('click', async () => {
+          // Try to find F-IDs: first from "F-XXXX..F-YYYY" ranges, then individual.
+          const rangeM = msg.match(/F-(\d+)\.\.F-(\d+)/);
+          let fids = [];
+          if (rangeM) {
+            const start = parseInt(rangeM[1], 10);
+            const end = parseInt(rangeM[2], 10);
+            for (let i = start; i <= end && i < start + 20; i++) {
+              fids.push('F-' + String(i).padStart(4, '0'));
+            }
+          } else {
+            fids = msg.match(/F-\d+/g) || [];
+          }
+
+          if (fids.length > 0 && window.BrainUniverse) {
+            for (const fid of fids) {
               if (window.BrainUniverse.focusNode(fid)) {
                 toast('Focused ' + fid, 'ok');
                 return;
               }
             }
           }
+
+          // Fallback: fetch commit files, find knowledge/ changes, extract F-IDs.
+          try {
+            const token2 = getToken();
+            const sha = c.sha;
+            const detRes = await guardedFetch(
+              CONFIG.apiBase + `/repos/Vrdevil44/dream-brain/commits/${sha}`,
+              { headers: { 'Authorization': 'Bearer ' + token2, 'Accept': 'application/vnd.github+json' } }
+            );
+            if (detRes.ok) {
+              const det = await detRes.json();
+              const kFiles = (det.files || []).filter((f) => f.filename.startsWith('knowledge/'));
+              if (kFiles.length > 0 && window.BrainUniverse) {
+                // Try focusing via the first file's F-IDs from its patch.
+                const patch = kFiles[0].patch || '';
+                const patchFids = patch.match(/F-\d+/g) || [];
+                for (const fid of [...new Set(patchFids)].slice(0, 5)) {
+                  if (window.BrainUniverse.focusNode(fid)) {
+                    toast('Focused ' + fid, 'ok');
+                    return;
+                  }
+                }
+              }
+            }
+          } catch { /* fall through */ }
+
           toast('No graph node found for this update', 'err');
         });
         list.appendChild(li);
