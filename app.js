@@ -640,7 +640,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=15df0a5');
+        await loadScriptOnce('universe.js?v=04c99f4');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2226,9 +2226,14 @@
     if (!badge || !pill) return;
     if (!isMobile()) { pill.hidden = true; return; }
     pill.hidden = false;
-    // Show count of new updates (vs last seen).
-    const lastSeen = parseInt(localStorage.getItem('updates-last-seen') || '0', 10);
-    const newCount = Math.max(0, count - lastSeen);
+    // On first load, mark all as seen (no badge). Only new ones after that count.
+    let lastSeen = localStorage.getItem('updates-last-seen');
+    if (lastSeen === null) {
+      localStorage.setItem('updates-last-seen', String(count));
+      badge.textContent = '';
+      return;
+    }
+    const newCount = Math.max(0, count - parseInt(lastSeen, 10));
     badge.textContent = newCount > 0 ? newCount : '';
   }
 
@@ -2261,14 +2266,14 @@
       });
     }
 
-    // Brand header expandable → domains panel.
+    // Brand header expandable → show the real legend (domains + relations).
     const brand = document.querySelector('.brand');
     const domains = $('#brand-domains');
     if (brand && domains) {
       brand.addEventListener('click', () => {
         const open = domains.classList.toggle('open');
         domains.hidden = !open;
-        if (open) buildDomainsList();
+        if (open) buildMobileLegend();
       });
     }
 
@@ -2309,32 +2314,35 @@
     }
   }
 
-  function buildDomainsList() {
-    const container = $('#brand-domains-list');
+  function buildMobileLegend() {
+    const container = $('#brand-domains');
     if (!container) return;
-    // Get domains from the legend or graph data.
-    const domains = ['people', 'projects', 'topics', 'places', 'patterns', 'library'];
     container.innerHTML = '';
-    const activeDomains = JSON.parse(localStorage.getItem('active-domains') || 'null') || domains;
-    for (const d of domains) {
-      const label = document.createElement('label');
-      label.className = 'domain-toggle';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = activeDomains.includes(d);
-      cb.addEventListener('change', () => {
-        const current = JSON.parse(localStorage.getItem('active-domains') || 'null') || [...domains];
-        if (cb.checked && !current.includes(d)) current.push(d);
-        if (!cb.checked) current.splice(current.indexOf(d), 1);
-        localStorage.setItem('active-domains', JSON.stringify(current));
-        if (window.BrainUniverse && window.BrainUniverse.setDomainFilter) {
-          window.BrainUniverse.setDomainFilter(current);
-        }
-      });
-      label.appendChild(cb);
-      label.appendChild(document.createTextNode(d.charAt(0).toUpperCase() + d.slice(1)));
-      container.appendChild(label);
+    // Reuse the real legend from the universe (colors, counts, toggle behavior).
+    if (window.BrainUniverse && window.BrainUniverse.getLegend) {
+      const legend = window.BrainUniverse.getLegend();
+      if (legend) {
+        // Clone it so the original stays intact.
+        const clone = legend.cloneNode(true);
+        // Re-wire the toggle buttons in the clone.
+        const origRows = legend.querySelectorAll('.u-legend-row');
+        const cloneRows = clone.querySelectorAll('.u-legend-row');
+        cloneRows.forEach((cloneRow, i) => {
+          const origRow = origRows[i];
+          if (origRow) {
+            // Copy the pressed state.
+            cloneRow.setAttribute('aria-pressed', origRow.getAttribute('aria-pressed'));
+            cloneRow.classList.toggle('u-off', origRow.classList.contains('u-off'));
+            // Clicking the clone triggers the original.
+            cloneRow.addEventListener('click', () => origRow.click());
+          }
+        });
+        container.appendChild(clone);
+        return;
+      }
     }
+    // Fallback: simple message if legend not available.
+    container.innerHTML = '<p class="muted">Legend not available in this view.</p>';
   }
 
   function toggleMobileSearch() {

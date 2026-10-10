@@ -650,12 +650,12 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
   #view-toggle, #sync-now { display: none !important; }
 
   /* Mobile: hide full search bar (replaced by icon button) */
-  .search-wrap { display: none !important; }
+  .search-wrap, .u-search { display: none !important; }
 
-  /* Mobile: updates pill (collapsed by default) */
+  /* Mobile: updates pill (collapsed by default, left side) */
   .updates-log {
-    left: 50%;
-    transform: translateX(-50%);
+    left: 12px;
+    transform: none;
     bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px);
     width: auto;
     max-width: 90vw;
@@ -686,8 +686,8 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
     cursor: pointer;
     border: none;
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 12px;
+    transform: none;
     bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px);
     z-index: 6;
   }
@@ -714,7 +714,7 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
     top: 64px;
     left: 12px;
     right: 12px;
-    padding: 12px 16px;
+    padding: 0;
     border-radius: 12px;
     background: var(--surface);
     backdrop-filter: blur(14px);
@@ -723,11 +723,20 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
     z-index: 7;
     max-height: 60vh;
     overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+  .brand-domains::-webkit-scrollbar { display: none; }
   .brand-domains.open { display: block; }
-  .brand-domains h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin: 0 0 8px; }
-  .brand-domains .domain-toggle { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 14px; }
-  .brand-domains .domain-toggle input { accent-color: var(--accent); }
+  /* The cloned legend inherits u-legend styles; ensure it displays well on mobile */
+  .brand-domains .u-legend {
+    position: static;
+    max-height: none;
+    box-shadow: none;
+    border: none;
+    background: transparent;
+    padding: 12px 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -939,6 +948,22 @@ body.view-3d .node-panel { display: none; }
 .mobile-settings-extras { display: none; }
 @media (max-width: 640px) {
   .mobile-settings-extras { display: block; }
+@media (max-width: 640px) {
+  .modal-backdrop {
+    padding: 0;
+    place-items: end center;
+  }
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 85vh;
+    border-radius: 18px 18px 0 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
+  }
+  .modal::-webkit-scrollbar { display: none; }
   /* Hide desktop updates log panel on mobile (pill replaces it) */
   .updates-log:not(.expanded) { display: none; }
   .updates-log.expanded { display: block; }

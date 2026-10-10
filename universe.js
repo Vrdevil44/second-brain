@@ -742,9 +742,13 @@
       .onEngineStop(() => {
         if (!S) return;
         updateFocus(); // re-apply dimming once the layout settles
-        if (S.fitOnStop) {
+        // On touch: don't auto-fit — let the user control the view (his call 2026-10-10).
+        const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        if (S.fitOnStop && !isTouch) {
           S.fitOnStop = false;
           S.graph.zoomToFit(800, 40);
+        } else {
+          S.fitOnStop = false;
         }
       });
 
@@ -830,6 +834,7 @@
         .map((n) => ({ id: n.id, label: n.name || n.id }))
         .slice(0, 20);
     },
+    getLegend: () => (S && S.legendBox) ? S.legendBox : null,
     setDomainFilter: (domains) => {
       // Filter visible nodes by domain — for mobile domain toggles.
       if (!S || !S.graph) return;
