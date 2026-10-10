@@ -773,6 +773,8 @@ body.view-3d .node-panel { display: none; }
 }
 .u-actions { display: flex; gap: 8px; margin-bottom: 14px; }
 .u-muted { color: var(--text-3); font-size: 12.5px; }
+.u-why { margin-bottom: 12px; }
+.u-why p { margin: 4px 0; }
 .u-group { margin-bottom: 12px; }
 .u-group-title {
   display: flex;

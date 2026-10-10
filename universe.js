@@ -393,6 +393,8 @@
     S.panel.hidden = false;
   }
 
+  // The declaring fact of an edge is always its source: build-graph emits source -> target exactly as
+  // written in the source fact's "-> TYPE [F-ID]" segment, so no separate provenance field is needed.
   function renderEdgePanel(link) {
     const a = idOf(link.source);
     const b = idOf(link.target);
@@ -403,6 +405,25 @@
     sw.style.background = TYPE_COLORS[link.type] || FALLBACK_LINK;
     title.append(sw, document.createTextNode(link.type));
     S.panel.append(title);
+
+    // Every edge between the pair, either direction; the clicked one first.
+    const all = (S.data.adj.get(a) || []).filter((r) => r.other === b).map((r) => r.edge);
+    const clicked = all.findIndex((e) => e.source === a && e.target === b && e.type === link.type);
+    if (clicked > 0) all.unshift(all.splice(clicked, 1)[0]);
+    const why = h('section', 'u-group');
+    why.append(h('h3', 'u-group-title', all.length > 1 ? 'Why (' + all.length + ' relations)' : 'Why'));
+    for (const e of all.length ? all : [link]) {
+      const src = S.data.byId.get(String(idOf(e.source)));
+      const row = h('div', 'u-why');
+      row.dataset.relation = e.type;
+      row.append(h('div', 'u-neighbor-dir', e.type + ' · ' + idOf(e.source) + ' → ' + idOf(e.target)));
+      const text = src ? [...src.name].slice(0, 140).join('') : 'Unrecorded';
+      row.append(h('p', 'u-muted', text));
+      if (src && src.date) row.append(h('small', 'u-neighbor-dir', 'Declared by ' + src.id + ' · recorded ' + src.date));
+      why.append(row);
+    }
+    S.panel.append(why);
+
     const grp = h('section', 'u-group');
     grp.append(h('h3', 'u-group-title', 'From'), neighborButton(a));
     grp.append(h('h3', 'u-group-title', 'To'), neighborButton(b));
