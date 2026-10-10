@@ -63,6 +63,7 @@
     person: '#ff7eb6',
     project: '#6aa7ff',
     topic: '#9be564',
+    unknown: '#888888',
   };
   // Node types the renderer knows. Anything else renders as 'unknown'.
   const NODE_TYPES = Object.keys(TYPE_COLORS);
@@ -640,7 +641,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=dc18461');
+        await loadScriptOnce('universe.js?v=f109d8d');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -717,7 +718,10 @@
       if (!n || (typeof n.id !== 'string' && typeof n.id !== 'number')) continue;
       const id = String(n.id);
       if (graph.byId.has(id)) continue;
-      const type = NODE_TYPES.includes(n.type) ? n.type : 'unknown';
+      // Map domain → 2D type for coloring. Domains: people, projects, topics, places, patterns, library.
+      const domainToType = { people: 'person', projects: 'project', topics: 'topic', places: 'target', patterns: 'idea', library: 'cluster' };
+      const rawType = n.type || domainToType[n.domain] || 'unknown';
+      const type = NODE_TYPES.includes(rawType) ? rawType : 'unknown';
       const size = clamp(Number(n.size) || 1, 1, 1000);
       const label = String(n.label == null ? id : n.label).slice(0, 120);
       const node = {
