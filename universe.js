@@ -548,6 +548,7 @@
       .linkWidth(0.6)
       .linkLabel(() => '') // we render our own tooltip
       .cooldownTime(15000)
+      .enableNodeDrag(false) // P2-T3: node micro-drags swallowed taps (clickAfterDrag defaults false); orbit/pan unaffected, nothing uses onNodeDrag
       .onNodeClick(onNodeClick)
       .onBackgroundClick(onBackgroundClick)
       .onLinkHover((link) => {
