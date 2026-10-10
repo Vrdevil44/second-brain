@@ -642,7 +642,7 @@
       try {
         await loadScriptOnce('vendor/three.min.js');
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=86a2210');
+        await loadScriptOnce('universe.js?v=14883d1');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2394,9 +2394,10 @@
         cluster: '#8b7cff', idea: '#38d6c4', target: '#ffb547',
         person: '#ff7eb6', project: '#6aa7ff', topic: '#9be564',
       };
+      const domainToType = { people: 'person', projects: 'project', topics: 'topic', places: 'target', patterns: 'idea', library: 'cluster' };
       const tCount = new Map();
       for (const n of graphData.nodes) {
-        const t = n.type || 'unknown';
+        const t = n.type || domainToType[n.domain] || 'unknown';
         tCount.set(t, (tCount.get(t) || 0) + 1);
       }
       const box = document.createElement('div');
