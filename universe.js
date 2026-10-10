@@ -91,47 +91,6 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
-  // Premium glow sprite: canvas radial gradient (bright core + soft halo),
-  // matching the 2D canvas look. Cached per color.
-  const glowCache = new Map();
-  function glowTexture(hex) {
-    if (glowCache.has(hex)) return glowCache.get(hex);
-    const size = 128;
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    const n = parseInt(hex.slice(1), 16);
-    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-    const lighter = (c) => Math.min(255, c + 70);
-    // Outer halo.
-    let grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-    grad.addColorStop(0, `rgba(${r},${g},${b},0.9)`);
-    grad.addColorStop(0.25, `rgba(${lighter(r)},${lighter(g)},${lighter(b)},1)`);
-    grad.addColorStop(0.4, `rgba(${r},${g},${b},0.95)`);
-    grad.addColorStop(0.7, `rgba(${r},${g},${b},0.25)`);
-    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-    const tex = new THREE.CanvasTexture(canvas);
-    glowCache.set(hex, tex);
-    return tex;
-  }
-
-  function glowSprite(node) {
-    const hex = DOMAIN_COLORS[node.domain] || FALLBACK_NODE;
-    const mat = new THREE.SpriteMaterial({
-      map: glowTexture(hex),
-      transparent: true,
-      depthWrite: false,
-      opacity: node.status === 'superseded' ? 0.35 : 0.95,
-    });
-    const sprite = new THREE.Sprite(mat);
-    // Scale with node value (val), matching the old sphere sizing.
-    const s = Math.cbrt(node.val || 1) * 4 * 2.2;
-    sprite.scale.set(s, s, 1);
-    return sprite;
-  }
-
   // f = focus factor (1 = normal, DIM = outside the focused neighborhood).
   function nodeColor(n, f) {
     // Fresh nodes (just synced) glow white-hot for 60s — unmissable.
@@ -295,14 +254,6 @@
     // Re-setting an accessor makes the lib re-digest node/link materials.
     S.graph
       .nodeColor((n) => nodeColor(n, focusOpacity(n.id)))
-      .nodeThreeObject((n) => {
-        // Update existing sprite opacity for focus dimming.
-        const obj = n.__threeObj;
-        if (obj && obj.material) {
-          obj.material.opacity = (n.status === 'superseded' ? 0.35 : 0.95) * focusOpacity(n.id);
-        }
-        return obj || glowSprite(n);
-      })
       .linkColor((l) => {
         const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : DIM;
         return f === 1 ? l.color : hexToRgba(l.color, f);
@@ -743,11 +694,10 @@
       .showNavInfo(false)
       .nodeId('id')
       .nodeVal('val')
-      .nodeThreeObject(glowSprite)
       .nodeColor('color')
       .nodeRelSize(4)
-      .nodeOpacity(0.92)
-      .nodeResolution(10)
+      .nodeOpacity(0.95)
+      .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
       .linkColor('color')
       .linkOpacity(0.55)
