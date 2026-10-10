@@ -194,10 +194,14 @@
   // linkOpacity (global scalars) by each colour's alpha, so per-element
   // dimming has to go through the colour accessors.
   function computeFocusSet() {
-    if (!S.selected || !S.visible.has(S.selected)) return null;
-    const set = new Map([[S.selected, 0]]);
-    let frontier = [S.selected];
-    for (let hop = 1; hop <= S.focusDepth; hop++) {
+    // Hover takes temporary priority (live 1-hop preview); a click pins the
+    // selection at its chosen depth. Hover-out falls back to the pinned node.
+    const anchor = S.hovered || S.selected;
+    if (!anchor || !S.visible.has(anchor)) return null;
+    const depth = S.hovered ? 1 : S.focusDepth;
+    const set = new Map([[anchor, 0]]);
+    let frontier = [anchor];
+    for (let hop = 1; hop <= depth; hop++) {
       const next = [];
       for (const id of frontier) {
         for (const o of S.visAdj.get(id) || []) {
@@ -287,13 +291,34 @@
     S.graph.d3ReheatSimulation();
   }
 
+  // Centroid of the nodes currently on screen — the "middle of the network".
+  function graphCenter() {
+    if (!S || !S.graph) return { x: 0, y: 0, z: 0 };
+    const nodes = S.graph.graphData().nodes;
+    if (!nodes.length) return { x: 0, y: 0, z: 0 };
+    let x = 0, y = 0, z = 0;
+    for (const n of nodes) { x += n.x || 0; y += n.y || 0; z += n.z || 0; }
+    return { x: x / nodes.length, y: y / nodes.length, z: z / nodes.length };
+  }
+
   // Clears selection, closes the panel, restores full opacity.
   function closePanel() {
     if (!S) return;
     S.selected = null;
+    S.hovered = null;
+    S.hoverLink = null;
     S.focusDepth = 1;
     S.panelNode = null;
     S.panel.hidden = true;
+    S.tip.hidden = true;
+    // Return the orbit target to the middle of the network so rotation isn't
+    // left pinned to the last focused node.
+    const cam = S.graph.camera();
+    S.graph.cameraPosition(
+      { x: cam.position.x, y: cam.position.y, z: cam.position.z },
+      graphCenter(),
+      800
+    );
     updateFocus();
   }
 
@@ -580,7 +605,7 @@
       visible: new Set(), isolated: null, selected: null,
       clickTimer: null, clickNode: null, lastBgClick: 0,
       focusDepth: 1, focusSet: null, visAdj: new Map(), panelNode: null,
-      fitOnStop: true, paused: false,
+      fitOnStop: true, paused: false, hovered: null, hoverLink: null,
     };
 
     container.textContent = '';
@@ -658,7 +683,7 @@
       .nodeRelSize(4)
       .nodeOpacity(0.92)
       .nodeResolution(10)
-      .nodeLabel(() => '') // P2-T7: hover tooltip disabled — it was the only DOM change on node hover and a prime suspect for the hover shift-down; node names show in the click panel
+      .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
       .linkColor('color')
       .linkOpacity(0.55)
       .linkWidth(0.6)
@@ -667,15 +692,32 @@
       .enableNodeDrag(false) // P2-T3: node micro-drags swallowed taps (clickAfterDrag defaults false); orbit/pan unaffected, nothing uses onNodeDrag
       .onNodeClick(onNodeClick)
       .onBackgroundClick(onBackgroundClick)
-      .onLinkHover((link) => {
+      .onNodeHover((node) => {
         if (!S) return;
-        if (link) {
-          S.tip.textContent = link.type;
+        const id = node ? node.id : null;
+        if (S.hovered === id) return;
+        S.hovered = id;
+        if (node) {
+          S.tip.textContent = node.name;
           S.tip.hidden = false;
-        } else {
+        } else if (!S.hoverLink) {
           S.tip.hidden = true;
         }
-        S.stage.style.cursor = link ? 'pointer' : '';
+        S.stage.style.cursor = (node || S.hoverLink) ? 'pointer' : '';
+        updateFocus(); // live 1-hop highlight follows the hover
+      })
+      .onLinkHover((link) => {
+        if (!S) return;
+        S.hoverLink = link || null;
+        if (!S.hovered) { // node hover takes tip priority
+          if (link) {
+            S.tip.textContent = link.type;
+            S.tip.hidden = false;
+          } else {
+            S.tip.hidden = true;
+          }
+        }
+        S.stage.style.cursor = (link || S.hovered) ? 'pointer' : '';
       })
       .onLinkClick((link) => { if (S && link) renderEdgePanel(link); })
       .onEngineStop(() => {
