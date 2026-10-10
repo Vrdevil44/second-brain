@@ -32,7 +32,7 @@
   // ---------------------------------------------------------------------------
   const CONFIG = {
     owner: 'Vrdevil44',
-    repo: 'about-vibhu',
+    repo: 'dream-brain',
     dumpDir: 'daily-dump',
     graphUrl: 'graph.json',
     apiBase: 'https://api.github.com',
@@ -91,6 +91,11 @@
     if (u.origin === CONFIG.apiBase) {
       if (m === 'GET' && u.pathname === '/user') return;
       if (m === 'PUT' && u.pathname.startsWith(DUMP_PATH_PREFIX) && !u.pathname.includes('..')) return;
+      // Sync-now: dispatch the workflow and poll its status.
+      const wf = `/repos/${CONFIG.owner}/dream-brain/actions/`;
+      if (m === 'POST' && u.pathname === wf + 'workflows/sync.yml/dispatches') return;
+      if (m === 'GET' && u.pathname === wf + 'workflows/sync.yml/runs') return;
+      if (m === 'GET' && /^\/repos\/[^/]+\/dream-brain\/actions\/runs\/\d+$/.test(u.pathname)) return;
     }
     throw new Error('Blocked by privacy rule: ' + m + ' ' + u.origin + u.pathname);
   }
@@ -632,7 +637,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=054a8ba');
+        await loadScriptOnce('universe.js?v=9495520');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
