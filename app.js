@@ -641,7 +641,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=e75e3b2');
+        await loadScriptOnce('universe.js?v=e75f34d');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -740,8 +740,8 @@
     const seen = new Set();
     for (const e of rawEdges) {
       if (!e) continue;
-      const a = graph.byId.get(String(e.from));
-      const b = graph.byId.get(String(e.to));
+      const a = graph.byId.get(String(e.from || e.source));
+      const b = graph.byId.get(String(e.to || e.target));
       if (!a || !b || a === b) continue;
       const key = a.id < b.id ? a.id + '\u0000' + b.id : b.id + '\u0000' + a.id;
       if (seen.has(key)) continue;
