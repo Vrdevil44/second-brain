@@ -41,6 +41,7 @@
   const FALLBACK_LINK = '#6e7187';
   const BG = '#07080d';
   const DBLCLICK_MS = 280;
+  const DIM = 0.15; // opacity factor for nodes/links outside the focus neighborhood
 
   let S = null; // live state; null when not initialised
 
@@ -62,9 +63,11 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
-  function nodeColor(n) {
+  // f = focus factor (1 = normal, DIM = outside the focused neighborhood).
+  function nodeColor(n, f) {
     const c = DOMAIN_COLORS[n.domain] || FALLBACK_NODE;
-    return n.status === 'superseded' ? hexToRgba(c, 0.35) : c;
+    const a = (n.status === 'superseded' ? 0.35 : 1) * (f == null ? 1 : f);
+    return a === 1 ? c : hexToRgba(c, a);
   }
 
   const idOf = (x) => (x && typeof x === 'object' ? x.id : x);
@@ -107,6 +110,7 @@
         domain: String(n.domain || ''),
         status: String(n.status || ''),
         date: String(n.date || ''),
+        cmt: String(n.cmt || ''), // fact.v2 share-time comment; not rendered yet
         x: c.x + (hash01(id + ':x') - 0.5) * SEED_J,
         y: c.y + (hash01(id + ':y') - 0.5) * SEED_J,
         z: c.z + (hash01(id + ':z') - 0.5) * SEED_J,
@@ -161,6 +165,13 @@
     if (!S) return;
     const { vNodes, vEdges } = computeVisible();
     S.visible = new Set(vNodes.map((n) => n.id));
+    // Adjacency over what is actually on screen; focus hops follow this, so
+    // filters/isolation change the neighborhood the same way they change the view.
+    S.visAdj = new Map(vNodes.map((n) => [n.id, new Set()]));
+    for (const e of vEdges) {
+      S.visAdj.get(e.source).add(e.target);
+      S.visAdj.get(e.target).add(e.source);
+    }
     // Node objects persist (keeps x/y/z); links are rebuilt because the engine
     // rewrites source/target into object refs.
     const links = vEdges.map((e) => ({
@@ -174,6 +185,61 @@
     }
     if (S.resetBtn) S.resetBtn.hidden = !S.isolated;
     refreshSuggestions();
+    updateFocus();
+    if (S.panelNode && !S.panel.hidden) renderNodePanel(S.panelNode); // refresh hidden-by-filter rows
+  }
+
+  // ---- Focus (magnetic dimming) -----------------------------------------------
+  // Dimming rides on colour alpha: 3d-force-graph multiplies nodeOpacity /
+  // linkOpacity (global scalars) by each colour's alpha, so per-element
+  // dimming has to go through the colour accessors.
+  function computeFocusSet() {
+    if (!S.selected || !S.visible.has(S.selected)) return null;
+    const set = new Map([[S.selected, 0]]);
+    let frontier = [S.selected];
+    for (let hop = 1; hop <= S.focusDepth; hop++) {
+      const next = [];
+      for (const id of frontier) {
+        for (const o of S.visAdj.get(id) || []) {
+          if (!set.has(o)) { set.set(o, hop); next.push(o); }
+        }
+      }
+      frontier = next;
+    }
+    return set;
+  }
+
+  // Opacity factor for a node: 1 when in focus (or no focus), DIM otherwise.
+  function focusOpacity(id) {
+    return !S || !S.focusSet || S.focusSet.has(id) ? 1 : DIM;
+  }
+
+  function updateFocus() {
+    if (!S || !S.graph) return;
+    S.focusSet = computeFocusSet();
+    // Re-setting an accessor makes the lib re-digest node/link materials.
+    S.graph
+      .nodeColor((n) => nodeColor(n, focusOpacity(n.id)))
+      .linkColor((l) => {
+        const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : DIM;
+        return f === 1 ? l.color : hexToRgba(l.color, f);
+      });
+  }
+
+  // Tap semantics: new node -> focus 1-hop; same selected node -> toggle 2-hop.
+  function tapNode(id) {
+    if (!S) return;
+    if (S.selected === id) {
+      S.focusDepth = S.focusDepth === 1 ? 2 : 1;
+      renderNodePanel(S.data.byId.get(id));
+      updateFocus();
+    } else {
+      select(id, false);
+    }
+  }
+
+  function toggleDepth() {
+    if (S && S.selected) tapNode(S.selected);
   }
 
   // ---- Camera -----------------------------------------------------------------
@@ -193,8 +259,10 @@
     const node = S.data.byId.get(id);
     if (!node) return;
     if (!S.visible.has(id)) return;
+    if (S.selected !== id) S.focusDepth = 1;
     S.selected = id;
     renderNodePanel(node);
+    updateFocus();
     if (fly) {
       const live = S.graph.graphData().nodes.find((n) => n.id === id);
       flyTo(live || node);
@@ -219,10 +287,14 @@
     S.graph.d3ReheatSimulation();
   }
 
+  // Clears selection, closes the panel, restores full opacity.
   function closePanel() {
     if (!S) return;
     S.selected = null;
+    S.focusDepth = 1;
+    S.panelNode = null;
     S.panel.hidden = true;
+    updateFocus();
   }
 
   // ---- Detail panel -----------------------------------------------------------
@@ -262,7 +334,15 @@
     return b;
   }
 
+  // One row per neighbor; parallel edges of different types share the row.
+  function neighborRow(id, rels) {
+    const row = neighborButton(id, rels.map((r) => (r.dir === 'out' ? '→ ' : '← ') + r.edge.type).join(' · '));
+    row.dataset.relations = rels.map((r) => r.edge.type).join(',');
+    return row;
+  }
+
   function renderNodePanel(node) {
+    S.panelNode = node;
     panelHead('Fact ' + node.id);
     S.panel.append(h('h2', 'u-title', node.name));
 
@@ -280,29 +360,35 @@
     iso.type = 'button';
     iso.addEventListener('click', () => (S.isolated === node.id ? resetIsolation() : isolate(node.id)));
     actions.append(focus, iso);
+    if (S.selected === node.id) {
+      const depth = h('button', 'u-btn', S.focusDepth === 1 ? 'Show 2 hops' : 'Show 1 hop');
+      depth.type = 'button';
+      depth.addEventListener('click', toggleDepth);
+      actions.append(depth);
+    }
     S.panel.append(actions);
 
     const rels = S.data.adj.get(node.id) || [];
     if (!rels.length) {
       S.panel.append(h('p', 'u-muted', 'No relations recorded.'));
     } else {
-      const groups = new Map();
+      const byNeighbor = new Map();
       for (const r of rels) {
-        if (!groups.has(r.edge.type)) groups.set(r.edge.type, []);
-        groups.get(r.edge.type).push(r);
+        if (r.other === node.id) continue; // self-loop
+        if (!byNeighbor.has(r.other)) byNeighbor.set(r.other, []);
+        byNeighbor.get(r.other).push(r);
       }
-      for (const type of TYPES.concat([...groups.keys()].filter((t) => !TYPES.includes(t)))) {
-        const list = groups.get(type);
-        if (!list) continue;
-        const sec = h('section', 'u-group');
-        const title = h('h3', 'u-group-title');
-        const sw = h('i', 'u-swatch');
-        sw.style.background = TYPE_COLORS[type] || FALLBACK_LINK;
-        title.append(sw, document.createTextNode(type + ' (' + list.length + ')'));
-        sec.append(title);
-        for (const r of list) sec.append(neighborButton(r.other, r.dir === 'out' ? '→ out' : '← in'));
-        S.panel.append(sec);
-      }
+      const rank = (list) => Math.min(...list.map((r) => {
+        const i = TYPES.indexOf(r.edge.type);
+        return i < 0 ? TYPES.length : i;
+      }));
+      const nameOf = (id) => (S.data.byId.get(id) || { name: id }).name;
+      const ordered = [...byNeighbor.entries()].sort((a, b) => (
+        rank(a[1]) - rank(b[1]) || nameOf(a[0]).localeCompare(nameOf(b[0]))));
+      const sec = h('section', 'u-group');
+      sec.append(h('h3', 'u-group-title', 'Neighbors (' + ordered.length + ')'));
+      for (const [id, list] of ordered) sec.append(neighborRow(id, list));
+      S.panel.append(sec);
     }
     S.panel.hidden = false;
   }
@@ -310,6 +396,7 @@
   function renderEdgePanel(link) {
     const a = idOf(link.source);
     const b = idOf(link.target);
+    S.panelNode = null;
     panelHead('Relation');
     const title = h('h2', 'u-title');
     const sw = h('i', 'u-swatch');
@@ -339,12 +426,13 @@
       if (!S) return;
       S.clickTimer = null;
       S.clickNode = null;
-      select(node.id, false);
+      tapNode(node.id);
     }, DBLCLICK_MS);
   }
 
   function onBackgroundClick() {
     if (!S) return;
+    closePanel(); // background tap clears the selection / focus
     const now = Date.now();
     if (now - S.lastBgClick < DBLCLICK_MS) {
       S.lastBgClick = 0;
@@ -445,6 +533,12 @@
     S.graph.width(d.w).height(d.h);
   }
 
+  function onKeyDown(e) {
+    if (!S || e.key !== 'Escape') return;
+    if (e.target === S.search) return; // search box handles its own Escape
+    closePanel();
+  }
+
   function onPointerMove(e) {
     if (!S || S.tip.hidden) return;
     const r = S.container.getBoundingClientRect();
@@ -464,6 +558,7 @@
       domains: new Set(DOMAINS), types: new Set(TYPES),
       visible: new Set(), isolated: null, selected: null,
       clickTimer: null, clickNode: null, lastBgClick: 0,
+      focusDepth: 1, focusSet: null, visAdj: new Map(), panelNode: null,
       fitOnStop: true, paused: false,
     };
 
@@ -563,7 +658,9 @@
       })
       .onLinkClick((link) => { if (S && link) renderEdgePanel(link); })
       .onEngineStop(() => {
-        if (S && S.fitOnStop) {
+        if (!S) return;
+        updateFocus(); // re-apply dimming once the layout settles
+        if (S.fitOnStop) {
           S.fitOnStop = false;
           S.graph.zoomToFit(800, 40);
         }
@@ -571,6 +668,8 @@
 
     S.onResize = onResize;
     window.addEventListener('resize', S.onResize);
+    S.onKey = onKeyDown;
+    document.addEventListener('keydown', S.onKey);
     container.addEventListener('pointermove', onPointerMove);
     if (typeof ResizeObserver === 'function') {
       S.ro = new ResizeObserver(onResize);
@@ -586,6 +685,7 @@
     S = null;
     if (s.clickTimer) clearTimeout(s.clickTimer);
     window.removeEventListener('resize', s.onResize);
+    document.removeEventListener('keydown', s.onKey);
     if (s.container) s.container.removeEventListener('pointermove', onPointerMove);
     if (s.ro) s.ro.disconnect();
     try {
@@ -602,5 +702,26 @@
     if (s.container) s.container.textContent = '';
   }
 
-  window.BrainUniverse = { init, destroy };
+  // Read/drive hooks for the acceptance harness (portal/checks/focus-mode.checks.mjs).
+  function getPanelRows() {
+    if (!S) return [];
+    return [...S.panel.querySelectorAll('.u-neighbor[data-relations]')].map((b) => {
+      const types = b.dataset.relations.split(',');
+      return {
+        label: b.querySelector('.u-neighbor-label').textContent,
+        relationType: types[0],
+        relationTypes: types,
+      };
+    });
+  }
+
+  window.BrainUniverse = {
+    init,
+    destroy,
+    selectNode: (id) => tapNode(id),
+    clearSelection: () => closePanel(),
+    getOpacity: (id) => focusOpacity(id),
+    getSelectedId: () => (S ? S.selected : null),
+    getPanelRows,
+  };
 })();
