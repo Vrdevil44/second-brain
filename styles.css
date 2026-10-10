@@ -711,7 +711,7 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
   .brand-domains {
     display: none;
     position: fixed;
-    top: 64px;
+    top: 76px;
     left: 12px;
     right: 12px;
     padding: 0;
@@ -719,8 +719,8 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
     background: var(--surface);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    box-shadow: 0 0 0 1px var(--border);
-    z-index: 7;
+    box-shadow: 0 0 0 1px var(--border), 0 12px 40px rgba(0,0,0,0.5);
+    z-index: 20;
     max-height: 60vh;
     overflow-y: auto;
     scrollbar-width: none;
