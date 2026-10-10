@@ -632,7 +632,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=c12fc5c');
+        await loadScriptOnce('universe.js?v=376a77e');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1350,10 +1350,9 @@
   $('#dump-open-settings').addEventListener('click', openSettings);
 
   // ---- Sync now ---------------------------------------------------------------
-  // On-demand sync: creates a `sync-now` issue, then polls it with a progress
-  // dial. The dev-house cron (every 2 min) picks it up, runs the pipeline
-  // (only if there are changes — cheap when idle), and closes the issue with
-  // a summary. The dial resolves when the issue closes.
+  // On-demand sync triggered DIRECTLY from the portal: dispatches the
+  // sync-now GitHub Actions workflow, then polls its run status with a
+  // progress dial. No cron polling — the pipeline starts immediately.
   $('#sync-now').addEventListener('click', async () => {
     const token = getToken();
     if (!token) { toast('Add your GitHub token in Settings first.', 'err'); openSettings(); return; }
@@ -1374,55 +1373,54 @@
     });
 
     try {
-      // 1. File the request.
-      label.textContent = 'Requesting…';
-      const res = await api('/repos/Vrdevil44/dream-brain/issues', {
+      // 1. Dispatch the workflow directly.
+      label.textContent = 'Starting…';
+      const disp = await api('/repos/Vrdevil44/dream-brain/actions/workflows/sync.yml/dispatches', {
         method: 'POST',
-        body: JSON.stringify({
-          title: '[sync-now] ' + new Date().toISOString(),
-          body: 'On-demand sync requested from the portal. Dev house: ingest daily-dump/, merge, rebuild graph, republish portal, then close this issue with a summary.',
-          labels: ['sync-now'],
-        }),
+        body: JSON.stringify({ ref: 'master' }),
       });
-      if (!res.ok) throw new Error('GitHub API ' + res.status);
-      const issue = await res.json();
-      const issueNum = issue.number;
+      if (!disp.ok) throw new Error('GitHub API ' + disp.status);
 
-      // 2. Progress dial: poll until the issue closes (or 10 min timeout).
+      // 2. Find the run we just triggered.
       label.textContent = 'Syncing…';
       btn.classList.add('syncing');
+      let runId = null;
+      for (let i = 0; i < 6 && !runId; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const runs = await api('/repos/Vrdevil44/dream-brain/actions/workflows/sync.yml/runs?per_page=5');
+          if (runs.ok) {
+            const data = await runs.json();
+            const run = data.workflow_runs && data.workflow_runs[0];
+            if (run) runId = run.id;
+          }
+        } catch { /* retry */ }
+      }
+      if (!runId) throw new Error('Could not find the triggered run');
+
+      // 3. Poll until complete (10 min timeout).
       const deadline = Date.now() + 10 * 60 * 1000;
-      let done = false;
-      let summary = '';
-      while (Date.now() < deadline && !done) {
+      let status = '', conclusion = '';
+      while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 8000));
         try {
-          const st = await api(`/repos/Vrdevil44/dream-brain/issues/${issueNum}`);
+          const st = await api(`/repos/Vrdevil44/dream-brain/actions/runs/${runId}`);
           if (!st.ok) continue;
           const data = await st.json();
-          if (data.state === 'closed') {
-            done = true;
-            // Grab the closing comment for the summary.
-            try {
-              const cm = await api(`/repos/Vrdevil44/dream-brain/issues/${issueNum}/comments?per_page=100`);
-              if (cm.ok) {
-                const comments = await cm.json();
-                const last = comments[comments.length - 1];
-                if (last) summary = last.body.slice(0, 200);
-              }
-            } catch { /* summary optional */ }
-          }
-        } catch { /* keep polling on transient errors */ }
+          status = data.status;
+          conclusion = data.conclusion;
+          if (status === 'completed') break;
+        } catch { /* keep polling */ }
       }
       btn.classList.remove('syncing');
-      if (done) {
-        toast('Sync complete.' + (summary ? ' ' + summary : ''), 'ok');
+      if (status === 'completed') {
+        toast(conclusion === 'success' ? 'Sync complete.' : 'Sync finished: ' + conclusion, conclusion === 'success' ? 'ok' : 'err');
       } else {
-        toast('Sync is still running — check the sync-now issue on GitHub.', 'ok');
+        toast('Sync still running — check Actions on GitHub.', 'ok');
       }
     } catch (err) {
       btn.classList.remove('syncing');
-      toast('Sync request failed: ' + err.message, 'err');
+      toast('Sync failed: ' + err.message, 'err');
     } finally {
       label.textContent = origLabel;
       btn.disabled = false;
