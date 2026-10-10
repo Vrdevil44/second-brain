@@ -942,6 +942,9 @@ body.view-3d .node-panel { display: none; }
   .u-left { width: calc(100vw - 36px); bottom: auto; max-height: 40vh; top: 76px; }
   .u-legend { display: none; }
   .u-panel { top: auto; bottom: 66px; height: 45vh; width: calc(100vw - 36px); }
+  /* 2D mobile: hide zoom controls and bottom legend — pinch to zoom, legend via heading tab. */
+  body.view-2d .zoom-controls { display: none; }
+  body.view-2d aside.legend { display: none; }
 }
 
 /* Desktop: hide mobile settings extras by default */

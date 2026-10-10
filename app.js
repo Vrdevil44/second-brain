@@ -641,7 +641,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=ef5d8dc');
+        await loadScriptOnce('universe.js?v=e75e3b2');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -660,6 +660,7 @@
       }
     }
     if (toggle) { toggle.textContent = '3D'; toggle.title = 'Switch to 3D view'; }
+    document.body.classList.add('view-2d');
     if (!graph2dBuilt) { buildGraph(graphData); graph2dBuilt = true; }
     else { resize(); fitView(false); requestRender(); }
   }
@@ -668,8 +669,9 @@
     if (mode === viewMode || !graphData) return;
     if (viewMode === '3d' && window.BrainUniverse) window.BrainUniverse.destroy();
     $('#universe').hidden = true;
-    document.body.classList.remove('view-3d');
+    document.body.classList.remove('view-3d', 'view-2d');
     viewMode = mode;
+    document.body.classList.add(mode === '3d' ? 'view-3d' : 'view-2d');
     await renderView();
   }
 
@@ -2280,15 +2282,24 @@
       });
     }
 
-    // Brand header expandable → show the real legend (domains + relations).
+    // Brand header expandable → show the legend. Tap outside to collapse.
     const brand = document.querySelector('.brand');
     const domains = $('#brand-domains');
     if (brand && domains) {
-      brand.addEventListener('click', () => {
+      brand.addEventListener('click', (e) => {
+        e.stopPropagation();
         const open = domains.classList.toggle('open');
         domains.hidden = !open;
         if (open) buildMobileLegend();
       });
+      // Auto-collapse when tapping outside.
+      document.addEventListener('click', (e) => {
+        if (domains.classList.contains('open') &&
+            !domains.contains(e.target) && !brand.contains(e.target)) {
+          domains.classList.remove('open');
+          domains.hidden = true;
+        }
+      }, true);
     }
 
     // Search icon button.
