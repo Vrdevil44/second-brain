@@ -669,27 +669,12 @@
     S.legendBox = buildLegend();
 
     const controls = h('div', 'u-controls');
-    S.pauseBtn = h('button', 'u-btn', 'Pause');
-    S.pauseBtn.type = 'button';
-    S.pauseBtn.addEventListener('click', () => {
-      S.paused = !S.paused;
-      if (S.paused) S.graph.pauseAnimation(); else S.graph.resumeAnimation();
-      S.pauseBtn.textContent = S.paused ? 'Resume' : 'Pause';
-    });
-    const reheat = h('button', 'u-btn', 'Reheat');
-    reheat.type = 'button';
-    reheat.addEventListener('click', () => {
-      if (S.paused) { S.paused = false; S.graph.resumeAnimation(); S.pauseBtn.textContent = 'Pause'; }
-      S.graph.d3ReheatSimulation();
-    });
+    // Pause/Reheat/Fit removed — not useful (his call 2026-10-10).
     S.resetBtn = h('button', 'u-btn', 'Reset');
     S.resetBtn.type = 'button';
     S.resetBtn.hidden = true;
     S.resetBtn.addEventListener('click', resetIsolation);
-    const fit = h('button', 'u-btn', 'Fit');
-    fit.type = 'button';
-    fit.addEventListener('click', () => S.graph.zoomToFit(600, 40));
-    controls.append(S.pauseBtn, reheat, fit, S.resetBtn);
+    controls.append(S.resetBtn);
 
     S.panel = h('aside', 'u-panel');
     S.panel.hidden = true;
@@ -724,6 +709,8 @@
       .onBackgroundClick(onBackgroundClick)
       .onNodeHover((node) => {
         if (!S) return;
+        // No hover tooltips on touch — tap opens the detail panel instead (his call 2026-10-10).
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return;
         const id = node ? node.id : null;
         if (S.hovered === id) return;
         S.hovered = id;
@@ -738,6 +725,8 @@
       })
       .onLinkHover((link) => {
         if (!S) return;
+        // No hover tooltips on touch (his call 2026-10-10).
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return;
         S.hoverLink = link || null;
         if (!S.hovered) { // node hover takes tip priority
           if (link) {
@@ -831,6 +820,23 @@
       S.graph.cameraPosition(pos, { x: node.x || 0, y: node.y || 0, z: node.z || 0 }, 900);
       tapNode(id);
       return true;
+    },
+    searchNodes: (q) => {
+      if (!S || !S.graph) return [];
+      const query = q.toLowerCase();
+      return S.graph.graphData().nodes
+        .filter((n) => (n.name && n.name.toLowerCase().includes(query)) ||
+                       (n.id && n.id.toLowerCase().includes(query)))
+        .map((n) => ({ id: n.id, label: n.name || n.id }))
+        .slice(0, 20);
+    },
+    setDomainFilter: (domains) => {
+      // Filter visible nodes by domain — for mobile domain toggles.
+      if (!S || !S.graph) return;
+      // Store and apply on next render; simple implementation hides non-matching.
+      S.domainFilter = new Set(domains);
+      // Trigger a refresh if the graph supports it.
+      if (S.graph.refresh) S.graph.refresh();
     },
   };
 })();

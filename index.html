@@ -15,7 +15,7 @@
   <meta name="theme-color" content="#07080d">
   <title>Second Brain</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307080d'/%3E%3Ccircle cx='10' cy='12' r='4' fill='%238b7cff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%2338d6c4'/%3E%3Ccircle cx='17' cy='22' r='3.5' fill='%23ffb547'/%3E%3Cpath d='M10 12L22 11M10 12L17 22M22 11L17 22' stroke='%23ffffff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=1a91cae">
+  <link rel="stylesheet" href="styles.css?v=15df0a5">
 </head>
 <body>
   <!-- Password gate: the published graph.json is AES-256-GCM encrypted.
@@ -101,6 +101,17 @@
       <li class="muted">Loading…</li>
     </ul>
   </aside>
+  <!-- Mobile updates pill -->
+  <button class="updates-pill" id="updates-pill" type="button" aria-label="Show latest updates" hidden>
+    <span>Updates</span>
+    <span class="badge-count" id="updates-badge"></span>
+  </button>
+
+  <!-- Mobile brand domains panel -->
+  <div class="brand-domains" id="brand-domains" hidden>
+    <h3>Domains</h3>
+    <div id="brand-domains-list"></div>
+  </div>
 
   <!-- Zoom controls -->
   <div class="zoom-controls" role="group" aria-label="Zoom">
@@ -231,6 +242,17 @@
         <button class="btn btn-primary" type="button" id="token-save">Save</button>
       </div>
 
+      <!-- Mobile: view and sync controls (hidden from topbar on mobile) -->
+      <div class="mobile-settings-extras" id="mobile-settings-extras" hidden>
+        <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin:16px 0 8px;">View & Sync</h3>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" type="button" id="settings-view-toggle">Switch to 2D</button>
+          <button class="btn" type="button" id="settings-sync-now">
+            <span>Sync now</span>
+          </button>
+        </div>
+      </div>
+
       <div id="device-section" hidden>
         <h3 class="section-title">This device</h3>
         <p class="muted small" id="session-status"></p>
@@ -248,6 +270,6 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="app.js?v=1a91cae" defer></script>
+  <script src="app.js?v=15df0a5" defer></script>
 </body>
 </html>

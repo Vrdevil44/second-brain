@@ -640,7 +640,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=1a91cae');
+        await loadScriptOnce('universe.js?v=15df0a5');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2208,9 +2208,188 @@
         });
         list.appendChild(li);
       }
+      // Update mobile pill badge.
+      updateUpdatesBadge(commits.length);
     } catch (err) {
       list.innerHTML = '<li class="muted">Could not load updates.</li>';
     }
+  }
+
+  // ===========================================================================
+  // Mobile UI: updates pill, expandable header, search icon, settings extras
+  // ===========================================================================
+  const isMobile = () => window.matchMedia('(max-width: 640px)').matches;
+
+  function updateUpdatesBadge(count) {
+    const badge = $('#updates-badge');
+    const pill = $('#updates-pill');
+    if (!badge || !pill) return;
+    if (!isMobile()) { pill.hidden = true; return; }
+    pill.hidden = false;
+    // Show count of new updates (vs last seen).
+    const lastSeen = parseInt(localStorage.getItem('updates-last-seen') || '0', 10);
+    const newCount = Math.max(0, count - lastSeen);
+    badge.textContent = newCount > 0 ? newCount : '';
+  }
+
+  function initMobileUI() {
+    if (!isMobile()) return;
+
+    // Updates pill toggle.
+    const pill = $('#updates-pill');
+    const log = $('#updates-log');
+    if (pill && log) {
+      pill.hidden = false;
+      pill.addEventListener('click', () => {
+        const expanded = log.classList.toggle('expanded');
+        pill.style.display = expanded ? 'none' : 'flex';
+        if (expanded) {
+          // Mark as seen.
+          const list = $('#updates-list');
+          const count = list ? list.children.length : 0;
+          localStorage.setItem('updates-last-seen', String(count));
+          $('#updates-badge').textContent = '';
+        }
+      });
+      // Close when tapping outside.
+      document.addEventListener('click', (e) => {
+        if (log.classList.contains('expanded') &&
+            !log.contains(e.target) && !pill.contains(e.target)) {
+          log.classList.remove('expanded');
+          pill.style.display = 'flex';
+        }
+      });
+    }
+
+    // Brand header expandable → domains panel.
+    const brand = document.querySelector('.brand');
+    const domains = $('#brand-domains');
+    if (brand && domains) {
+      brand.addEventListener('click', () => {
+        const open = domains.classList.toggle('open');
+        domains.hidden = !open;
+        if (open) buildDomainsList();
+      });
+    }
+
+    // Search icon button.
+    const topbarActions = document.querySelector('.topbar-actions');
+    if (topbarActions && !$('#search-toggle')) {
+      const searchBtn = document.createElement('button');
+      searchBtn.className = 'btn btn-icon';
+      searchBtn.id = 'search-toggle';
+      searchBtn.type = 'button';
+      searchBtn.setAttribute('aria-label', 'Search');
+      searchBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
+      searchBtn.addEventListener('click', toggleMobileSearch);
+      topbarActions.insertBefore(searchBtn, topbarActions.firstChild);
+    }
+
+    // Show mobile settings extras.
+    const extras = $('#mobile-settings-extras');
+    if (extras) {
+      extras.hidden = false;
+      // Wire view toggle.
+      const viewBtn = $('#settings-view-toggle');
+      const mainViewBtn = $('#view-toggle');
+      if (viewBtn && mainViewBtn) {
+        viewBtn.addEventListener('click', () => mainViewBtn.click());
+      }
+      // Wire sync.
+      const syncBtn = $('#settings-sync-now');
+      const mainSyncBtn = $('#sync-now');
+      if (syncBtn && mainSyncBtn) {
+        syncBtn.addEventListener('click', () => {
+          // Close settings first, then trigger sync.
+          const modal = $('#settings-modal');
+          if (modal) modal.hidden = true;
+          mainSyncBtn.click();
+        });
+      }
+    }
+  }
+
+  function buildDomainsList() {
+    const container = $('#brand-domains-list');
+    if (!container) return;
+    // Get domains from the legend or graph data.
+    const domains = ['people', 'projects', 'topics', 'places', 'patterns', 'library'];
+    container.innerHTML = '';
+    const activeDomains = JSON.parse(localStorage.getItem('active-domains') || 'null') || domains;
+    for (const d of domains) {
+      const label = document.createElement('label');
+      label.className = 'domain-toggle';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = activeDomains.includes(d);
+      cb.addEventListener('change', () => {
+        const current = JSON.parse(localStorage.getItem('active-domains') || 'null') || [...domains];
+        if (cb.checked && !current.includes(d)) current.push(d);
+        if (!cb.checked) current.splice(current.indexOf(d), 1);
+        localStorage.setItem('active-domains', JSON.stringify(current));
+        if (window.BrainUniverse && window.BrainUniverse.setDomainFilter) {
+          window.BrainUniverse.setDomainFilter(current);
+        }
+      });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(d.charAt(0).toUpperCase() + d.slice(1)));
+      container.appendChild(label);
+    }
+  }
+
+  function toggleMobileSearch() {
+    let overlay = $('#mobile-search-overlay');
+    if (overlay) {
+      overlay.remove();
+      return;
+    }
+    overlay = document.createElement('div');
+    overlay.id = 'mobile-search-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:50;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);padding:12px;overflow-y:auto;';
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.placeholder = 'Search facts…';
+    input.style.cssText = 'width:100%;padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;margin-bottom:12px;';
+    const results = document.createElement('div');
+    results.id = 'mobile-search-results';
+    const close = document.createElement('button');
+    close.textContent = '✕ Close';
+    close.style.cssText = 'width:100%;padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;color:var(--text-2);font-size:14px;cursor:pointer;margin-top:12px;';
+    close.addEventListener('click', () => overlay.remove());
+
+    input.addEventListener('input', () => {
+      const q = input.value.toLowerCase().trim();
+      results.innerHTML = '';
+      if (q.length < 2) return;
+      // Search graph nodes.
+      const matches = [];
+      if (window.BrainUniverse && window.BrainUniverse.searchNodes) {
+        matches.push(...window.BrainUniverse.searchNodes(q));
+      }
+      for (const m of matches.slice(0, 20)) {
+        const div = document.createElement('div');
+        div.style.cssText = 'padding:12px;border-bottom:1px solid var(--border);cursor:pointer;';
+        div.innerHTML = '<div style="font-weight:600;font-size:14px;"></div><div class="muted" style="font-size:12px;"></div>';
+        div.querySelector('div').textContent = m.label || m.id;
+        div.querySelector('.muted').textContent = m.id;
+        div.addEventListener('click', () => {
+          overlay.remove();
+          if (window.BrainUniverse && window.BrainUniverse.focusNode) {
+            window.BrainUniverse.focusNode(m.id);
+          }
+        });
+        results.appendChild(div);
+      }
+      if (matches.length === 0) {
+        results.innerHTML = '<div class="muted" style="padding:20px;text-align:center;">No matches</div>';
+      }
+    });
+
+    overlay.appendChild(input);
+    overlay.appendChild(results);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
+    input.focus();
   }
 
   // ===========================================================================
@@ -2221,4 +2400,5 @@
   refreshTokenDot();
   loadGraph();
   loadUpdatesLog();
+  initMobileUI();
 })();
