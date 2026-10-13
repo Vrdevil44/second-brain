@@ -776,7 +776,7 @@
     const d = size();
     S.graph = window.ForceGraph3D({ controlType: 'orbit' })(stage)
       .width(d.w).height(d.h)
-      .backgroundColor('rgba(0,0,0,0)') // transparent: CSS starfield shows through
+      .backgroundColor('rgba(0,0,0,0)') // transparent: deep-space background shows through
       .showNavInfo(false)
       .nodeId('id')
       .nodeVal('val')
