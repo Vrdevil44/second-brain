@@ -141,31 +141,6 @@
     return m;
   }
 
-  // Static canvas starfield, shown through the transparent WebGL canvas.
-  // Zero WebGL cost; data: URL is allowed by the portal CSP (img-src data:).
-  let starURL = null;
-  function starfieldURL() {
-    if (starURL) return starURL;
-    const c = document.createElement('canvas');
-    c.width = 1024; c.height = 1024;
-    const g = c.getContext('2d');
-    for (let i = 0; i < 420; i++) {
-      const x = Math.random() * 1024, y = Math.random() * 1024;
-      const r = Math.random();
-      const a = 0.12 + Math.random() * 0.45;
-      g.fillStyle = 'rgba(174,194,224,' + a.toFixed(2) + ')';
-      const s = r < 0.9 ? 1 : 2;
-      g.fillRect(x, y, s, s);
-      if (r > 0.97) { // a few brighter stars with a sparkle cross
-        g.fillStyle = 'rgba(200,220,255,' + Math.min(1, a + 0.25).toFixed(2) + ')';
-        g.fillRect(x - 2, y, 5, 1);
-        g.fillRect(x, y - 2, 1, 5);
-      }
-    }
-    starURL = c.toDataURL('image/png');
-    return starURL;
-  }
-
   // f = focus factor (1 = normal, DIM = outside the focused neighborhood).
   function nodeColor(n, f) {
     // Fresh nodes (just synced) glow white-hot for 60s — unmissable.
@@ -869,13 +844,10 @@
     S.onResize = onResize;
     window.addEventListener('resize', S.onResize);
 
-    // Premium treatment: CSS starfield behind the transparent canvas.
-    try {
-      S.stage.style.backgroundColor = BG;
-      S.stage.style.backgroundImage = 'url("' + starfieldURL() + '")';
-      S.stage.style.backgroundSize = 'cover';
-      S.stage.style.backgroundPosition = 'center';
-    } catch (e) { /* starfield is decorative — never break init */ }
+    // Deep-space background only — no starfield (his call: the void stays clean;
+    // celestial events are the arrivals, not the backdrop).
+    S.stage.style.backgroundColor = BG;
+    S.stage.style.backgroundImage = 'none';
 
     // Gentle auto-rotation until the visitor first grabs the scene.
     try {
