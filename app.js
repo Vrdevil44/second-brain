@@ -641,7 +641,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=4935f56');
+        await loadScriptOnce('universe.js?v=7195f3d');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -988,10 +988,10 @@
       const rgb = RGB[n.type];
       const dim = focus && !focusSet.has(n.id);
       const isFocus = n === focus;
-      const glowR = n.r * (n.type === 'cluster' ? 3 : 2.6) * (isFocus ? 1.25 : 1);
+      const glowR = n.r * (n.type === 'cluster' ? 3.4 : 3.0) * (isFocus ? 1.25 : 1);
 
       const halo = ctx.createRadialGradient(n.x, n.y, n.r * 0.5, n.x, n.y, glowR);
-      halo.addColorStop(0, rgba(rgb, dim ? 0.05 : isFocus ? 0.5 : 0.28));
+      halo.addColorStop(0, rgba(rgb, dim ? 0.05 : isFocus ? 0.45 : 0.22));
       halo.addColorStop(1, rgba(rgb, 0));
       ctx.fillStyle = halo;
       ctx.beginPath();
@@ -1008,13 +1008,13 @@
       ctx.fill();
 
       if (n === selected) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.strokeStyle = 'rgba(110,231,255,0.9)';
         ctx.lineWidth = 2 / k;
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r + 5 / k, 0, Math.PI * 2);
         ctx.stroke();
       } else if (n === hovered) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.strokeStyle = 'rgba(110,231,255,0.45)';
         ctx.lineWidth = 1.5 / k;
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r + 3 / k, 0, Math.PI * 2);
@@ -1058,7 +1058,7 @@
     const ox = ((tx % step) + step) % step;
     const oy = ((ty % step) + step) % step;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = 'rgba(255,255,255,0.045)';
+    ctx.fillStyle = 'rgba(110,231,255,0.05)';
     for (let x = ox; x < w; x += step) {
       for (let y = oy; y < h; y += step) {
         ctx.fillRect(x - 0.75, y - 0.75, 1.5, 1.5);

@@ -26,9 +26,9 @@
       for (const [id, ts] of freshNodes) {
         if (now - ts >= FRESH_MS - 100) { freshNodes.delete(id); changed = true; }
       }
-      if (changed && S.graph) S.graph.refresh();
+      if (changed && S.graph) { S.graph.refresh(); updateFocus(); }
     }, FRESH_MS + 500);
-    if (S.graph) S.graph.refresh();
+    if (S.graph) { S.graph.refresh(); updateFocus(); }
   }
 
   function isFresh(id) {
@@ -89,6 +89,81 @@
   function hexToRgba(hex, a) {
     const n = parseInt(hex.slice(1), 16);
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  // ---- Premium glow treatment -------------------------------------------------
+  // The vendored 3d-force-graph keeps Three.js module-private (no THREE global),
+  // so halo meshes are cloned from a live default node object: its constructor,
+  // a unit-normalised sphere geometry, and a MeshLambertMaterial prototype.
+  // Additive blending is the numeric enum (THREE.AdditiveBlending === 2).
+  const BLEND_ADDITIVE = 2;
+  const HALO_SCALE = 3.2;   // halo radius = core radius * 3.2
+  const HALO_OPACITY = 0.16;
+  let glowTpl = null; // { Mesh, geo, matProto } — captured async, see init()
+
+  function captureGlowTemplate() {
+    if (glowTpl || !S || !S.graph) return false;
+    const nodes = S.graph.graphData().nodes;
+    for (const n of nodes) {
+      const o = n.__threeObj;
+      if (o && o.isMesh && o.geometry && o.material) {
+        const geo = o.geometry.clone();
+        geo.computeBoundingSphere();
+        const r = (geo.boundingSphere && geo.boundingSphere.radius) || 1;
+        geo.scale(1 / r, 1 / r, 1 / r); // unit sphere; per-node scale applied on the mesh
+        glowTpl = { Mesh: o.constructor, geo, matProto: o.material };
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function haloColor(node) {
+    if (isFresh(node.id)) return FRESH_COLOR;
+    return DOMAIN_COLORS[node.domain] || FALLBACK_NODE;
+  }
+
+  // nodeThreeObject builder: an additive-blend halo shell around the default
+  // core sphere (nodeThreeObjectExtend(true) keeps the core library-managed,
+  // so its colour-alpha dimming path is untouched).
+  function buildHalo(node) {
+    const mat = glowTpl.matProto.clone();
+    mat.color.set(haloColor(node));
+    mat.transparent = true;
+    mat.opacity = HALO_OPACITY;
+    mat.blending = BLEND_ADDITIVE;
+    mat.depthWrite = false;
+    const m = new glowTpl.Mesh(glowTpl.geo, mat);
+    const R = 4 * Math.cbrt(Math.max(1, Number(node.val) || 1)); // nodeRelSize(4)
+    m.scale.setScalar(R * HALO_SCALE);
+    m.raycast = function () {}; // halos must not steal hover/click picking
+    node._halo = m;
+    return m;
+  }
+
+  // Static canvas starfield, shown through the transparent WebGL canvas.
+  // Zero WebGL cost; data: URL is allowed by the portal CSP (img-src data:).
+  let starURL = null;
+  function starfieldURL() {
+    if (starURL) return starURL;
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 1024;
+    const g = c.getContext('2d');
+    for (let i = 0; i < 420; i++) {
+      const x = Math.random() * 1024, y = Math.random() * 1024;
+      const r = Math.random();
+      const a = 0.12 + Math.random() * 0.45;
+      g.fillStyle = 'rgba(174,194,224,' + a.toFixed(2) + ')';
+      const s = r < 0.9 ? 1 : 2;
+      g.fillRect(x, y, s, s);
+      if (r > 0.97) { // a few brighter stars with a sparkle cross
+        g.fillStyle = 'rgba(200,220,255,' + Math.min(1, a + 0.25).toFixed(2) + ')';
+        g.fillRect(x - 2, y, 5, 1);
+        g.fillRect(x, y - 2, 1, 5);
+      }
+    }
+    starURL = c.toDataURL('image/png');
+    return starURL;
   }
 
   // f = focus factor (1 = normal, DIM = outside the focused neighborhood).
@@ -248,6 +323,14 @@
     return !S || !S.focusSet || S.focusSet.has(id) ? 1 : DIM;
   }
 
+  // Focus-aware link particles: dimmed links show no particles (their
+  // materials take the link colour with alpha dropped, so they'd otherwise
+  // render full-bright on a dimmed link).
+  function particleCount(l) {
+    if (!S || !S.focusSet) return 1;
+    return (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : 0;
+  }
+
   function updateFocus() {
     if (!S || !S.graph) return;
     S.focusSet = computeFocusSet();
@@ -257,7 +340,17 @@
       .linkColor((l) => {
         const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : DIM;
         return f === 1 ? l.color : hexToRgba(l.color, f);
-      });
+      })
+      .linkDirectionalParticles((l) => particleCount(l));
+    // Halo dimming rides alongside the core's colour-alpha dimming.
+    const nodes = S.graph.graphData().nodes;
+    for (const n of nodes) {
+      if (!n._halo) continue;
+      const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
+      const boost = (S.selected === n.id) ? 1.6 : 1;
+      const fresh = isFresh(n.id) ? 1.9 : 1;
+      n._halo.material.opacity = Math.min(0.5, HALO_OPACITY * a * boost * fresh);
+    }
   }
 
   // Tap semantics: new node -> focus 1-hop; same selected node -> toggle 2-hop.
@@ -690,7 +783,7 @@
     const d = size();
     S.graph = window.ForceGraph3D({ controlType: 'orbit' })(stage)
       .width(d.w).height(d.h)
-      .backgroundColor(BG)
+      .backgroundColor('rgba(0,0,0,0)') // transparent: CSS starfield shows through
       .showNavInfo(false)
       .nodeId('id')
       .nodeVal('val')
@@ -702,6 +795,9 @@
       .linkColor('color')
       .linkOpacity(0.55)
       .linkWidth(0.6)
+      .linkDirectionalParticles((l) => particleCount(l))
+      .linkDirectionalParticleWidth(1.6)
+      .linkDirectionalParticleSpeed(0.004)
       .linkLabel(() => '') // we render our own tooltip
       .cooldownTime(15000)
       .enableNodeDrag(false) // P2-T3: node micro-drags swallowed taps (clickAfterDrag defaults false); orbit/pan unaffected, nothing uses onNodeDrag
@@ -754,6 +850,39 @@
 
     S.onResize = onResize;
     window.addEventListener('resize', S.onResize);
+
+    // Premium treatment: CSS starfield behind the transparent canvas.
+    try {
+      S.stage.style.backgroundColor = BG;
+      S.stage.style.backgroundImage = 'url("' + starfieldURL() + '")';
+      S.stage.style.backgroundSize = 'cover';
+      S.stage.style.backgroundPosition = 'center';
+    } catch (e) { /* starfield is decorative — never break init */ }
+
+    // Gentle auto-rotation until the visitor first grabs the scene.
+    try {
+      const ctl = S.graph.controls();
+      ctl.autoRotate = true;
+      ctl.autoRotateSpeed = 0.55;
+      container.addEventListener('pointerdown', () => { ctl.autoRotate = false; }, { once: true });
+    } catch (e) { /* controls unavailable — non-fatal */ }
+
+    // Glow halos install asynchronously: __threeObj is created in a debounced
+    // digest, so poll until a live node object appears (then set the builder
+    // and re-digest once). Guarded so a failed WebGL context can't spin forever.
+    let glowReady = false, glowTries = 0;
+    const glowPoll = () => {
+      if (!S) return;
+      if (!glowReady && captureGlowTemplate()) {
+        glowReady = true;
+        S.graph.nodeThreeObject(buildHalo).nodeThreeObjectExtend(true);
+        S.graph.refresh();
+        updateFocus();
+      } else if (!glowReady && ++glowTries < 600) {
+        requestAnimationFrame(glowPoll);
+      }
+    };
+    requestAnimationFrame(glowPoll);
     S.onKey = onKeyDown;
     document.addEventListener('keydown', S.onKey);
     container.addEventListener('pointermove', onPointerMove);
