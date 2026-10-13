@@ -1195,7 +1195,13 @@
       hud._act = h('div', 'hud-activity');
       hud._body.append(hud._focus, hud._status, hud._act);
       hud.append(hud._head, hud._body);
-      S.ui.append(hud);
+      // Bottom-anchored stack (his call 2026-10-13): the beat bar lives
+      // directly above the LATEST UPDATES panel, never near the header/search.
+      const stack = document.getElementById('bottom-stack');
+      const logEl = document.getElementById('updates-log');
+      if (stack && logEl) stack.insertBefore(hud, logEl);
+      else if (stack) stack.appendChild(hud);
+      else S.ui.append(hud);
       S.hud = hud;
       if (S.hudCollapsed == null) {
         setHudCollapsed(!!(window.matchMedia && window.matchMedia('(max-width: 640px)').matches));

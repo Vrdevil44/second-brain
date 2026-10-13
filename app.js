@@ -646,7 +646,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=1184a16');
+        await loadScriptOnce('universe.js?v=e563abf');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2195,7 +2195,9 @@
       // Preserve beat entries already merged into the feed (newer than commits).
       const beatItems = [...list.querySelectorAll('.beat-entry, .beat-summary')];
       list.innerHTML = '';
-      for (const c of commits.slice(0, 8)) {        const li = document.createElement('li');
+      // Log-tail order (his call 2026-10-13): oldest first, newest last —
+      // entries stream in chronologically and the view pins to the newest.
+      for (const c of commits.slice(0, 8).reverse()) {        const li = document.createElement('li');
         const msg = (c.commit.message || '').split('\n')[0].slice(0, 80);
         const time = new Date(c.commit.author.date).toLocaleString('en-US', {
           month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
@@ -2260,6 +2262,9 @@
       }
       // Re-append preserved beat entries at the end (chronological: newest last).
       for (const b of beatItems) list.appendChild(b);
+      // Log tail: pin to the newest entry after (re)load.
+      initUpdatesAutoScroll();
+      if (updatesAutoScroll) scrollUpdatesToBottom();
       // Update mobile pill badge.
       updateUpdatesBadge(commits.length);
     } catch (err) {
@@ -2306,9 +2311,23 @@
     badge.textContent = fresh > 0 ? fresh : '';
   }
 
+  // Mobile beat pill: compact beat status; dot lights up when a new beat
+  // arrives while the HUD panel is collapsed (his call 2026-10-13).
+  function updateBeatPill(st) {
+    const pill = $('#beat-pill');
+    if (!pill || !st || !isMobile()) return;
+    pill.hidden = false;
+    const label = $('#beat-pill-label');
+    if (label) label.textContent = 'beat ' + st.beat; // plain words, never F-IDs
+    const dot = $('#beat-dot');
+    const hud = document.querySelector('.hud');
+    if (dot && (!hud || !hud.classList.contains('expanded'))) dot.classList.add('new');
+  }
+
   function appendBeatUpdates(st) {
     const list = $('#updates-list');
     if (!list || !st) return;
+    updateBeatPill(st);
     const demands = Array.isArray(st.demands) ? st.demands.filter(Boolean).slice(0, 5) : [];
     if (!demands.length) return; // silence holds: quiet beats add nothing
     // Drop the Loading/token placeholder once real entries exist.
@@ -2386,12 +2405,45 @@
           scrollUpdatesToBottom();
         }
       });
-      // Close when tapping outside.
+      // Close when tapping outside (but not when tapping the beat panel/pill).
       document.addEventListener('click', (e) => {
+        const hud = document.querySelector('.hud');
+        const beatPillEl = $('#beat-pill');
         if (log.classList.contains('expanded') &&
-            !log.contains(e.target) && !pill.contains(e.target)) {
+            !log.contains(e.target) && !pill.contains(e.target) &&
+            !(hud && hud.contains(e.target)) &&
+            !(beatPillEl && beatPillEl.contains(e.target))) {
           log.classList.remove('expanded');
           pill.style.display = 'flex';
+        }
+      });
+    }
+
+    // Beat pill: compact beat status; tap to expand the HUD panel above,
+    // tap outside to dismiss (his standing mobile pattern: no close buttons).
+    const beatPill = $('#beat-pill');
+    if (beatPill) {
+      beatPill.hidden = false;
+      const hudEl = () => document.querySelector('.hud');
+      beatPill.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const hud = hudEl();
+        if (!hud) return;
+        const expanded = hud.classList.toggle('expanded');
+        beatPill.style.display = expanded ? 'none' : 'flex';
+        const dot = $('#beat-dot');
+        if (dot) dot.classList.remove('new'); // seen: clear the dot
+      });
+      document.addEventListener('click', (e) => {
+        const hud = hudEl();
+        const log = $('#updates-log');
+        const pill = $('#updates-pill');
+        if (hud && hud.classList.contains('expanded') &&
+            !hud.contains(e.target) && !beatPill.contains(e.target) &&
+            !(log && log.contains(e.target)) &&
+            !(pill && pill.contains(e.target))) {
+          hud.classList.remove('expanded');
+          beatPill.style.display = 'flex';
         }
       });
     }

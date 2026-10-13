@@ -252,6 +252,30 @@ a:hover { color: #b0a6ff; }
 .updates-log li:first-child { border-top: none; }
 .updates-log .u-time { color: var(--text-3); font-size: 11px; }
 .updates-log .muted { color: var(--text-3); }
+
+/* Bottom-anchored stack: beat bar (HUD) + latest updates (his call 2026-10-13).
+   The beat bar sits directly above the updates panel; nothing overlaps the
+   header or search. Compact by design — it must not eat the 3D universe. */
+#bottom-stack {
+  position: fixed;
+  left: 18px;
+  bottom: calc(max(18px, env(safe-area-inset-bottom)) + 52px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(300px, calc(100vw - 36px));
+  z-index: 5;
+}
+#bottom-stack .hud {
+  position: static;
+  width: 100%;
+}
+#bottom-stack .updates-log {
+  position: static;
+  width: 100%;
+  max-height: 200px;
+}
+#bottom-stack .pills-row { display: none; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot-cluster { background: var(--cluster); box-shadow: 0 0 10px var(--cluster); }
 .dot-idea { background: var(--idea); box-shadow: 0 0 10px var(--idea); }
@@ -741,6 +765,60 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
     padding: 0 6px;
   }
   .updates-pill .badge-count:empty { display: none; }
+
+  /* Mobile bottom stack: compact pills, panels expand above (his call 2026-10-13).
+     Default collapsed to save space; tap to expand, tap-outside to dismiss. */
+  #bottom-stack {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px);
+  }
+  #bottom-stack .hud { display: none; }
+  #bottom-stack .hud.expanded {
+    display: block;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  #bottom-stack .updates-log { display: none; }
+  #bottom-stack .updates-log.expanded {
+    display: block;
+    max-height: 50vh;
+    padding: 10px 14px;
+    border-radius: 12px;
+    overflow-y: auto;
+  }
+  #bottom-stack .pills-row { display: flex; gap: 8px; }
+  #bottom-stack .updates-pill { position: static; }
+  .beat-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: var(--surface);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 0 0 1px var(--border);
+    font-size: 13px;
+    color: var(--text-2);
+    cursor: pointer;
+    border: none;
+  }
+  .beat-pill[hidden] { display: none; }
+  .beat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-3);
+    flex: none;
+  }
+  .beat-dot.new { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+  #beat-pill-label {
+    font: 600 11px var(--mono);
+    letter-spacing: 1px;
+    color: var(--text-3);
+  }
 
   /* Mobile: brand header expandable */
   .brand { cursor: pointer; }
