@@ -130,8 +130,8 @@
     const mat = glowTpl.matProto.clone();
     mat.color.set(haloColor(node));
     mat.transparent = true;
-    mat.opacity = HALO_OPACITY;
-    mat.blending = BLEND_ADDITIVE;
+    mat.opacity = 0; // rest state: no bubble — halos only light up for live events,
+    mat.blending = BLEND_ADDITIVE; // selection, fresh nodes, and the breathing core
     mat.depthWrite = false;
     const m = new glowTpl.Mesh(glowTpl.geo, mat);
     const R = 4 * Math.cbrt(Math.max(1, Number(node.val) || 1)); // nodeRelSize(4)
@@ -332,6 +332,9 @@
     if (S.live && S.live.on) { paintLiveHalos(nodes); return; }
     for (const n of nodes) {
       if (!n._halo) continue;
+      // Rest state: halo off. Only the selected node and fresh nodes earn a glow.
+      const show = (S.selected === n.id) || isFresh(n.id);
+      if (!show) { n._halo.material.opacity = 0; continue; }
       const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
       const boost = (S.selected === n.id) ? 1.6 : 1;
       const fresh = isFresh(n.id) ? 1.9 : 1;
@@ -1229,26 +1232,30 @@
     for (const n of nodes) {
       if (!n._halo) continue;
       const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
-      const boost = (S.selected === n.id) ? 1.6 : 1;
-      const fr = isFresh(n.id) ? 1.9 : 1;
-      let o = HALO_OPACITY * a * boost * fr;
+      // Rest state: halo off — no bubble. Glow only for live events, selection,
+      // fresh nodes, and the breathing core.
+      let o = 0;
       let kind = null;
       const g = S.live.glow.get(n.id);
       if (g) {
         if (nowMs > g.until) S.live.glow.delete(n.id);
         else {
           kind = g.kind;
-          o = kind === 'demand' ? 0.30 + 0.16 * Math.sin(t * 5.2) : Math.min(0.55, o * 1.7 + 0.12);
+          o = kind === 'demand' ? 0.30 + 0.16 * Math.sin(t * 5.2) : 0.12 + HALO_OPACITY * a * 1.7;
         }
       }
-      if (!kind && n.id === S.data.coreId) {
+      if (n.id === S.data.coreId) {
+        kind = kind || 'core';
         o = Math.min(0.5, o + 0.07 + 0.055 * Math.sin(t * 1.15)); // breathing core
+      } else if (!kind) {
+        if (S.selected === n.id) o = Math.min(0.5, HALO_OPACITY * a * 1.6);
+        else if (isFresh(n.id)) o = Math.min(0.5, HALO_OPACITY * a * 1.9);
       }
       if (n._liveKind !== kind) {
         n._liveKind = kind;
-        n._halo.material.color.set(kind ? LIVE_COLORS[kind] : haloColor(n));
+        n._halo.material.color.set(kind && LIVE_COLORS[kind] ? LIVE_COLORS[kind] : haloColor(n));
       }
-      n._halo.material.opacity = Math.min(0.6, Math.max(0.02, o));
+      n._halo.material.opacity = Math.min(0.6, o);
     }
   }
 
