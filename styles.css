@@ -1113,13 +1113,13 @@ body.view-3d .node-panel { display: none; }
   .live-ticker { bottom: 70px; }
 }
 
-/* Core readout: what the mind is thinking. Minimal, no decoration. */
-.core-panel {
+/* Brain-status HUD: the site's always-visible status line. Minimal, no chrome,
+   no close button — tap the header to collapse/expand, tap outside collapses. */
+.hud {
   position: absolute;
   top: 82px;
   left: 18px;
   width: min(300px, calc(100vw - 36px));
-  padding: 10px 12px 11px;
   border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1129,12 +1129,52 @@ body.view-3d .node-panel { display: none; }
   z-index: 5;
   font: 400 11.5px var(--font);
   color: var(--text-2);
+  overflow: hidden;
 }
-.core-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.core-panel-title { font: 600 10px var(--mono); letter-spacing: 1.5px; color: var(--text-3); }
-.core-panel-x { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
-.core-panel-x:hover { color: var(--text); }
-.core-panel-focus { margin: 0 0 6px; padding: 0; list-style: none; }
-.core-panel-focus li { margin: 0 0 5px; color: var(--text); font-size: 11.5px; line-height: 1.35; }
-.core-panel-focus .why { display: block; color: var(--text-3); font-size: 10.5px; margin-top: 1px; }
-.core-panel-meta { color: var(--text-3); font-size: 10.5px; font-family: var(--mono); }
+.hud-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.hud-stage { font: 600 10px var(--mono); letter-spacing: 1.5px; color: var(--text-3); text-transform: uppercase; }
+.hud-beat { font: 600 10px var(--mono); letter-spacing: 1px; color: var(--text-3); }
+.hud-body { padding: 0 12px 11px; }
+.hud.collapsed .hud-body { display: none; }
+.hud-focus { margin: 2px 0 6px; padding: 0; list-style: none; }
+.hud-focus li { margin: 0 0 5px; color: var(--text); font-size: 11.5px; line-height: 1.35; }
+.hud-focus .why { display: block; color: var(--text-3); font-size: 10.5px; margin-top: 1px; }
+.hud-status { color: var(--text-3); font-size: 10.5px; font-family: var(--mono); margin-bottom: 6px; }
+.hud-activity {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.35;
+  min-height: 20px;
+}
+.hud-activity-kind {
+  font: 700 9px var(--mono);
+  letter-spacing: 1px;
+  color: var(--warn);
+  flex: none;
+}
+.hud-activity-flash { animation: hudFade 1.2s var(--ease) both; }
+@keyframes hudFade { from { opacity: 0.25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .hud-activity-flash { animation: none; }
+}
+@media (max-width: 640px) {
+  .hud { top: 70px; left: 12px; }
+}

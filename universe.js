@@ -81,6 +81,42 @@
     return e;
   }
 
+  // ---- DYNAMIC UI v1 helpers --------------------------------------------------
+  // Every visual maps to a real signal. These resolve graph entities for the
+  // live-construction layer (activity events name F-IDs; the UI speaks words).
+  function nodeById(id) {
+    if (!S || !S.graph || id == null) return null;
+    return S.graph.graphData().nodes.find((x) => String(x.id) === String(id)) || null;
+  }
+  function linkNode(e) {
+    if (!e) return null;
+    return (typeof e === 'object') ? e : nodeById(e);
+  }
+  // Strip F-IDs from heartbeat labels: the UI speaks plain words, never IDs.
+  function stripFids(s) {
+    return String(s || '').replace(/F-\d+/g, '').replace(/\s{2,}/g, ' ')
+      .replace(/\s+([,.;:])/g, '$1').replace(/\(\s*\)/g, '').trim();
+  }
+  // Multiply an rgba()/hex color's alpha (for the imperceptible domain breath).
+  function scaleAlpha(color, k) {
+    const m = String(color).match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
+    if (m) {
+      const a = Math.min(1, Math.max(0, (+m[4]) * k));
+      return 'rgba(' + m[1] + ',' + m[2] + ',' + m[3] + ',' + a.toFixed(3) + ')';
+    }
+    return hexToRgba(String(color), Math.min(1, Math.max(0.02, k)));
+  }
+  // One plain-words line for an activity event (the ticker + HUD activity row).
+  function activityWords(a, st) {
+    if (!a) return '';
+    if (a.kind === 'think' && st && st.core && Array.isArray(st.core.focus) && st.core.focus.length) {
+      return 'think — focus: ' + st.core.focus.slice(0, 3)
+        .map((f) => String(f.label || '').slice(0, 42)).join(', ');
+    }
+    const w = stripFids(a.label || a.kind);
+    return w || a.kind;
+  }
+
   function escHtml(str) {
     return String(str).replace(/[&<>"']/g, (c) => (
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -331,7 +367,18 @@
       .nodeColor((n) => nodeColor(n, focusOpacity(n.id)))
       .linkColor((l) => {
         const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : DIM;
-        return f === 1 ? l.color : hexToRgba(l.color, f);
+        let c = f === 1 ? l.color : hexToRgba(l.color, f);
+        // Domain breath: links inside the most active domain oscillate ±0.03 —
+        // almost imperceptible, and only when there is real recent activity.
+        const bd = S.live && S.live.breathDomain;
+        if (bd && !S.live.hold) {
+          const a = linkNode(l.source), b = linkNode(l.target);
+          if (a && b && a.domain === bd && b.domain === bd) {
+            const t = (performance.now() - (S.live.breathT0 || performance.now())) / 1000;
+            c = scaleAlpha(c, 1 + 0.03 * Math.sin(t * 0.9));
+          }
+        }
+        return c;
       })
       .linkDirectionalParticles((l) => particleCount(l));
     // Halo dimming rides alongside the core's colour-alpha dimming.
@@ -1016,11 +1063,23 @@
     ticker.setAttribute('aria-live', 'polite');
     S.ui.append(badge, ticker);
     S.live = {
-      on: true, lastBeat: -1, state: null, t0: performance.now(), seq: 0,
-      glow: new Map(), fx: [], badge, btext, ticker, timer: 0, raf: 0,
+      on: true, lastBeat: -1, state: null, formation: null, t0: performance.now(), seq: 0,
+      glow: new Map(), fx: [], rings: [], badge, btext, ticker, timer: 0, raf: 0,
+      lastActivityKey: null, lastAmbient: 0, lastBreath: 0, breathDomain: null, hold: false,
     };
     S.liveBtn.textContent = 'Exit Live';
     S.liveBtn.setAttribute('aria-pressed', 'true');
+    // Ambient life pauses while their hands are on the scene (his rule).
+    S._holdOn = () => { if (S.live) S.live.hold = true; };
+    S._holdOff = () => { if (S.live) S.live.hold = false; };
+    S.stage.addEventListener('pointerdown', S._holdOn);
+    window.addEventListener('pointerup', S._holdOff);
+    window.addEventListener('pointercancel', S._holdOff);
+    // Tap-outside collapses the HUD (no close buttons — his rule).
+    S._hudOutside = (e) => {
+      if (S.hud && !S.hudCollapsed && !S.hud.contains(e.target)) setHudCollapsed(true);
+    };
+    document.addEventListener('pointerdown', S._hudOutside);
     S.live.timer = setInterval(pollLive, LIVE_POLL_MS);
     S.live.raf = requestAnimationFrame(liveTick);
     updateFocus();
@@ -1035,10 +1094,13 @@
     cancelAnimationFrame(L.raf);
     const scene = liveScene();
     for (const f of L.fx) { try { f.dispose(scene); } catch (e) { /* already gone */ } }
+    for (const r of (L.rings || [])) { try { scene && scene.remove(r); r.material.dispose(); } catch (e) { /* gone */ } }
+    if (S._hudOutside) { document.removeEventListener('pointerdown', S._hudOutside); S._hudOutside = null; }
+    if (S._holdOn) { S.stage.removeEventListener('pointerdown', S._holdOn); S._holdOn = null; }
+    if (S._holdOff) { window.removeEventListener('pointerup', S._holdOff); window.removeEventListener('pointercancel', S._holdOff); S._holdOff = null; }
     if (L.badge.parentNode) L.badge.parentNode.removeChild(L.badge);
     if (L.ticker.parentNode) L.ticker.parentNode.removeChild(L.ticker);
-    if (S.corePanel) { S.corePanel.remove(); S.corePanel = null; }
-    S.corePanelOff = false;
+    if (S.hud) { S.hud.remove(); S.hud = null; }
     if (S.liveBtn) { S.liveBtn.textContent = 'Live'; S.liveBtn.setAttribute('aria-pressed', 'false'); }
     for (const n of S.graph.graphData().nodes) {
       if (n._halo && n._liveKind) { n._halo.material.color.set(haloColor(n)); n._liveKind = null; }
@@ -1069,7 +1131,9 @@
     if (!S || !S.live || !S.live.on || seq !== S.live.seq) return;
     if (st) {
       S.live.state = st;
-      renderCorePanel(st);
+      S.live.formation = st.formation || null;
+      renderHUD(st);
+      renderActivity(st);
       if (st.beat !== S.live.lastBeat) { S.live.lastBeat = st.beat; onBeat(st); }
     }
     paintBadge();
@@ -1079,8 +1143,7 @@
   // INTERIOR response (core pulse + echo glows). No arrivals = interior only.
   function onBeat(st) {
     renderTicker(st);
-    S.corePanelOff = false; // fresh thought resurfaces a dismissed panel
-    renderCorePanel(st);
+    renderHUD(st);
     const arrivals = Array.isArray(st.arrivals) ? st.arrivals.filter(Boolean).slice(0, 8) : [];
     const touched = Array.isArray(st.touched) ? st.touched.filter(Boolean) : [];
     const applyEcho = () => {
@@ -1102,7 +1165,11 @@
   function renderTicker(st) {
     const box = S.live.ticker;
     box.textContent = '';
-    box.append(h('div', 'live-ticker-head', 'CORE · BEAT ' + st.beat));
+    // One line of life under the beat: the latest real event, plain words.
+    const acts = Array.isArray(st.activity) ? st.activity : [];
+    const lastAct = acts.length ? acts[acts.length - 1] : null;
+    box.append(h('div', 'live-ticker-head',
+      'CORE · BEAT ' + st.beat + (lastAct ? ' — ' + activityWords(lastAct, st) : '')));
     const lines = Array.isArray(st.demands) ? st.demands.slice(0, 5) : [];
     if (!lines.length) {
       const row = h('div', 'live-line');
@@ -1119,44 +1186,83 @@
     });
   }
 
-  // Core readout: what the mind is thinking right now. Small, dismissible,
-  // plain words (labels, never F-IDs). Hidden when the core has nothing staged.
-  function renderCorePanel(st) {
-    const core = st && st.core;
-    if (S.corePanelOff || !core || !Array.isArray(core.focus) || !core.focus.length) {
-      if (S.corePanel) { S.corePanel.remove(); S.corePanel = null; }
-      return;
+  // Brain-status HUD: the site's always-visible status line. Core formation
+  // stage (plain words), current focus (plain words, never F-IDs), beat /
+  // facts / demands / last-think, and the latest activity as one fading line.
+  // No close button (his law): tap the header to collapse/expand; tapping
+  // anywhere outside collapses it. Starts collapsed on mobile.
+  function setHudCollapsed(collapsed) {
+    S.hudCollapsed = !!collapsed;
+    if (S.hud) {
+      S.hud.classList.toggle('collapsed', S.hudCollapsed);
+      S.hud._head.setAttribute('aria-expanded', String(!S.hudCollapsed));
     }
-    let panel = S.corePanel;
-    if (!panel) {
-      panel = h('div', 'core-panel');
-      const head = h('div', 'core-panel-head');
-      head.append(h('span', 'core-panel-title', 'CORE · THINKING'));
-      const x = h('button', 'core-panel-x', '×');
-      x.type = 'button';
-      x.title = 'Dismiss';
-      x.addEventListener('click', () => { S.corePanelOff = true; if (S.corePanel) { S.corePanel.remove(); S.corePanel = null; } });
-      head.append(x);
-      panel.append(head);
-      panel._body = h('div', 'core-panel-body');
-      panel.append(panel._body);
-      S.ui.append(panel);
-      S.corePanel = panel;
+  }
+  function hudActivityLine(text) {
+    if (!S || !S.hud || !S.hud._act) return;
+    const el = S.hud._act;
+    el.textContent = '';
+    // Restart the fade each time the line changes (a visible breath of life).
+    el.classList.remove('hud-activity-flash');
+    void el.offsetWidth;
+    el.append(h('span', 'hud-activity-kind', 'LIVE'), h('span', null, String(text || '').slice(0, 140)));
+    el.classList.add('hud-activity-flash');
+  }
+  function relTime(iso) {
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return '';
+    const m = Math.round((Date.now() - ms) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return m + 'm ago';
+    return Math.round(m / 60) + 'h ago';
+  }
+  function renderHUD(st) {
+    if (!st) { if (S.hud) { S.hud.remove(); S.hud = null; } return; }
+    const core = st.core, fm = st.formation;
+    let hud = S.hud;
+    if (!hud) {
+      hud = h('div', 'hud');
+      hud._head = h('button', 'hud-head');
+      hud._head.type = 'button';
+      hud._head.setAttribute('aria-expanded', 'true');
+      hud._stage = h('span', 'hud-stage');
+      hud._beat = h('span', 'hud-beat');
+      hud._head.append(hud._stage, hud._beat);
+      hud._head.addEventListener('click', (e) => { e.stopPropagation(); setHudCollapsed(!S.hudCollapsed); });
+      hud._body = h('div', 'hud-body');
+      hud._focus = h('ul', 'hud-focus');
+      hud._status = h('div', 'hud-status');
+      hud._act = h('div', 'hud-activity');
+      hud._body.append(hud._focus, hud._status, hud._act);
+      hud.append(hud._head, hud._body);
+      S.ui.append(hud);
+      S.hud = hud;
+      if (S.hudCollapsed == null) {
+        setHudCollapsed(!!(window.matchMedia && window.matchMedia('(max-width: 640px)').matches));
+      } else {
+        hud.classList.toggle('collapsed', S.hudCollapsed);
+      }
     }
-    const body = panel._body;
-    body.textContent = '';
-    const ul = h('ul', 'core-panel-focus');
-    for (const f of core.focus.slice(0, 3)) {
-      const li = h('li');
-      li.append(h('span', null, String(f.label || '').slice(0, 90)));
-      if (f.why) li.append(h('span', 'why', String(f.why).slice(0, 120)));
-      ul.append(li);
+    hud._stage.textContent = (fm && fm.words) || (core ? 'the core is awake' : 'listening');
+    hud._beat.textContent = 'beat ' + st.beat;
+    const ul = hud._focus;
+    ul.textContent = '';
+    if (core && Array.isArray(core.focus)) {
+      for (const f of core.focus.slice(0, 3)) {
+        const li = h('li');
+        li.append(h('span', null, String(f.label || '').slice(0, 90)));
+        if (f.why) li.append(h('span', 'why', String(f.why).slice(0, 120)));
+        ul.append(li);
+      }
     }
-    body.append(ul);
-    const meta = [];
-    if (typeof core.open_questions === 'number') meta.push(core.open_questions + ' open question' + (core.open_questions === 1 ? '' : 's'));
-    if (core.last_think) meta.push('last think ' + String(core.last_think).slice(0, 16).replace('T', ' '));
-    if (meta.length) body.append(h('div', 'core-panel-meta', meta.join(' · ')));
+    const meta = [st.nodes + ' facts', st.inbox + ' demand' + (st.inbox === 1 ? '' : 's')];
+    if (core && typeof core.open_questions === 'number' && core.open_questions > 0) {
+      meta.push(core.open_questions + ' open question' + (core.open_questions === 1 ? '' : 's'));
+    }
+    if (core && core.last_think) meta.push('think ' + relTime(core.last_think));
+    hud._status.textContent = meta.join(' · ');
+    const acts = Array.isArray(st.activity) ? st.activity : [];
+    if (acts.length) hudActivityLine(activityWords(acts[acts.length - 1], st));
   }
 
   function paintBadge() {
@@ -1248,28 +1354,29 @@
     }
   }
 
-  function interiorPulse() {
+  function interiorPulse(waves, dur, opacity) {
     const scene = liveScene();
     const core = coreNode();
     if (!scene || !core) return;
-    // three staggered wavefronts — a rhythmic pulse readable across the mesh
-    for (let w = 0; w < 3; w++) {
+    // staggered wavefronts — a rhythmic pulse readable across the mesh
+    const W = waves == null ? 3 : waves, D = dur || 2800, O = opacity == null ? 0.55 : opacity;
+    for (let w = 0; w < W; w++) {
       setTimeout(() => {
         if (!S || !S.live || !S.live.on) return;
         const sc = liveScene(), c = coreNode();
         if (!sc || !c) return;
-        const ring = liveMesh('#eaf6ff', 0.55);
+        const ring = liveMesh('#eaf6ff', O);
         if (!ring) return;
         ring.position.set(c.x, c.y, c.z);
         sc.add(ring);
-        const t0 = performance.now(), dur = 2800;
+        const t0 = performance.now();
         S.live.fx.push({
           update(now) {
-            const t = Math.min(1, (now - t0) / dur);
+            const t = Math.min(1, (now - t0) / D);
             const cc = coreNode();
             if (cc) ring.position.set(cc.x, cc.y, cc.z);
             ring.scale.setScalar(20 + t * 280);
-            ring.material.opacity = 0.55 * (1 - t);
+            ring.material.opacity = O * (1 - t);
             return t < 1;
           },
           dispose(s2) { (s2 || sc).remove(ring); ring.material.dispose(); },
@@ -1278,11 +1385,123 @@
     }
   }
 
+  // A thought blooming: slower, deeper than the beat pulse — the mind working.
+  function thinkBloom() { interiorPulse(5, 4200, 0.7); }
+  // One sweep ring expanding from the core (sync / merge settling in).
+  function sweepRing() { interiorPulse(1, 2200, 0.5); }
+
+  // A thin pulse traveling from node A to node B (demand opened: the named
+  // nodes reach for each other; ambient: a high-gravity pathway breathing).
+  function pulseBetween(idA, idB, color, opacity, dur) {
+    const scene = liveScene();
+    if (!scene) return;
+    const a = nodeById(idA), b = nodeById(idB);
+    if (!a || !b || a.x == null || b.x == null) return;
+    const O = opacity == null ? 0.5 : opacity, D = dur || 1400;
+    const dot = liveMesh(color || '#ffb547', O);
+    if (!dot) return;
+    dot.scale.setScalar(5);
+    scene.add(dot);
+    const t0 = performance.now();
+    const ax = a.x, ay = a.y, az = a.z, bx = b.x, by = b.y, bz = b.z;
+    S.live.fx.push({
+      update(now) {
+        const t = Math.min(1, (now - t0) / D);
+        dot.position.set(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t);
+        dot.material.opacity = O * (1 - t * 0.4);
+        return t < 1;
+      },
+      dispose(s2) { (s2 || scene).remove(dot); dot.material.dispose(); },
+    });
+  }
+
+  // ---- formation: the core's visible stage -----------------------------------
+  // igniting 0 rings → forming 1 → awake 2 → deepening 3. Thin, faint,
+  // restrained — the mind condensing, not decoration.
+  const FORMATION_STAGES = ['igniting', 'forming', 'awake', 'deepening'];
+  function formationIndex() {
+    const st = S && S.live && S.live.formation && S.live.formation.stage;
+    const i = FORMATION_STAGES.indexOf(st);
+    return i < 0 ? 0 : i; // unknown → no rings: nothing formed yet, no fake state
+  }
+  function updateFormationRings() {
+    const L = S.live;
+    const scene = liveScene(), core = coreNode();
+    if (!scene || !core) return;
+    const want = formationIndex();
+    while (L.rings.length > want) {
+      const r = L.rings.pop();
+      try { scene.remove(r); r.material.dispose(); } catch (e) { /* gone */ }
+    }
+    const t = (performance.now() - L.t0) / 1000;
+    while (L.rings.length < want) {
+      const ring = liveMesh('#9adcff', 0.08);
+      if (!ring) break;
+      L.rings.push(ring);
+      scene.add(ring);
+    }
+    L.rings.forEach((ring, i) => {
+      const R = 46 + i * 30;
+      const breathe = 1 + 0.05 * Math.sin(t * 0.8 + i * 1.7);
+      ring.position.set(core.x, core.y, core.z);
+      ring.scale.set(R * breathe, R * 0.07 * breathe, R * breathe);
+      ring.material.opacity = 0.07 + 0.02 * Math.sin(t * 0.8 + i * 1.7);
+    });
+  }
+
+  // ---- activity: heartbeat events rendered as visible life ------------------
+  function renderActivity(st) {
+    const L = S.live;
+    if (!L) return;
+    const acts = Array.isArray(st.activity) ? st.activity : [];
+    let start = 0;
+    if (L.lastActivityKey) {
+      const ki = acts.findIndex((a) => a && (a.t + '|' + a.kind) === L.lastActivityKey);
+      if (ki >= 0) start = ki + 1;
+    }
+    for (let i = start; i < acts.length; i++) {
+      if (acts[i]) { try { activityEvent(acts[i]); } catch (e) { /* never break the frame */ } }
+    }
+    if (acts.length) L.lastActivityKey = acts[acts.length - 1].t + '|' + acts[acts.length - 1].kind;
+  }
+  function activityEvent(a) {
+    const until = Date.now() + 90000;
+    const liveIds = (a.fids || []).filter((id) => nodeById(id));
+    switch (a.kind) {
+      case 'think':
+        thinkBloom();
+        break;
+      case 'demand_opened':
+      case 'contradiction': {
+        const kind = a.kind === 'contradiction' ? 'contradiction' : 'demand';
+        liveIds.forEach((id, i) => setTimeout(() => {
+          if (S && S.live && S.live.on) { S.live.glow.set(String(id), { kind, until }); updateFocus(); }
+        }, i * 400)); // lights in touch order — a visible sweep
+        if (liveIds.length >= 2) pulseBetween(liveIds[0], liveIds[1], '#ffb547');
+        break;
+      }
+      case 'merge':
+      case 'sync': {
+        // Settling in: touched nodes light in sequence, a sweep leaves the core.
+        const mUntil = Date.now() + 60000;
+        liveIds.forEach((id, i) => setTimeout(() => {
+          if (S && S.live && S.live.on) { S.live.glow.set(String(id), { kind: 'fresh', until: mUntil }); updateFocus(); }
+        }, i * 150));
+        sweepRing();
+        break;
+      }
+      // 'beat': the beat already pulses via onBeat — no extra motion.
+      // 'demand_resolved': resolution is the absence of demands — nothing to add.
+    }
+  }
+
   // Per-frame halo painter for LIVE mode: base dimming + echo glows +
   // breathing core. Colours sync here so expiry restores the domain colour.
   function paintLiveHalos(nodes) {
     const t = (performance.now() - S.live.t0) / 1000;
     const nowMs = Date.now();
+    // The breath deepens as the core forms — a real signal, not decoration.
+    const depth = [0.7, 1.0, 1.3, 1.6][formationIndex()] || 1.0;
     for (const n of nodes) {
       if (!n._halo) continue;
       const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
@@ -1300,7 +1519,7 @@
       }
       if (n.id === S.data.coreId) {
         kind = kind || 'core';
-        o = Math.min(0.5, o + 0.07 + 0.055 * Math.sin(t * 1.15)); // breathing core
+        o = Math.min(0.5, o + 0.07 * depth + 0.055 * depth * Math.sin(t * 1.15));
       } else if (!kind) {
         if (S.selected === n.id) o = Math.min(0.5, HALO_OPACITY * a * 1.6);
         else if (isFresh(n.id)) o = Math.min(0.5, HALO_OPACITY * a * 1.9);
@@ -1311,6 +1530,51 @@
       }
       n._halo.material.opacity = Math.min(0.6, o);
     }
+  }
+
+  // ---- ambient neural aliveness -------------------------------------------------
+  // Between events the brain must feel alive, not frozen. Everything here is
+  // throttled, faint, and pauses while their hands are on the scene.
+  function ambientPulse() {
+    const L = S.live;
+    if (!L || L.hold) return;
+    const nodes = S.graph.graphData().nodes;
+    const links = S.graph.graphData().links || [];
+    if (!nodes.length || !links.length) return;
+    // Top-decile gravity threshold: only the mind's strongest pathways breathe.
+    const gs = nodes.map((n) => +n.gravity || 0).sort((a, b) => b - a);
+    const thr = gs[Math.max(0, Math.floor(gs.length * 0.1))] || 0;
+    if (thr <= 0) return;
+    const cands = [];
+    for (const l of links) {
+      const a = linkNode(l.source), b = linkNode(l.target);
+      if (a && b && a.x != null && b.x != null && (+a.gravity || 0) >= thr && (+b.gravity || 0) >= thr) {
+        cands.push([a.id, b.id]);
+        if (cands.length >= 60) break;
+      }
+    }
+    if (!cands.length) return;
+    const [pa, pb] = cands[(Math.random() * cands.length) | 0];
+    pulseBetween(pa, pb, '#6ee7ff', 0.16, 3200); // faint, slow
+  }
+  function breatheDomain() {
+    const L = S.live;
+    if (!L || !L.state || L.hold) return;
+    // Most active domain from the recent activity's named nodes (truthful);
+    // falls back to the last beat's touched nodes. None → no breathing.
+    const ids = [];
+    const acts = Array.isArray(L.state.activity) ? L.state.activity : [];
+    for (const a of acts.slice(-24)) for (const id of (a.fids || [])) ids.push(String(id));
+    const touched = Array.isArray(L.state.touched) ? L.state.touched : [];
+    for (const t of touched) if (t && t.id) ids.push(String(t.id));
+    const byId = new Map();
+    for (const n of S.graph.graphData().nodes) byId.set(String(n.id), n);
+    const counts = {};
+    for (const id of ids) { const n = byId.get(id); if (n && n.domain) counts[n.domain] = (counts[n.domain] || 0) + 1; }
+    let dom = null, best = 0;
+    for (const d in counts) if (counts[d] > best) { best = counts[d]; dom = d; }
+    if (dom !== L.breathDomain) { L.breathDomain = dom; L.breathT0 = performance.now(); }
+    updateFocus(); // re-runs link colors with the breathing alpha
   }
 
   function liveTick() {
@@ -1324,6 +1588,11 @@
       if (!alive) { try { fx[i].dispose(scene); } catch (e) { /* already gone */ } fx.splice(i, 1); }
     }
     try { paintLiveHalos(S.graph.graphData().nodes); } catch (e) { /* never break the frame */ }
+    try { updateFormationRings(); } catch (e) { /* never break the frame */ }
+    try {
+      if (!S.live.hold && now - S.live.lastAmbient > 20000) { S.live.lastAmbient = now; ambientPulse(); }
+      if (!S.live.hold && now - S.live.lastBreath > 2000) { S.live.lastBreath = now; breatheDomain(); }
+    } catch (e) { /* ambient never breaks the frame */ }
     S.live.raf = requestAnimationFrame(liveTick);
   }
 
@@ -1334,6 +1603,8 @@
     exit: () => exitLive(),
     isOn: () => !!(S && S.live && S.live.on),
     coreId: () => (S ? S.data.coreId : null),
+    formation: () => (S && S.live ? S.live.formation : null),
+    activity: () => (S && S.live && S.live.state && Array.isArray(S.live.state.activity) ? S.live.state.activity : []),
     glows: () => (S && S.live ? [...S.live.glow.entries()].map(([id, g]) => ({ id, kind: g.kind })) : []),
     haloColors(ids) {
       // actual three.js halo material colours for the given node ids ("" if none)
@@ -1364,6 +1635,28 @@
     destroy,
     selectNode: (id) => tapNode(id),
     clearSelection: () => closePanel(),
+    // DYNAMIC UI v1: the sync button shows the harvest happening. syncSweep
+    // fires when the sync starts (a sweep leaves the core); syncDone fires
+    // when it lands — new arrivals streak in, the ticker tells the truth.
+    syncSweep() {
+      if (!S || !S.live || !S.live.on) return false;
+      sweepRing();
+      hudActivityLine('sync running — harvesting the mesh');
+      return true;
+    },
+    syncDone(diff, newIds) {
+      if (!S || !S.live || !S.live.on) return false;
+      const ids = Array.isArray(newIds) ? newIds.filter((id) => nodeById(id)) : [];
+      if (diff > 0 && ids.length) {
+        ids.slice(0, 8).forEach((id, i) => setTimeout(() => {
+          if (S && S.live && S.live.on) spawnArrival({ id: String(id), type: 'knowledge', headline: '' });
+        }, i * 400));
+        hudActivityLine('sync: ' + diff + ' new — settling into the mesh');
+      } else {
+        hudActivityLine('sync: nothing new — mesh is clean');
+      }
+      return true;
+    },
     getOpacity: (id) => focusOpacity(id),
     getSelectedId: () => (S ? S.selected : null),
     getPanelRows,

@@ -646,7 +646,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=d682283');
+        await loadScriptOnce('universe.js?v=95478ed');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1439,6 +1439,8 @@
     try {
       // 0. Snapshot before.
       label.textContent = 'Starting…';
+      // DYNAMIC UI v1: show the harvest happening — a sweep leaves the core.
+      if (window.BrainUniverse && window.BrainUniverse.syncSweep) { try { window.BrainUniverse.syncSweep(); } catch (e) { /* never break sync */ } }
       const before = await getNodeCount();
 
       // 1. Dispatch the workflow directly.
@@ -1513,11 +1515,14 @@
             if (window.BrainUniverse && window.BrainUniverse.markFresh) {
               window.BrainUniverse.markFresh(newIds);
             }
+            // DYNAMIC UI v1: the harvest lands visibly — streaks + truthful ticker.
+            if (window.BrainUniverse && window.BrainUniverse.syncDone) { try { window.BrainUniverse.syncDone(diff, newIds); } catch (e) { /* never break sync */ } }
             // Reload graph to show new nodes.
             loadGraph();
             loadUpdatesLog();
           } else {
             toast('Sync complete: no new nodes.', 'ok');
+            if (window.BrainUniverse && window.BrainUniverse.syncDone) { try { window.BrainUniverse.syncDone(0, []); } catch (e) { /* never break sync */ } }
           }
         } else {
           toast('Sync complete.', 'ok');
