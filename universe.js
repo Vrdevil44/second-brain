@@ -261,7 +261,7 @@
       adj.get(e.source).push({ edge: e, other: e.target, dir: 'out' });
       if (e.target !== e.source) adj.get(e.target).push({ edge: e, other: e.source, dir: 'in' });
     }
-    // LIVE mode: the "core" is the mesh's centre of gravity — the heaviest node,
+    // The "core" is the mesh's centre of gravity — the heaviest node,
     // where each beat's pulse originates and which breathes when idle.
     // (A visual anchor only. The real core is the thinking mind, never a node.)
     let coreId = null, bestScore = -1;
@@ -382,7 +382,7 @@
       })
       .linkDirectionalParticles((l) => particleCount(l));
     // Halo dimming rides alongside the core's colour-alpha dimming.
-    // In LIVE mode the per-frame painter owns the halos (breathing core,
+    // The per-frame painter owns the halos (breathing core,
     // echo glows); node/link colour accessors above still run.
     const nodes = S.graph.graphData().nodes;
     if (S.live && S.live.on) { paintLiveHalos(nodes); return; }
@@ -814,12 +814,8 @@
     S.resetBtn.hidden = true;
     S.resetBtn.addEventListener('click', resetIsolation);
     controls.append(S.resetBtn);
-    S.liveBtn = h('button', 'u-btn', 'Live');
-    S.liveBtn.type = 'button';
-    S.liveBtn.setAttribute('aria-pressed', 'false');
-    S.liveBtn.title = 'Watch the brain think in real time';
-    S.liveBtn.addEventListener('click', toggleLive);
-    controls.append(S.liveBtn);
+    // No Live button — there is no mode to enter. The single view is alive
+    // (his call 2026-10-13): the ambient systems start with the scene.
 
     S.panel = h('aside', 'u-panel');
     S.panel.hidden = true;
@@ -941,15 +937,14 @@
     }
 
     applyData();
-    // ?live=1 auto-enters LIVE consciousness mode (demo / deep link).
-    try {
-      if (new URLSearchParams(location.search).get('live') === '1') enterLive();
-    } catch (e) { /* URL API unavailable — non-fatal */ }
+    // One view, always alive (his call 2026-10-13): the ambient systems start
+    // with the scene. No mode to enter.
+    startLiving();
   }
 
   function destroy() {
     if (!S) return;
-    exitLive(); // clears timers, fx meshes, badge/ticker; S still set
+    stopLiving(); // clears timers, fx meshes, ticker/HUD; S still set
     const s = S;
     S = null;
     if (s.clickTimer) clearTimeout(s.clickTimer);
@@ -984,9 +979,10 @@
     });
   }
 
-  // ---- LIVE consciousness mode ------------------------------------------------
-  // The brain thinking in real time. Polls live-state.json (the heartbeat's
-  // staged per-beat snapshot) and renders two visual registers:
+  // ---- The living view ------------------------------------------------------
+  // ONE view, always alive (his call 2026-10-13 — the Live mode is gone).
+  // Polls live-state.json (the heartbeat's staged per-beat snapshot) and
+  // renders two visual registers:
   //   INTERIOR (the mind itself): each beat = a pulse emanating from the core
   //     node; echo-touched nodes glow color-coded — contradiction ember red,
   //     new link green, fresh info cool blue, demand pulsing amber.
@@ -998,7 +994,6 @@
   // Silent by design: no audio anywhere — the core's voice lives in the text
   // ticker only.
   const LIVE_POLL_MS = 15000;
-  const LIVE_STALE_MS = 30 * 60 * 1000;
   const LIVE_GLOW_MS = 90 * 1000;
   const LIVE_COLORS = {
     contradiction: '#ff6b4d',
@@ -1050,25 +1045,21 @@
     return S.graph.graphData().nodes.find((x) => x.id === S.data.coreId) || null;
   }
 
-  function enterLive() {
-    if (!S || S.live) return;
-    const badge = h('button', 'live-badge live-wait');
-    badge.type = 'button';
-    badge.title = 'Exit live view';
-    const dot = h('span', 'live-dot');
-    const btext = h('span', 'live-badge-text', 'LIVE · signal pending');
-    badge.append(dot, btext);
-    badge.addEventListener('click', exitLive);
+  // There is ONE view and it is alive (his call 2026-10-13). startLiving runs
+  // once at init and never stops: breathing core, formation rings, ambient
+  // pathway pulses, HUD, activity ticker, event-driven blooms/sweeps from
+  // live-state.json. Nothing to enter, nothing to exit. stopLiving runs only
+  // from destroy() to tear the scene down.
+  function startLiving() {
+    if (!S || S.live) return; // idempotent
     const ticker = h('div', 'live-ticker');
     ticker.setAttribute('aria-live', 'polite');
-    S.ui.append(badge, ticker);
+    S.ui.append(ticker);
     S.live = {
       on: true, lastBeat: -1, state: null, formation: null, t0: performance.now(), seq: 0,
-      glow: new Map(), fx: [], rings: [], badge, btext, ticker, timer: 0, raf: 0,
+      glow: new Map(), fx: [], rings: [], ticker, timer: 0, raf: 0,
       lastActivityKey: null, lastAmbient: 0, lastBreath: 0, breathDomain: null, hold: false,
     };
-    S.liveBtn.textContent = 'Exit Live';
-    S.liveBtn.setAttribute('aria-pressed', 'true');
     // Ambient life pauses while their hands are on the scene (his rule).
     S._holdOn = () => { if (S.live) S.live.hold = true; };
     S._holdOff = () => { if (S.live) S.live.hold = false; };
@@ -1086,7 +1077,7 @@
     pollLive();
   }
 
-  function exitLive() {
+  function stopLiving() {
     if (!S || !S.live) return;
     const L = S.live;
     S.live = null;
@@ -1098,19 +1089,12 @@
     if (S._hudOutside) { document.removeEventListener('pointerdown', S._hudOutside); S._hudOutside = null; }
     if (S._holdOn) { S.stage.removeEventListener('pointerdown', S._holdOn); S._holdOn = null; }
     if (S._holdOff) { window.removeEventListener('pointerup', S._holdOff); window.removeEventListener('pointercancel', S._holdOff); S._holdOff = null; }
-    if (L.badge.parentNode) L.badge.parentNode.removeChild(L.badge);
     if (L.ticker.parentNode) L.ticker.parentNode.removeChild(L.ticker);
     if (S.hud) { S.hud.remove(); S.hud = null; }
-    if (S.liveBtn) { S.liveBtn.textContent = 'Live'; S.liveBtn.setAttribute('aria-pressed', 'false'); }
     for (const n of S.graph.graphData().nodes) {
       if (n._halo && n._liveKind) { n._halo.material.color.set(haloColor(n)); n._liveKind = null; }
     }
     updateFocus();
-  }
-
-  function toggleLive() {
-    if (!S) return;
-    if (S.live) exitLive(); else enterLive();
   }
 
   async function pollLive() {
@@ -1136,7 +1120,6 @@
       renderActivity(st);
       if (st.beat !== S.live.lastBeat) { S.live.lastBeat = st.beat; onBeat(st); }
     }
-    paintBadge();
   }
 
   // One beat: EXTERIOR first (arrivals streak in, staggered), then the
@@ -1205,7 +1188,7 @@
     // Restart the fade each time the line changes (a visible breath of life).
     el.classList.remove('hud-activity-flash');
     void el.offsetWidth;
-    el.append(h('span', 'hud-activity-kind', 'LIVE'), h('span', null, String(text || '').slice(0, 140)));
+    el.append(h('span', 'hud-activity-kind', 'CORE'), h('span', null, String(text || '').slice(0, 140)));
     el.classList.add('hud-activity-flash');
   }
   function relTime(iso) {
@@ -1265,17 +1248,8 @@
     if (acts.length) hudActivityLine(activityWords(acts[acts.length - 1], st));
   }
 
-  function paintBadge() {
-    const L = S && S.live;
-    if (!L) return;
-    const st = L.state;
-    L.badge.classList.toggle('live-wait', !st);
-    if (!st) { L.btext.textContent = 'LIVE · signal pending'; return; }
-    const age = Date.now() - Date.parse(st.ts);
-    const ageTxt = Number.isFinite(age) ? (age < 90e3 ? 'just now' : Math.round(age / 60e3) + 'm ago') : '';
-    L.btext.textContent = 'LIVE · beat ' + st.beat + ' · ' + st.nodes + ' facts' + (ageTxt ? ' · ' + ageTxt : '');
-    L.badge.classList.toggle('live-stale', Number.isFinite(age) && age > LIVE_STALE_MS);
-  }
+  // (paintBadge removed with the Live badge — unified view, his call 2026-10-13.
+  // The HUD carries beat/facts/demands now.)
 
   function arrivalTarget(a) {
     const nodes = S.graph.graphData().nodes;
@@ -1495,7 +1469,7 @@
     }
   }
 
-  // Per-frame halo painter for LIVE mode: base dimming + echo glows +
+  // Per-frame halo painter: base dimming + echo glows +
   // breathing core. Colours sync here so expiry restores the domain colour.
   function paintLiveHalos(nodes) {
     const t = (performance.now() - S.live.t0) / 1000;
@@ -1598,10 +1572,11 @@
 
   // Dev hook for staged verification (screenshots): feeds a beat state through
   // the real render path. Same-origin page only; no privileges.
+  // The view is always alive (unified view, his call 2026-10-13) — there is no
+  // mode to enter or exit; enter() is idempotent and exit() is gone.
   window.BrainLive = {
-    enter: () => enterLive(),
-    exit: () => exitLive(),
-    isOn: () => !!(S && S.live && S.live.on),
+    enter: () => startLiving(),
+    isOn: () => !!(S && S.live),
     coreId: () => (S ? S.data.coreId : null),
     formation: () => (S && S.live ? S.live.formation : null),
     activity: () => (S && S.live && S.live.state && Array.isArray(S.live.state.activity) ? S.live.state.activity : []),
@@ -1625,7 +1600,6 @@
       S.live.state = st;
       S.live.lastBeat = st.beat;
       onBeat(st);
-      paintBadge();
       return true;
     },
   };
