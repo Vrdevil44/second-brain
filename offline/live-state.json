@@ -1,22 +1,25 @@
 {
- "beat": 17,
+ "beat": 18,
  "facts": 505,
- "inbox": 10,
- "ts": "2026-10-13T21:15:01Z",
+ "inbox": 20,
+ "ts": "2026-10-13T22:00:01Z",
  "twin": "offline",
- "demands_open": 14,
+ "demands_open": 39,
  "demands_top": [
   "MISSING LINK: think loop produced zero demands across 5 passes. FIX: force >=1 demand per 90s cycle referencing an F-ID or inbox file.",
   "ORPHAN: Etawah mentioned in F-0361/0308/0419, no place node. FIX: create Etawah place node + backlinks. (User-confirmed 2026-10-13: Etawah = hometown, Uttar Pradesh, India.)",
   "GAP: 4 unprocessed inbox files while open_questions/intentions empty. FIX: process all 4, extract >=1 question + >=1 intention each."
  ],
- "queue_depth": 0,
+ "queue_depth": 2,
  "skills_permanent": 3,
  "skills_total": 3,
  "core_size": 1,
  "promotions_total": 0,
  "promotions_pending": 9,
- "avg_confidence": 0.9,
+ "avg_confidence": 0.91,
+ "throughput_1h": 13,
+ "consolidation_today_min": 30,
+ "time_votes_pending": 0,
  "hunger": [
   {
    "id": "DQ-0001 \u2014 Entity map",
@@ -57,9 +60,158 @@
    "answer": "Keep as hometown anchor, origin context (not operational). Etawah, Uttar Pradesh, India \u2014 user-confirmed 2026-10-13. Keep: DPS Etawah 2014-2018 (9th-12th schooling); father 67-68 alone in India (Etawah family ties); cultural roots. NOT \"the city where the second brain is based\" \u2014 that was agent confabulation, contradicted by the user himself.",
    "answered_by": "dev-house (Max)",
    "source": "user-confirmed 2026-10-13, education timeline, memory/people/father.md"
+  },
+  {
+   "id": "DQ-0006 - [identity] bootcamp day 0",
+   "q": "What is Vibhu's theory about WHY he overshares? (Anxiety? People-pleasing? Need to be seen as helpful/knowledgeable? Something else?) This is necessary to design real behavior change, not just surface-level awareness.",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0007 - [identity] bootcamp day 0",
+   "q": "What does \"steadying\" from Guggu actually teach Vibhu about his own emotional regulation? F-0313 says her listening calms his \"spinning head\"\u2014is he developing independent grounding skills, or becoming dependent on extern",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0008 - [identity] bootcamp day 0",
+   "q": "Is the roommate situation (F-0015, F-0283\u2013285) a separate identity problem, or a symptom of Vibhu's boundary/oversharing pattern? Does KP's reservedness trigger Vibhu to over-explain/over-share to \"fix\" the distance?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0009 - [career] bootcamp day 0",
+   "q": "What is the actual success metric for the DOTM brand-outreach campaign (F-0442)? Is it brand replies, deal closures, LinkedIn follower growth, or something else\u2014and what counts as \"working\"?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0010 - [career] bootcamp day 0",
+   "q": "After the Sep 2026 oversharing incident (F-0298), what does \"keeping boundaries\" mean concretely in Vibhu's day-to-day at F12, and how will he know he's rebuilt trust with Kevan?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0011 - [career] bootcamp day 0",
+   "q": "Which project (TheNexus, BMS, .Webly, MusicPad AI, or brain) is the true north star for the next 90 days\u2014i.e., which one *must* ship or reach a milestone for Vibhu to feel confident in the next job search?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0012 - [money] bootcamp day 0",
+   "q": "What is the true monthly cash burn after all fixed expenses (rent, insurance, tiffin, gas, groceries) are paid, and how much float does he need between paycheques to avoid credit cards going backward? (Relates: F-0048, F",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0013 - [money] bootcamp day 0",
+   "q": "Is the India transfer (F-0250) a *fixed monthly commitment* (e.g., 2,500 INR per paycheque) or discretionary *after* card debt hits zero, and does it compete with the car fix (F-0042)? (Relates: F-0007, F-0042, F-0043, F",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0014 - [money] bootcamp day 0",
+   "q": "Post-card-payoff (early Nov), what is the priority ranking: (A) rebuild cash emergency fund to 3 months expenses, (B) resume India remittance at higher/regular cadence, (C) grow investment portfolio, or (D) fund car repa",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0015 - [health] bootcamp day 0",
+   "q": "What is the real barrier to gym restart \u2014 money (no membership budget), time (conflicting with exam/work), or confidence (strength anxiety after 70 kg drop)? [Determines whether demand-fix (a)5 is financial, scheduling, ",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0016 - [health] bootcamp day 0",
+   "q": "Does the Itraconazole course end on 2026-10-13, and will Dr. Bahrani's revisit depend on skin clearance or routine follow-up? [Shapes urgency and data needed for F-0432 action.]",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0017 - [health] bootcamp day 0",
+   "q": "Which of the three load sources (exam, money, PR/career) is most solvable in the next 2 weeks, and does EAP counselling (F-0050) address it? [Informs sleep protocol priority and F-0062 mitigation.]",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0018 - [music] bootcamp day 0",
+   "q": "What is the real commercial barrier stopping DOTM from booking 5+ live shows in Oct\u2013Dec 2026? (Is it: promotion reach, promoter relationships, rider costs, scheduling, brand deal dependency, or something else?)",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0019 - [music] bootcamp day 0",
+   "q": "Why does the \"DOTM Daily\" brand-partnership model (F-0086, F-0089) exist as pitch material (F-0090) but show zero completed campaigns yet? (What's blocking the first brand deal: outreach resonance, contract speed, or lac",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0020 - [music] bootcamp day 0",
+   "q": "Does the Desi hip-hop camp structure (DOTM center + Ghaint Jxtt + HPO; F-0017, F-0019, F-0020) have a formal revenue-share or are artists operating solo with loose connective tissue?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0021 - [relationships] bootcamp day 0",
+   "q": "What is Vibhu's concrete, step-by-step plan to restore trust with Kevan \u2014 and what does \"trust restored\" look like to Kevan specifically?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0022 - [relationships] bootcamp day 0",
+   "q": "Is Guggu his romantic partner, or is she in a different relational role \u2014 and does she know/understand how much he relies on her for emotional grounding?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
+  },
+  {
+   "id": "DQ-0023 - [relationships] bootcamp day 0",
+   "q": "What is the current status and root cause of the Remitly transfer holds on 2026-10-09, and how is this affecting his father's immediate financial needs in India?",
+   "status": "queued",
+   "answer": "-",
+   "answered_by": "-",
+   "source": "dev-house deep-think 2026-10-13"
   }
  ],
  "confidence_nodes": [
+  {
+   "id": "F-0007",
+   "confidence": 0.9500000000000001,
+   "label": "Core motivation: financial stability, better job, confidence, better physique - "
+  },
   {
    "id": "F-0001",
    "confidence": 0.9,
@@ -79,11 +231,6 @@
    "id": "F-0005",
    "confidence": 0.9,
    "label": "Self-described strengths: communicator, funny, confident presence; people skills"
-  },
-  {
-   "id": "F-0007",
-   "confidence": 0.9,
-   "label": "Core motivation: financial stability, better job, confidence, better physique - "
   },
   {
    "id": "F-0009",
