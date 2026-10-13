@@ -1181,3 +1181,35 @@ body.view-3d .node-panel { display: none; }
 @media (max-width: 640px) {
   .hud { top: 70px; left: 12px; }
 }
+
+/* Core hunger strip: open questions with routing status. Quiet by design. */
+.hunger-strip {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 217, 160, 0.18);
+  border-radius: 10px;
+  background: rgba(10, 10, 16, 0.55);
+  font-size: 12px;
+}
+.hunger-strip h3 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 217, 160, 0.75);
+}
+.hunger-strip ul { margin: 0; padding: 0; list-style: none; }
+.hunger-strip li { margin: 3px 0; color: #c9ccdd; line-height: 1.4; }
+.hunger-strip li.muted { color: #6e7187; font-size: 11px; }
+.hunger-strip .hunger-need { color: #ffd9a0; }
+.hunger-strip .hunger-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 10px;
+  background: rgba(255, 157, 92, 0.16);
+  color: #ffb37a;
+  border: 1px solid rgba(255, 157, 92, 0.35);
+}

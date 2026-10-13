@@ -1,1 +1,110 @@
-{"activity":[],"beat":8,"inbox":8,"nodes":505,"snapshot_of":"origin/offline @ e563abf","ts":"2026-10-13T19:15:01Z","twin":"offline"}
+{
+ "beat": 17,
+ "facts": 505,
+ "inbox": 10,
+ "ts": "2026-10-13T21:15:01Z",
+ "twin": "offline",
+ "demands_open": 14,
+ "demands_top": [
+  "MISSING LINK: think loop produced zero demands across 5 passes. FIX: force >=1 demand per 90s cycle referencing an F-ID or inbox file.",
+  "ORPHAN: Etawah mentioned in F-0361/0308/0419, no place node. FIX: create Etawah place node + backlinks. (User-confirmed 2026-10-13: Etawah = hometown, Uttar Pradesh, India.)",
+  "GAP: 4 unprocessed inbox files while open_questions/intentions empty. FIX: process all 4, extract >=1 question + >=1 intention each."
+ ],
+ "queue_depth": 0,
+ "skills_permanent": 3,
+ "skills_total": 3,
+ "core_size": 1,
+ "promotions_total": 0,
+ "promotions_pending": 9,
+ "avg_confidence": 0.9,
+ "hunger": [
+  {
+   "id": "DQ-0001 \u2014 Entity map",
+   "q": "Which facts belong to the user (Vibhu) vs his girlfriend (Gagandeep)? Where is the boundary?",
+   "status": "answered",
+   "answer": "Owner-vs-partner boundary. Vibhu Dikshit = the user, the human whose brain this is: every \"I/me/my\" in his captures and every fact about his life, career, body, money = Vibhu. Gagandeep Kaur Dhaliwal (Guggu) = his girlfriend, a separate person (Canadian citizen, lives on SFU mountain); facts about her life = Gagandeep. Rule: relationship-context \"she/her\" -> Gagandeep unless the capture names someone else; never merge their attributes. The 2026-10-13 confusion (2 queries mixing attributes) is a ",
+   "answered_by": "dev-house (Max)",
+   "source": "brain state \u2014 runtime/entity-map.json, F-0010, memory/people/gagandeep-kaur-dhaliwal.md"
+  },
+  {
+   "id": "DQ-0002 \u2014 F-0007 priority rank",
+   "q": "Of financial stability, better job, confidence, physique \u2014 which unlocks the others fastest?",
+   "status": "answered",
+   "answer": "Better job unlocks the others fastest. From his lanes: a bigger-company/platform role -> higher income -> financial stability (F-0007's core) -> confidence (identity + money). Physique (70->80kg) runs parallel \u2014 a better job funds gym time/money but physique doesn't unlock the others. Order: better job -> financial stability -> confidence, physique parallel. He can override \u2014 this is the dev house's analytical read, not his decision.",
+   "answered_by": "dev-house (Max)",
+   "source": "goal lanes (career=move-to-a-bigger-company-and-platform, money=make-my-money-work, physique=get-back-to-80-kg), ideal-self blueprint (MEMORY.md)"
+  },
+  {
+   "id": "DQ-0003 \u2014 DOTM camp revenue rule",
+   "q": "Direct income path toward F-0007, skill-building detour, or sunk-cost distraction?",
+   "status": "answered",
+   "answer": "Skill-building detour / network capital \u2014 currently a PAUSED asset. Not a direct income path (paused at his request 2026-10-01; he reopens it, do not nudge). Not a sunk-cost distraction (broker/exec-producer model risks third-party sponsor capital, not his; nothing on paper yet \u2014 MOU is the next step). It builds India<->Canada bridge capital and sponsor relationships (Dev/DOTM 77K Spotify monthly listeners, BroCode talks). Revisit only when he reopens it.",
+   "answered_by": "dev-house (Max)",
+   "source": "brain state \u2014 side-hustle paused, DOTM camp (memory/groups/dotm-camp.md), people/dev-dotm.md"
+  },
+  {
+   "id": "DQ-0004 \u2014 UFV -> F12.net gap",
+   "q": "How does the career path connect, and what is the next rung?",
+   "status": "answered",
+   "answer": "UFV (University of the Fraser Valley, Abbotsford) -> BCIS Bachelor of Computer Information Systems 2021-2025 (CGPA 3.51/4.33) -> F12.net Project Services Specialist since 2026-01-12 (tier-3 support <-> compliance). The \"gap\" was the new-grad -> industry transition \u2014 crossed. Next rung (his career lane): move to a bigger company + platform; Phase 1 now = GitHub + all projects to industry standards, presentable.",
+   "answered_by": "dev-house (Max)",
+   "source": "education timeline, work schedule (MEMORY.md), industry-ready push"
+  },
+  {
+   "id": "DQ-0005 \u2014 Etawah relevance",
+   "q": "Hometown (Etawah, UP, India \u2014 user-confirmed). What context should the brain keep about it?",
+   "status": "answered",
+   "answer": "Keep as hometown anchor, origin context (not operational). Etawah, Uttar Pradesh, India \u2014 user-confirmed 2026-10-13. Keep: DPS Etawah 2014-2018 (9th-12th schooling); father 67-68 alone in India (Etawah family ties); cultural roots. NOT \"the city where the second brain is based\" \u2014 that was agent confabulation, contradicted by the user himself.",
+   "answered_by": "dev-house (Max)",
+   "source": "user-confirmed 2026-10-13, education timeline, memory/people/father.md"
+  }
+ ],
+ "confidence_nodes": [
+  {
+   "id": "F-0001",
+   "confidence": 0.9,
+   "label": "Name: Vibhu Dikshit (goes by Vibhu D.), born 2002-04-10, single."
+  },
+  {
+   "id": "F-0003",
+   "confidence": 0.9,
+   "label": "Lives in Brentwood, Burnaby (Hillside East Towers, 27th floor, 1BHK den) with a "
+  },
+  {
+   "id": "F-0004",
+   "confidence": 0.9,
+   "label": "Education: UFV Bachelor of Computer Information Systems (2+2 India/Canada pathwa"
+  },
+  {
+   "id": "F-0005",
+   "confidence": 0.9,
+   "label": "Self-described strengths: communicator, funny, confident presence; people skills"
+  },
+  {
+   "id": "F-0007",
+   "confidence": 0.9,
+   "label": "Core motivation: financial stability, better job, confidence, better physique - "
+  },
+  {
+   "id": "F-0009",
+   "confidence": 0.9,
+   "label": "Confidence blockers: physique, tier-3+ IT knowledge gaps (cloud, Microsoft, Wind"
+  },
+  {
+   "id": "F-0010",
+   "confidence": 0.9,
+   "label": "Girlfriend: Gagandeep Kaur Dhaliwal (Guggu); Canadian citizen, lives near SFU Bu"
+  },
+  {
+   "id": "F-0012",
+   "confidence": 0.9,
+   "label": "Father: 67-68, alone in India; saving for him is the most important goal."
+  },
+  {
+   "id": "F-0013",
+   "confidence": 0.9,
+   "label": "Mother: passed away in 2022 from bile duct cancer; held his pre-college freelanc"
+  }
+ ],
+ "snapshot_of": "offline twin"
+}

@@ -1406,6 +1406,125 @@
     });
   }
 
+  // ---- TRUE CORE: the offline twin's intelligence core, made visible ----
+  // Not a graph node — the thinking mind itself. (The mesh's heaviest node is
+  // only a visual anchor; this is the real core.) Glow/pulse ∝ core_size +
+  // avg_confidence from live-state. A dim ember while nearly empty — honest,
+  // never decorative.
+  function trueCoreState() {
+    const st = (S && S.live && S.live.state) || {};
+    return {
+      size: Math.max(0, Number(st.core_size) || 0),
+      conf: Math.min(1, Math.max(0, Number(st.avg_confidence) || 0)),
+    };
+  }
+  function ensureTrueCore(scene) {
+    const L = S.live;
+    if (L.trueCore) return L.trueCore;
+    const core = liveMesh('#ffd9a0', 0.5);
+    if (!core) return null;
+    const halo = liveMesh('#ff9d5c', 0.14);
+    const grp = { core, halo, t0: performance.now() };
+    core.position.set(0, 0, 0);
+    core.raycast = function () {};
+    scene.add(core);
+    if (halo) { halo.position.set(0, 0, 0); halo.raycast = function () {}; scene.add(halo); }
+    L.trueCore = grp;
+    return grp;
+  }
+  // Tracked nodes orbit the true core at radius ∝ 1/confidence — gravity visible.
+  function orbitTracked() {
+    const L = S.live;
+    if (!L || !L.on) return;
+    const st = L.state || {};
+    const tracked = Array.isArray(st.confidence_nodes) ? st.confidence_nodes : [];
+    if (!tracked.length) return;
+    const t = performance.now() / 1000;
+    const R0 = 130;
+    for (let i = 0; i < tracked.length; i++) {
+      const tn = tracked[i];
+      if (!tn || !tn.id) continue;
+      const n = nodeById(tn.id);
+      if (!n) continue;
+      const conf = Math.min(1, Math.max(0, Number(tn.confidence) || 0.3));
+      const r = R0 * (1.35 - conf); // 0.9 -> ~59 (hugs the core), 0.3 -> ~137 (drifts far)
+      const sp = 0.10 - 0.05 * conf; // inner orbits faster
+      const a = t * sp + (i * Math.PI * 2) / tracked.length;
+      n.fx = Math.cos(a) * r;
+      n.fz = Math.sin(a) * r;
+      n.fy = Math.sin(t * 0.25 + i * 1.3) * 16;
+    }
+  }
+  function paintTrueCore() {
+    const L = S.live;
+    if (!L || !L.on) return;
+    const scene = liveScene();
+    if (!scene) return;
+    const tc = ensureTrueCore(scene);
+    if (!tc) return;
+    const st = trueCoreState();
+    const t = (performance.now() - tc.t0) / 1000;
+    const mass = Math.min(2.6, 1 + st.size * 0.22); // 1 entry = ember; grows slowly
+    const pulse = 1 + 0.14 * Math.sin(t * 1.7) * (0.25 + 0.75 * st.conf);
+    tc.core.scale.setScalar(8 * mass * pulse);
+    tc.core.material.opacity = Math.min(0.92, 0.22 + 0.6 * st.conf);
+    if (tc.halo) {
+      tc.halo.scale.setScalar(30 * mass * (1 + 0.07 * Math.sin(t * 1.7 + 0.9)));
+      tc.halo.material.opacity = 0.08 + 0.12 * st.conf;
+    }
+    try { orbitTracked(); } catch (e) { /* orbits never break the frame */ }
+  }
+  // Thunder: a promotion streaks into the true core.
+  function thunderIntoCore(fromNode, color) {
+    const scene = liveScene();
+    if (!scene || !S.live) return;
+    const head = liveMesh(color, 1);
+    const trail = liveMesh(color, 0.45);
+    if (!head || !trail) return;
+    const o = (fromNode && typeof fromNode.x === 'number')
+      ? { x: fromNode.x, y: fromNode.y, z: fromNode.z }
+      : { x: 220, y: 130, z: -170 };
+    head.scale.setScalar(7);
+    scene.add(head); scene.add(trail);
+    const t0 = performance.now(), dur = 1300;
+    const dx = -o.x, dy = -o.y, dz = -o.z;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const ux = dx / len, uy = dy / len, uz = dz / len;
+    S.live.fx.push({
+      update(now) {
+        const t = Math.min(1, (now - t0) / dur);
+        const e = t * t * t; // ease-in: accelerates into the core
+        const hx = o.x + dx * e, hy = o.y + dy * e, hz = o.z + dz * e;
+        head.position.set(hx, hy, hz);
+        trail.position.set(hx - ux * 26, hy - uy * 26, hz - uz * 26);
+        trail.scale.set(3, 3, 30);
+        trail.lookAt(hx + ux, hy + uy, hz + uz);
+        if (t < 1) return true;
+        const flash = liveMesh(color, 0.85);
+        if (flash) {
+          flash.position.set(0, 0, 0);
+          scene.add(flash);
+          const f0 = performance.now();
+          S.live.fx.push({
+            update(n2) {
+              const k = Math.min(1, (n2 - f0) / 520);
+              flash.scale.setScalar(6 + k * 42);
+              flash.material.opacity = 0.85 * (1 - k);
+              return k < 1;
+            },
+            dispose(sc) { const s2 = sc || scene; s2.remove(flash); flash.material.dispose(); },
+          });
+        }
+        return false;
+      },
+      dispose(sc) {
+        const s2 = sc || scene;
+        s2.remove(head); s2.remove(trail);
+        head.material.dispose(); trail.material.dispose();
+      },
+    });
+  }
+
   // ---- activity: heartbeat events rendered as visible life ------------------
   function renderActivity(st) {
     const L = S.live;
@@ -1444,6 +1563,17 @@
         liveIds.forEach((id, i) => setTimeout(() => {
           if (S && S.live && S.live.on) { S.live.glow.set(String(id), { kind: 'fresh', until: mUntil }); updateFocus(); }
         }, i * 150));
+        sweepRing();
+        break;
+      }
+      case 'promotion': {
+        // A node earned its place: thunder streaks it into the true core.
+        const pn = liveIds.length ? nodeById(liveIds[0]) : null;
+        thunderIntoCore(pn, '#ffd9a0');
+        break;
+      }
+      case 'council': {
+        // Deliberation, not arrival: a quiet ring breathes once.
         sweepRing();
         break;
       }
@@ -1545,6 +1675,7 @@
       if (!alive) { try { fx[i].dispose(scene); } catch (e) { /* already gone */ } fx.splice(i, 1); }
     }
     try { paintLiveHalos(S.graph.graphData().nodes); } catch (e) { /* never break the frame */ }
+    try { paintTrueCore(); } catch (e) { /* the core never breaks the frame */ }
     try { updateFormationRings(); } catch (e) { /* never break the frame */ }
     try {
       if (!S.live.hold && now - S.live.lastAmbient > 20000) { S.live.lastAmbient = now; ambientPulse(); }

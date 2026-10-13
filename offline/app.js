@@ -2384,10 +2384,43 @@
     if (dot && (!hud || !hud.classList.contains('expanded'))) dot.classList.add('new');
   }
 
+  // Core hunger strip: open questions with routing status. Only needs-vibhu
+  // questions surface individually (marked); everything else is a quiet count.
+  // The dev house answers first — he is the last resort, asked directly in chat.
+  function renderHunger(st) {
+    const strip = $('#hunger-strip');
+    const list = $('#hunger-list');
+    if (!strip || !list || !st) return;
+    const hunger = Array.isArray(st.hunger) ? st.hunger : [];
+    if (!hunger.length) { strip.hidden = true; return; }
+    strip.hidden = false;
+    list.textContent = '';
+    const needVibhu = hunger.filter((h) => h && h.status === 'needs-vibhu');
+    const answered = hunger.filter((h) => h && h.status === 'answered').length;
+    for (const h of needVibhu) {
+      const li = document.createElement('li');
+      li.className = 'hunger-need';
+      const q = document.createElement('span');
+      q.textContent = h.q || h.id || 'question';
+      const tag = document.createElement('span');
+      tag.className = 'hunger-tag';
+      tag.textContent = 'needs Vibhu';
+      li.appendChild(q);
+      li.appendChild(tag);
+      list.appendChild(li);
+    }
+    const quiet = document.createElement('li');
+    quiet.className = 'muted';
+    quiet.textContent = hunger.length + ' questions \u00b7 dev house answered ' + answered +
+      ' \u00b7 ' + needVibhu.length + ' need Vibhu';
+    list.appendChild(quiet);
+  }
+
   function appendBeatUpdates(st) {
     const list = $('#updates-list');
     if (!list || !st) return;
     updateBeatPill(st);
+    try { renderHunger(st); } catch (e) { /* hunger never breaks updates */ }
     const demands = Array.isArray(st.demands) ? st.demands.filter(Boolean).slice(0, 5) : [];
     if (!demands.length) return; // silence holds: quiet beats add nothing
     // Drop the Loading/token placeholder once real entries exist.
@@ -2737,6 +2770,7 @@
   refreshTokenDot();
   loadGraph();
   loadUpdatesLog();
+  try { loadLiveStateLive().then((st) => { if (st) renderHunger(st); }); } catch (e) { /* silent */ }
   initUpdatesAutoScroll();
   initMobileUI();
 })();
