@@ -1052,12 +1052,9 @@
   // from destroy() to tear the scene down.
   function startLiving() {
     if (!S || S.live) return; // idempotent
-    const ticker = h('div', 'live-ticker');
-    ticker.setAttribute('aria-live', 'polite');
-    S.ui.append(ticker);
     S.live = {
       on: true, lastBeat: -1, state: null, formation: null, t0: performance.now(), seq: 0,
-      glow: new Map(), fx: [], rings: [], ticker, timer: 0, raf: 0,
+      glow: new Map(), fx: [], rings: [], timer: 0, raf: 0,
       lastActivityKey: null, lastAmbient: 0, lastBreath: 0, breathDomain: null, hold: false,
     };
     // Ambient life pauses while their hands are on the scene (his rule).
@@ -1089,7 +1086,6 @@
     if (S._hudOutside) { document.removeEventListener('pointerdown', S._hudOutside); S._hudOutside = null; }
     if (S._holdOn) { S.stage.removeEventListener('pointerdown', S._holdOn); S._holdOn = null; }
     if (S._holdOff) { window.removeEventListener('pointerup', S._holdOff); window.removeEventListener('pointercancel', S._holdOff); S._holdOff = null; }
-    if (L.ticker.parentNode) L.ticker.parentNode.removeChild(L.ticker);
     if (S.hud) { S.hud.remove(); S.hud = null; }
     for (const n of S.graph.graphData().nodes) {
       if (n._halo && n._liveKind) { n._halo.material.color.set(haloColor(n)); n._liveKind = null; }
@@ -1124,8 +1120,13 @@
 
   // One beat: EXTERIOR first (arrivals streak in, staggered), then the
   // INTERIOR response (core pulse + echo glows). No arrivals = interior only.
+  // Beat entries merge into the Updates feed (his call 2026-10-13): no separate
+  // CORE panel — the api bridge hands the beat to the portal, which appends
+  // the entries + a closing beat summary as feed items.
   function onBeat(st) {
-    renderTicker(st);
+    if (S.api && typeof S.api.onBeatUpdates === 'function') {
+      try { S.api.onBeatUpdates(st); } catch (e) { /* feed must never break the beat */ }
+    }
     renderHUD(st);
     const arrivals = Array.isArray(st.arrivals) ? st.arrivals.filter(Boolean).slice(0, 8) : [];
     const touched = Array.isArray(st.touched) ? st.touched.filter(Boolean) : [];
@@ -1143,30 +1144,6 @@
       setTimeout(() => { if (S && S.live && S.live.on) spawnArrival(a); }, i * 650);
     });
     setTimeout(applyEcho, arrivals.length * 650 + 1500);
-  }
-
-  function renderTicker(st) {
-    const box = S.live.ticker;
-    box.textContent = '';
-    // One line of life under the beat: the latest real event, plain words.
-    const acts = Array.isArray(st.activity) ? st.activity : [];
-    const lastAct = acts.length ? acts[acts.length - 1] : null;
-    box.append(h('div', 'live-ticker-head',
-      'CORE · BEAT ' + st.beat + (lastAct ? ' — ' + activityWords(lastAct, st) : '')));
-    const lines = Array.isArray(st.demands) ? st.demands.slice(0, 5) : [];
-    if (!lines.length) {
-      const row = h('div', 'live-line');
-      row.append(h('span', 'live-kicker', 'CORE'), h('span', 'live-text', '— quiet mind —'));
-      box.append(row);
-      return;
-    }
-    lines.forEach((d, i) => {
-      const row = h('div', 'live-line');
-      row.style.animationDelay = (i * 0.12) + 's';
-      // textContent only: headlines are untrusted log/inbox text.
-      row.append(h('span', 'live-kicker', 'CORE'), h('span', 'live-text', String(d).slice(0, 160)));
-      box.append(row);
-    });
   }
 
   // Brain-status HUD: the site's always-visible status line. Core formation

@@ -646,13 +646,14 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=2be5a66');
+        await loadScriptOnce('universe.js?v=1184a16');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
         window.BrainUniverse.init(box, graphData, {
           onMeta: (text) => { $('#graph-meta').textContent = text; },
           loadLiveState,
+          onBeatUpdates: (st) => appendBeatUpdates(st),
         });
         $('#demo-badge').hidden = !graphData.demo;
         if (toggle) { toggle.textContent = '2D'; toggle.title = 'Switch to 2D view'; }
@@ -2191,9 +2192,10 @@
         list.innerHTML = '<li class="muted">Add your GitHub token in Settings to see updates.</li>';
         return;
       }
+      // Preserve beat entries already merged into the feed (newer than commits).
+      const beatItems = [...list.querySelectorAll('.beat-entry, .beat-summary')];
       list.innerHTML = '';
-      for (const c of commits.slice(0, 8)) {
-        const li = document.createElement('li');
+      for (const c of commits.slice(0, 8)) {        const li = document.createElement('li');
         const msg = (c.commit.message || '').split('\n')[0].slice(0, 80);
         const time = new Date(c.commit.author.date).toLocaleString('en-US', {
           month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
@@ -2256,11 +2258,88 @@
         });
         list.appendChild(li);
       }
+      // Re-append preserved beat entries at the end (chronological: newest last).
+      for (const b of beatItems) list.appendChild(b);
       // Update mobile pill badge.
       updateUpdatesBadge(commits.length);
     } catch (err) {
       list.innerHTML = '<li class="muted">Could not load updates.</li>';
     }
+  }
+
+  // ===========================================================================
+  // Beat entries merged into the Updates feed (his call 2026-10-13).
+  // No separate CORE panel: each beat's demands append here as feed entries,
+  // closed by a compact beat summary line. The feed auto-scrolls to the newest
+  // entry; scrolling up pauses it, returning to the bottom resumes.
+  // ===========================================================================
+  let updatesAutoScroll = true;
+
+  function isUpdatesAtBottom() {
+    const log = $('#updates-log');
+    if (!log) return true;
+    return (log.scrollHeight - log.scrollTop - log.clientHeight) < 24;
+  }
+
+  function initUpdatesAutoScroll() {
+    const log = $('#updates-log');
+    if (!log || log._beatScrollWired) return;
+    log._beatScrollWired = true;
+    log.addEventListener('scroll', () => { updatesAutoScroll = isUpdatesAtBottom(); }, { passive: true });
+  }
+
+  function scrollUpdatesToBottom() {
+    const log = $('#updates-log');
+    if (log) log.scrollTop = log.scrollHeight;
+  }
+
+  function bumpUpdatesBadge() {
+    const badge = $('#updates-badge');
+    const pill = $('#updates-pill');
+    const list = $('#updates-list');
+    const log = $('#updates-log');
+    if (!badge || !pill || !list || !log) return;
+    if (!isMobile()) return;
+    if (log.classList.contains('expanded')) return; // open feed: no badge needed
+    const lastSeen = parseInt(localStorage.getItem('updates-last-seen') || '0', 10);
+    const fresh = Math.max(0, list.children.length - lastSeen);
+    badge.textContent = fresh > 0 ? fresh : '';
+  }
+
+  function appendBeatUpdates(st) {
+    const list = $('#updates-list');
+    if (!list || !st) return;
+    const demands = Array.isArray(st.demands) ? st.demands.filter(Boolean).slice(0, 5) : [];
+    if (!demands.length) return; // silence holds: quiet beats add nothing
+    // Drop the Loading/token placeholder once real entries exist.
+    if (!list.querySelector('li:not(.muted)')) {
+      const ph = list.querySelector('li.muted');
+      if (ph) ph.remove();
+    }
+    const frag = document.createDocumentFragment();
+    for (const d of demands) {
+      const li = document.createElement('li');
+      li.className = 'beat-entry';
+      li.textContent = String(d).slice(0, 160); // textContent only: untrusted beat text
+      frag.appendChild(li);
+    }
+    // Closing entry for the batch: compact beat summary, plain words, no F-IDs.
+    let fix = 0, links = 0;
+    for (const d of demands) {
+      if (/^UNACCEPTABLE/i.test(d)) fix++;
+      else if (/^MISSING LINK/i.test(d)) links++;
+    }
+    const parts = [];
+    if (fix) parts.push(fix + ' fix demand' + (fix === 1 ? '' : 's'));
+    if (links) parts.push(links + ' missing link' + (links === 1 ? '' : 's'));
+    const sum = document.createElement('li');
+    sum.className = 'beat-summary';
+    sum.textContent = 'Beat ' + st.beat + ' — ' + (parts.length ? parts.join(', ') : 'noted');
+    frag.appendChild(sum);
+    list.appendChild(frag);
+    initUpdatesAutoScroll();
+    if (updatesAutoScroll) scrollUpdatesToBottom();
+    bumpUpdatesBadge();
   }
 
   // ===========================================================================
@@ -2302,6 +2381,9 @@
           const count = list ? list.children.length : 0;
           localStorage.setItem('updates-last-seen', String(count));
           $('#updates-badge').textContent = '';
+          // Fresh open lands on the newest entry.
+          updatesAutoScroll = true;
+          scrollUpdatesToBottom();
         }
       });
       // Close when tapping outside.
@@ -2543,5 +2625,6 @@
   refreshTokenDot();
   loadGraph();
   loadUpdatesLog();
+  initUpdatesAutoScroll();
   initMobileUI();
 })();

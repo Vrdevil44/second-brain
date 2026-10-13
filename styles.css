@@ -1023,56 +1023,19 @@ body.view-3d .node-panel { display: none; }
 
 /* ---------- The living view ---------- */
 /* Silent by design: the core's voice lives in the ticker text only. */
-/* (live-badge styles removed with the Live mode — unified view, his call 2026-10-13.) */
+/* (live-ticker styles removed — the CORE panel is gone; beat entries merge
+   into the Updates feed, his call 2026-10-13.) */
 
-.live-ticker {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 18px;
-  width: min(640px, calc(100vw - 36px));
-  padding: 12px 18px 13px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--line-glow);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: var(--shadow), 0 0 28px rgba(110, 231, 255, 0.06);
-  z-index: 5;
-  pointer-events: none; /* a ticker is read, not touched — orbit drag passes over */
-}
-.live-ticker-head {
-  font: 700 10px var(--mono);
-  letter-spacing: 1.4px;
-  color: var(--text-3);
-  margin-bottom: 6px;
-}
-.live-line {
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  padding: 5px 0;
-  border-top: 1px solid var(--border);
-  animation: liveRise 0.5s var(--ease) both;
-}
-.live-line:first-of-type { border-top: 0; }
-.live-kicker {
-  font: 700 9.5px var(--mono);
-  letter-spacing: 1px;
-  color: var(--warn);
-  flex: none;
-}
-.live-text {
-  font: italic 400 14.5px/1.45 Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+/* Beat entries merged into the Updates feed: the core's voice (italic serif),
+   closed by a compact beat summary line. No separate heading. */
+.updates-log .beat-entry {
+  font: italic 400 13px/1.45 Georgia, 'Iowan Old Style', 'Times New Roman', serif;
   color: var(--text);
 }
-@keyframes liveRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .live-line { animation: none; }
-}
-@media (max-width: 640px) {
-  .live-ticker { bottom: 70px; }
+.updates-log .beat-summary {
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--text-3);
 }
 
 /* Brain-status HUD: the site's always-visible status line. Minimal, no chrome,
