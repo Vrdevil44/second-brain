@@ -242,7 +242,15 @@
       adj.get(e.source).push({ edge: e, other: e.target, dir: 'out' });
       if (e.target !== e.source) adj.get(e.target).push({ edge: e, other: e.source, dir: 'in' });
     }
-    return { nodes, byId, edges, adj };
+    // LIVE mode: the "core" is the most-connected node — the mesh's centre of
+    // gravity, where each beat's pulse originates and which breathes when idle.
+    let coreId = null, bestScore = -1;
+    for (const n of nodes) {
+      const deg = (adj.get(n.id) || []).length;
+      const score = deg * 1000 + Math.min(999, n.val);
+      if (score > bestScore) { bestScore = score; coreId = n.id; }
+    }
+    return { nodes, byId, edges, adj, coreId };
   }
 
   // Which nodes/links are on screen given filters + isolation.
@@ -343,7 +351,10 @@
       })
       .linkDirectionalParticles((l) => particleCount(l));
     // Halo dimming rides alongside the core's colour-alpha dimming.
+    // In LIVE mode the per-frame painter owns the halos (breathing core,
+    // echo glows); node/link colour accessors above still run.
     const nodes = S.graph.graphData().nodes;
+    if (S.live && S.live.on) { paintLiveHalos(nodes); return; }
     for (const n of nodes) {
       if (!n._halo) continue;
       const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
@@ -738,6 +749,7 @@
 
     // Overlay UI
     const ui = h('div', 'u-ui');
+    S.ui = ui;
     const searchWrap = h('div', 'u-search');
     S.search = h('input', 'u-search-input');
     S.search.type = 'search';
@@ -768,6 +780,12 @@
     S.resetBtn.hidden = true;
     S.resetBtn.addEventListener('click', resetIsolation);
     controls.append(S.resetBtn);
+    S.liveBtn = h('button', 'u-btn', 'Live');
+    S.liveBtn.type = 'button';
+    S.liveBtn.setAttribute('aria-pressed', 'false');
+    S.liveBtn.title = 'Watch the brain think in real time';
+    S.liveBtn.addEventListener('click', toggleLive);
+    controls.append(S.liveBtn);
 
     S.panel = h('aside', 'u-panel');
     S.panel.hidden = true;
@@ -892,10 +910,15 @@
     }
 
     applyData();
+    // ?live=1 auto-enters LIVE consciousness mode (demo / deep link).
+    try {
+      if (new URLSearchParams(location.search).get('live') === '1') enterLive();
+    } catch (e) { /* URL API unavailable — non-fatal */ }
   }
 
   function destroy() {
     if (!S) return;
+    exitLive(); // clears timers, fx meshes, badge/ticker; S still set
     const s = S;
     S = null;
     if (s.clickTimer) clearTimeout(s.clickTimer);
@@ -929,6 +952,379 @@
       };
     });
   }
+
+  // ---- LIVE consciousness mode ------------------------------------------------
+  // The brain thinking in real time. Polls live-state.json (the heartbeat's
+  // staged per-beat snapshot) and renders two visual registers:
+  //   INTERIOR (the mind itself): each beat = a pulse emanating from the core
+  //     node; echo-touched nodes glow color-coded — contradiction ember red,
+  //     new link green, fresh info cool blue, demand pulsing amber.
+  //   EXTERIOR (the universe): arrivals from outside — new facts, new demands —
+  //     streak in from beyond the mesh edge as celestial events (a falling star
+  //     for knowledge, an electric-blue thundercrack for demands), then resolve
+  //     into the mesh. Calm interior, cosmos knocking at the edge.
+  // Idle (no new beat): the core breathes. Never a dead screen.
+  // Silent by design: no audio anywhere — the core's voice lives in the text
+  // ticker only.
+  const LIVE_POLL_MS = 15000;
+  const LIVE_STALE_MS = 30 * 60 * 1000;
+  const LIVE_GLOW_MS = 90 * 1000;
+  const LIVE_COLORS = {
+    contradiction: '#ff6b4d',
+    newlink: '#3ddc97',
+    fresh: '#6ee7ff',
+    demand: '#ffb547',
+  };
+  const STREAK_KNOWLEDGE = '#cfe4ff';
+  const STREAK_DEMAND = '#4da3ff';
+
+  function hashDir(seed) {
+    let x = 2166136261;
+    const s = 'live:' + String(seed);
+    for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); }
+    const r = () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return (x % 10000) / 10000; };
+    const u = r() * 2 - 1, th = r() * Math.PI * 2, q = Math.sqrt(Math.max(0, 1 - u * u));
+    return { x: q * Math.cos(th), y: q * Math.sin(th), z: u };
+  }
+
+  function liveMesh(color, opacity) {
+    if (!glowTpl) return null;
+    const mat = glowTpl.matProto.clone();
+    mat.color.set(color);
+    mat.transparent = true;
+    mat.opacity = opacity;
+    mat.blending = BLEND_ADDITIVE;
+    mat.depthWrite = false;
+    const m = new glowTpl.Mesh(glowTpl.geo, mat);
+    m.raycast = function () {};
+    return m;
+  }
+
+  function liveScene() {
+    return (S && S.graph && typeof S.graph.scene === 'function') ? S.graph.scene() : null;
+  }
+
+  function edgeRadius() {
+    const nodes = S.graph.graphData().nodes;
+    let r = 200;
+    for (const n of nodes) {
+      const d = Math.hypot(n.x || 0, n.y || 0, n.z || 0);
+      if (d > r) r = d;
+    }
+    return r;
+  }
+
+  function coreNode() {
+    if (!S || !S.graph || !S.data.coreId) return null;
+    return S.graph.graphData().nodes.find((x) => x.id === S.data.coreId) || null;
+  }
+
+  function enterLive() {
+    if (!S || S.live) return;
+    const badge = h('button', 'live-badge live-wait');
+    badge.type = 'button';
+    badge.title = 'Exit live view';
+    const dot = h('span', 'live-dot');
+    const btext = h('span', 'live-badge-text', 'LIVE · signal pending');
+    badge.append(dot, btext);
+    badge.addEventListener('click', exitLive);
+    const ticker = h('div', 'live-ticker');
+    ticker.setAttribute('aria-live', 'polite');
+    S.ui.append(badge, ticker);
+    S.live = {
+      on: true, lastBeat: -1, state: null, t0: performance.now(), seq: 0,
+      glow: new Map(), fx: [], badge, btext, ticker, timer: 0, raf: 0,
+    };
+    S.liveBtn.textContent = 'Exit Live';
+    S.liveBtn.setAttribute('aria-pressed', 'true');
+    S.live.timer = setInterval(pollLive, LIVE_POLL_MS);
+    S.live.raf = requestAnimationFrame(liveTick);
+    updateFocus();
+    pollLive();
+  }
+
+  function exitLive() {
+    if (!S || !S.live) return;
+    const L = S.live;
+    S.live = null;
+    clearInterval(L.timer);
+    cancelAnimationFrame(L.raf);
+    const scene = liveScene();
+    for (const f of L.fx) { try { f.dispose(scene); } catch (e) { /* already gone */ } }
+    if (L.badge.parentNode) L.badge.parentNode.removeChild(L.badge);
+    if (L.ticker.parentNode) L.ticker.parentNode.removeChild(L.ticker);
+    if (S.liveBtn) { S.liveBtn.textContent = 'Live'; S.liveBtn.setAttribute('aria-pressed', 'false'); }
+    for (const n of S.graph.graphData().nodes) {
+      if (n._halo && n._liveKind) { n._halo.material.color.set(haloColor(n)); n._liveKind = null; }
+    }
+    updateFocus();
+  }
+
+  function toggleLive() {
+    if (!S) return;
+    if (S.live) exitLive(); else enterLive();
+  }
+
+  async function pollLive() {
+    if (!S || !S.live || !S.live.on || S.live.held) return;
+    const seq = ++S.live.seq; // discard responses superseded by a newer poll
+    let st = null;
+    try {
+      if (S.api && typeof S.api.loadLiveState === 'function') {
+        st = await S.api.loadLiveState();
+      } else {
+        const r = await fetch('live-state.json', { cache: 'no-store' });
+        if (r.ok) {
+          const b = await r.json();
+          if (b && typeof b.beat === 'number') st = b;
+        }
+      }
+    } catch (e) { /* keep last good state */ }
+    if (!S || !S.live || !S.live.on || seq !== S.live.seq) return;
+    if (st) {
+      S.live.state = st;
+      if (st.beat !== S.live.lastBeat) { S.live.lastBeat = st.beat; onBeat(st); }
+    }
+    paintBadge();
+  }
+
+  // One beat: EXTERIOR first (arrivals streak in, staggered), then the
+  // INTERIOR response (core pulse + echo glows). No arrivals = interior only.
+  function onBeat(st) {
+    renderTicker(st);
+    const arrivals = Array.isArray(st.arrivals) ? st.arrivals.filter(Boolean).slice(0, 8) : [];
+    const touched = Array.isArray(st.touched) ? st.touched.filter(Boolean) : [];
+    const applyEcho = () => {
+      if (!S || !S.live || !S.live.on) return;
+      const until = Date.now() + LIVE_GLOW_MS;
+      for (const t of touched) {
+        if (t && t.id && LIVE_COLORS[t.kind]) S.live.glow.set(String(t.id), { kind: t.kind, until });
+      }
+      interiorPulse();
+      updateFocus();
+    };
+    if (!arrivals.length) { applyEcho(); return; }
+    arrivals.forEach((a, i) => {
+      setTimeout(() => { if (S && S.live && S.live.on) spawnArrival(a); }, i * 650);
+    });
+    setTimeout(applyEcho, arrivals.length * 650 + 1500);
+  }
+
+  function renderTicker(st) {
+    const box = S.live.ticker;
+    box.textContent = '';
+    box.append(h('div', 'live-ticker-head', 'CORE · BEAT ' + st.beat));
+    const lines = Array.isArray(st.demands) ? st.demands.slice(0, 5) : [];
+    if (!lines.length) {
+      const row = h('div', 'live-line');
+      row.append(h('span', 'live-kicker', 'CORE'), h('span', 'live-text', '— quiet mind —'));
+      box.append(row);
+      return;
+    }
+    lines.forEach((d, i) => {
+      const row = h('div', 'live-line');
+      row.style.animationDelay = (i * 0.12) + 's';
+      // textContent only: headlines are untrusted log/inbox text.
+      row.append(h('span', 'live-kicker', 'CORE'), h('span', 'live-text', String(d).slice(0, 160)));
+      box.append(row);
+    });
+  }
+
+  function paintBadge() {
+    const L = S && S.live;
+    if (!L) return;
+    const st = L.state;
+    L.badge.classList.toggle('live-wait', !st);
+    if (!st) { L.btext.textContent = 'LIVE · signal pending'; return; }
+    const age = Date.now() - Date.parse(st.ts);
+    const ageTxt = Number.isFinite(age) ? (age < 90e3 ? 'just now' : Math.round(age / 60e3) + 'm ago') : '';
+    L.btext.textContent = 'LIVE · beat ' + st.beat + ' · ' + st.nodes + ' facts' + (ageTxt ? ' · ' + ageTxt : '');
+    L.badge.classList.toggle('live-stale', Number.isFinite(age) && age > LIVE_STALE_MS);
+  }
+
+  function arrivalTarget(a) {
+    const nodes = S.graph.graphData().nodes;
+    if (a && a.id) {
+      const n = nodes.find((x) => x.id === String(a.id));
+      if (n && n.x != null) return { x: n.x, y: n.y, z: n.z, nodeId: n.id };
+    }
+    // No node yet (e.g. inbox proposals): the event flashes at the mesh rim.
+    const R = edgeRadius();
+    const d = hashDir('rim:' + ((a && a.headline) || 'x'));
+    return { x: d.x * R, y: d.y * R, z: d.z * R, nodeId: null };
+  }
+
+  function spawnArrival(a) {
+    const scene = liveScene();
+    const target = arrivalTarget(a);
+    if (!scene || !target) return;
+    const isDemand = a && a.type === 'demand';
+    const color = isDemand ? STREAK_DEMAND : STREAK_KNOWLEDGE;
+    const dur = isDemand ? 1100 : 1800;
+    const R = edgeRadius() * 1.4 + 120;
+    const dir = hashDir('from:' + ((a && (a.id || a.headline)) || 'x'));
+    const ox = dir.x * R, oy = dir.y * R, oz = dir.z * R;
+    const head = liveMesh(color, 1);
+    const trail = liveMesh(color, 0.5);
+    if (!head || !trail) return;
+    head.scale.setScalar(9);
+    scene.add(head); scene.add(trail);
+    const t0 = performance.now();
+    const dx = target.x - ox, dy = target.y - oy, dz = target.z - oz;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const ux = dx / len, uy = dy / len, uz = dz / len;
+    const fx = {
+      update(now) {
+        const t = Math.min(1, (now - t0) / dur);
+        const e = t * t; // ease-in: the streak accelerates inward
+        const hx = ox + dx * e, hy = oy + dy * e, hz = oz + dz * e;
+        head.position.set(hx, hy, hz);
+        trail.position.set(hx - ux * 30, hy - uy * 30, hz - uz * 30);
+        trail.scale.set(3.5, 3.5, 34);
+        trail.lookAt(hx + ux, hy + uy, hz + uz);
+        if (t < 1) return true;
+        landArrival(a, target, scene, head, color);
+        return false;
+      },
+      dispose(sc) {
+        const s2 = sc || scene;
+        s2.remove(head); s2.remove(trail);
+        head.material.dispose(); trail.material.dispose();
+      },
+    };
+    S.live.fx.push(fx);
+  }
+
+  function landArrival(a, target, scene, head, color) {
+    const flash = liveMesh(color, 0.9);
+    if (flash) {
+      flash.position.set(target.x, target.y, target.z);
+      scene.add(flash);
+      const t0 = performance.now();
+      S.live.fx.push({
+        update(now) {
+          const t = Math.min(1, (now - t0) / 420);
+          flash.scale.setScalar(8 + t * 46);
+          flash.material.opacity = 0.9 * (1 - t);
+          return t < 1;
+        },
+        dispose(sc) { (sc || scene).remove(flash); flash.material.dispose(); },
+      });
+    }
+    try { scene.remove(head); head.material.dispose(); } catch (e) { /* already gone */ }
+    if (target.nodeId && S.live) {
+      const kind = a && a.type === 'demand' ? 'demand' : 'fresh';
+      S.live.glow.set(target.nodeId, { kind, until: Date.now() + (kind === 'demand' ? 150000 : 60000) });
+      updateFocus();
+    }
+  }
+
+  function interiorPulse() {
+    const scene = liveScene();
+    const core = coreNode();
+    if (!scene || !core) return;
+    // three staggered wavefronts — a rhythmic pulse readable across the mesh
+    for (let w = 0; w < 3; w++) {
+      setTimeout(() => {
+        if (!S || !S.live || !S.live.on) return;
+        const sc = liveScene(), c = coreNode();
+        if (!sc || !c) return;
+        const ring = liveMesh('#eaf6ff', 0.55);
+        if (!ring) return;
+        ring.position.set(c.x, c.y, c.z);
+        sc.add(ring);
+        const t0 = performance.now(), dur = 2800;
+        S.live.fx.push({
+          update(now) {
+            const t = Math.min(1, (now - t0) / dur);
+            const cc = coreNode();
+            if (cc) ring.position.set(cc.x, cc.y, cc.z);
+            ring.scale.setScalar(20 + t * 280);
+            ring.material.opacity = 0.55 * (1 - t);
+            return t < 1;
+          },
+          dispose(s2) { (s2 || sc).remove(ring); ring.material.dispose(); },
+        });
+      }, w * 350);
+    }
+  }
+
+  // Per-frame halo painter for LIVE mode: base dimming + echo glows +
+  // breathing core. Colours sync here so expiry restores the domain colour.
+  function paintLiveHalos(nodes) {
+    const t = (performance.now() - S.live.t0) / 1000;
+    const nowMs = Date.now();
+    for (const n of nodes) {
+      if (!n._halo) continue;
+      const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
+      const boost = (S.selected === n.id) ? 1.6 : 1;
+      const fr = isFresh(n.id) ? 1.9 : 1;
+      let o = HALO_OPACITY * a * boost * fr;
+      let kind = null;
+      const g = S.live.glow.get(n.id);
+      if (g) {
+        if (nowMs > g.until) S.live.glow.delete(n.id);
+        else {
+          kind = g.kind;
+          o = kind === 'demand' ? 0.30 + 0.16 * Math.sin(t * 5.2) : Math.min(0.55, o * 1.7 + 0.12);
+        }
+      }
+      if (!kind && n.id === S.data.coreId) {
+        o = Math.min(0.5, o + 0.07 + 0.055 * Math.sin(t * 1.15)); // breathing core
+      }
+      if (n._liveKind !== kind) {
+        n._liveKind = kind;
+        n._halo.material.color.set(kind ? LIVE_COLORS[kind] : haloColor(n));
+      }
+      n._halo.material.opacity = Math.min(0.6, Math.max(0.02, o));
+    }
+  }
+
+  function liveTick() {
+    if (!S || !S.live || !S.live.on) return;
+    const now = performance.now();
+    const scene = liveScene();
+    const fx = S.live.fx;
+    for (let i = fx.length - 1; i >= 0; i--) {
+      let alive = false;
+      try { alive = fx[i].update(now) !== false; } catch (e) { alive = false; }
+      if (!alive) { try { fx[i].dispose(scene); } catch (e) { /* already gone */ } fx.splice(i, 1); }
+    }
+    try { paintLiveHalos(S.graph.graphData().nodes); } catch (e) { /* never break the frame */ }
+    S.live.raf = requestAnimationFrame(liveTick);
+  }
+
+  // Dev hook for staged verification (screenshots): feeds a beat state through
+  // the real render path. Same-origin page only; no privileges.
+  window.BrainLive = {
+    enter: () => enterLive(),
+    exit: () => exitLive(),
+    isOn: () => !!(S && S.live && S.live.on),
+    coreId: () => (S ? S.data.coreId : null),
+    glows: () => (S && S.live ? [...S.live.glow.entries()].map(([id, g]) => ({ id, kind: g.kind })) : []),
+    haloColors(ids) {
+      // actual three.js halo material colours for the given node ids ("" if none)
+      if (!S || !S.graph) return {};
+      const out = {};
+      const nodes = S.graph.graphData().nodes;
+      for (const id of (ids || [])) {
+        const n = nodes.find((x) => x.id === String(id));
+        out[id] = (n && n._halo && n._halo.material && n._halo.material.color)
+          ? '#' + n._halo.material.color.getHexString() : '';
+      }
+      return out;
+    },
+    hold: (on) => { if (S && S.live) S.live.held = !!on; },
+    inject(st) {
+      if (!S || !S.live || !S.live.on || !st) return false;
+      S.live.seq++; // invalidate any in-flight poll so it can't clobber this
+      S.live.state = st;
+      S.live.lastBeat = st.beat;
+      onBeat(st);
+      paintBadge();
+      return true;
+    },
+  };
 
   window.BrainUniverse = {
     init,

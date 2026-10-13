@@ -82,10 +82,11 @@
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json and mfa.json, only GET.
+      // Same origin: only graph.json, mfa.json and live-state.json, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
       const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
-      if (m === 'GET' && (isGraph || isMfa) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
+      if (m === 'GET' && (isGraph || isMfa || isLive) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       throw new Error('Blocked by privacy rule: ' + m + ' ' + u.pathname);
     }
 
@@ -360,6 +361,7 @@
     try { localStorage.removeItem(DEVICE_KEY); } catch { /* storage blocked */ }
     try { await idbDelete(); } catch { /* nothing stored / IDB blocked */ }
     sessionExpiresAt = 0;
+    sessionDataKey = null;
   }
 
   async function sha256Hex(text) {
@@ -471,6 +473,7 @@
         return fail('The brain was republished (the password may have changed), so the remembered session was cleared. Please unlock again.');
       }
       sessionExpiresAt = rec.expiresAt;
+      sessionDataKey = rec.key;
       return { data };
     } catch {
       return fail('Couldn\'t restore the remembered session. Please unlock again.');
@@ -603,6 +606,7 @@
 
     const key = await deriveDataKey(envelope, password);
     const data = await decryptWithKey(envelope, key);
+    sessionDataKey = key;
     password = ''; // dropped from our variables; JS can't guarantee the string is wiped
     lock.hidden = true;
     if (remember) {
@@ -618,6 +622,7 @@
   // nothing 3D-related is referenced from index.html.
   let viewMode = '3d';
   let graphData = null;
+  let sessionDataKey = null; // derived data key, held in memory only while unlocked (same lifetime as graphData)
   let graph2dBuilt = false;
   const scriptLoads = new Map();
 
@@ -641,12 +646,13 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=7195f3d');
+        await loadScriptOnce('universe.js?v=21e5396');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
         window.BrainUniverse.init(box, graphData, {
           onMeta: (text) => { $('#graph-meta').textContent = text; },
+          loadLiveState,
         });
         $('#demo-badge').hidden = !graphData.demo;
         if (toggle) { toggle.textContent = '2D'; toggle.title = 'Switch to 2D view'; }
@@ -704,6 +710,27 @@
       status.classList.add('error');
       status.textContent = 'Couldn\'t load graph.json (' + err.message + '). If you opened index.html straight from disk, serve the folder instead, for example: python3 -m http.server';
       $('#graph-meta').textContent = 'Graph unavailable';
+    }
+  }
+
+  // ---- LIVE heartbeat state -------------------------------------------------
+  // live-state.json is staged by the 15-min heartbeat and copied into portal/
+  // at publish time. Published, it wears the same AES-256-GCM envelope as
+  // graph.json (encrypted by the publish workflow); locally it is a plain
+  // object. Decrypted here with the session key, in memory only.
+  async function loadLiveState() {
+    try {
+      const res = await guardedFetch('live-state.json', { cache: 'no-store' });
+      if (!res.ok) return null;
+      const body = await res.json();
+      if (body && body.v === 1 && typeof body.data === 'string') {
+        if (!sessionDataKey) return null;
+        const st = await decryptWithKey(body, sessionDataKey); // returns parsed JSON
+        return (st && typeof st.beat === 'number') ? st : null;
+      }
+      return (body && typeof body.beat === 'number') ? body : null; // local preview
+    } catch {
+      return null;
     }
   }
 

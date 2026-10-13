@@ -996,6 +996,7 @@ body.view-3d .node-panel { display: none; }
 .mobile-settings-extras { display: none; }
 @media (max-width: 640px) {
   .mobile-settings-extras { display: block; }
+}
 @media (max-width: 640px) {
   .modal-backdrop {
     padding: 0;
@@ -1019,3 +1020,95 @@ body.view-3d .node-panel { display: none; }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* ---------- LIVE consciousness mode ---------- */
+/* Silent by design: the core's voice lives in the ticker text only. */
+
+.live-badge {
+  position: absolute;
+  top: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-glow);
+  background: var(--surface);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow), 0 0 18px rgba(255, 107, 109, 0.10);
+  color: var(--text);
+  font: 600 12px var(--mono);
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  z-index: 5;
+  white-space: nowrap;
+}
+.live-badge:hover { border-color: rgba(255, 107, 109, 0.45); }
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: #ff6b6d;
+  box-shadow: 0 0 10px #ff6b6d;
+  animation: liveBlink 1.6s ease-in-out infinite;
+}
+@keyframes liveBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.live-badge.live-wait .live-dot { background: var(--text-3); box-shadow: none; animation: none; }
+.live-badge.live-stale { box-shadow: var(--shadow), 0 0 18px rgba(255, 181, 71, 0.14); }
+.live-badge.live-stale .live-dot { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+
+.live-ticker {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 18px;
+  width: min(640px, calc(100vw - 36px));
+  padding: 12px 18px 13px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line-glow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow), 0 0 28px rgba(110, 231, 255, 0.06);
+  z-index: 5;
+  pointer-events: none; /* a ticker is read, not touched — orbit drag passes over */
+}
+.live-ticker-head {
+  font: 700 10px var(--mono);
+  letter-spacing: 1.4px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.live-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+  animation: liveRise 0.5s var(--ease) both;
+}
+.live-line:first-of-type { border-top: 0; }
+.live-kicker {
+  font: 700 9.5px var(--mono);
+  letter-spacing: 1px;
+  color: var(--warn);
+  flex: none;
+}
+.live-text {
+  font: italic 400 14.5px/1.45 Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+  color: var(--text);
+}
+@keyframes liveRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+  .live-line { animation: none; }
+}
+@media (max-width: 640px) {
+  .live-badge { top: 70px; }
+  .live-ticker { bottom: 70px; }
+}
