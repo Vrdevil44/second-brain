@@ -646,13 +646,13 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=e563abf');
+        await loadScriptOnce('universe.js?v=ce8c1e3');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
         window.BrainUniverse.init(box, graphData, {
           onMeta: (text) => { $('#graph-meta').textContent = text; },
-          loadLiveState,
+          loadLiveState: loadLiveStateLive, // live tailnet API first, baked fallback
           onBeatUpdates: (st) => appendBeatUpdates(st),
         });
         $('#demo-badge').hidden = !graphData.demo;
@@ -733,6 +733,66 @@
     } catch {
       return null;
     }
+  }
+
+  // ---- LIVE backend (tailnet) — silent auto-detect, baked fallback --------
+  // Tries the local machine's live API first (portal/config.js). On ANY
+  // failure the portal silently uses the baked live-state.json. No modes, no
+  // toggles, no UI changes: the universe keeps polling loadLiveState on its
+  // own cadence, and whichever source answers feeds the same render path.
+  let liveSseState = null;   // freshest beat pushed over SSE: { st, at }
+  let liveSseOpen = false;
+  let liveSseRetryAt = 0;
+
+  function liveApiBase() {
+    try { return (window.BRAIN_CONFIG && window.BRAIN_CONFIG.LIVE_API_BASE) || ''; }
+    catch (e) { return ''; }
+  }
+
+  async function fetchLiveState() {
+    const base = liveApiBase();
+    if (!base || typeof fetch !== 'function') return null;
+    try {
+      const ctl = new AbortController();
+      const ms = (window.BRAIN_CONFIG && window.BRAIN_CONFIG.LIVE_TIMEOUT_MS) || 2500;
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ms);
+      const res = await fetch(base + '/live-state', { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const body = await res.json();
+      return (body && typeof body.beat === 'number') ? body : null;
+    } catch (e) { return null; }
+  }
+
+  function ensureLiveStream() {
+    const base = liveApiBase();
+    if (!base || liveSseOpen || typeof EventSource !== 'function') return;
+    if (Date.now() < liveSseRetryAt) return;
+    try {
+      const es = new EventSource(base + '/stream');
+      liveSseOpen = true;
+      es.addEventListener('beat', (ev) => {
+        try {
+          const b = JSON.parse(ev.data);
+          if (b && typeof b.beat === 'number') liveSseState = { st: b, at: Date.now() };
+        } catch (e) {}
+      });
+      es.onerror = () => {
+        try { es.close(); } catch (e) {}
+        liveSseOpen = false;
+        liveSseRetryAt = Date.now() + 60000; // retry at most once a minute
+      };
+    } catch (e) { liveSseRetryAt = Date.now() + 60000; }
+  }
+
+  async function loadLiveStateLive() {
+    if (liveSseState && Date.now() - liveSseState.at < 45000) {
+      ensureLiveStream();
+      return liveSseState.st;
+    }
+    const live = await fetchLiveState();
+    if (live) { ensureLiveStream(); return live; }
+    return loadLiveState(); // baked static fallback — silent
   }
 
   function buildGraph(data) {
