@@ -182,18 +182,26 @@
       const id = String(n.id);
       if (byId.has(id)) continue;
       const c = centers[n.domain] || { x: 0, y: 0, z: 0 };
+      // Gravity: the core's pull. High-gravity nodes start near the center so
+      // the mesh visibly settles around the mind; low-gravity drifts outward.
+      // Subtle and stable: initial bias only, the force sim does the rest.
+      const grav = Math.min(1, Math.max(0, Number(n.gravity) || 0.10));
+      const gR = 300 * (1.25 - grav); // grav 1 -> r=75, grav 0.1 -> r=345
+      const th = hash01(id + ':gt') * Math.PI * 2;
+      const ph = Math.acos(2 * hash01(id + ':gp') - 1);
       const node = {
         id,
         name: String(n.label == null ? id : n.label),
-        val: Math.max(1, Number(n.size) || 1),
+        val: Math.max(1, Number(n.size) || 1) * (1 + 0.6 * grav), // marginally larger when heavy; never a bubble
+        gravity: grav,
         color: DOMAIN_COLORS[n.domain] || FALLBACK_NODE,
         domain: String(n.domain || ''),
         status: String(n.status || ''),
         date: String(n.date || ''),
         cmt: String(n.cmt || ''), // fact.v2 share-time comment; not rendered yet
-        x: c.x + (hash01(id + ':x') - 0.5) * SEED_J,
-        y: c.y + (hash01(id + ':y') - 0.5) * SEED_J,
-        z: c.z + (hash01(id + ':z') - 0.5) * SEED_J,
+        x: c.x * 0.25 + gR * Math.sin(ph) * Math.cos(th) + (hash01(id + ':x') - 0.5) * SEED_J,
+        y: c.y * 0.25 + gR * Math.sin(ph) * Math.sin(th) + (hash01(id + ':y') - 0.5) * SEED_J,
+        z: c.z * 0.25 + gR * Math.cos(ph) + (hash01(id + ':z') - 0.5) * SEED_J,
       };
       node.color = nodeColor(node);
       nodes.push(node);
@@ -217,12 +225,13 @@
       adj.get(e.source).push({ edge: e, other: e.target, dir: 'out' });
       if (e.target !== e.source) adj.get(e.target).push({ edge: e, other: e.source, dir: 'in' });
     }
-    // LIVE mode: the "core" is the most-connected node — the mesh's centre of
-    // gravity, where each beat's pulse originates and which breathes when idle.
+    // LIVE mode: the "core" is the mesh's centre of gravity — the heaviest node,
+    // where each beat's pulse originates and which breathes when idle.
+    // (A visual anchor only. The real core is the thinking mind, never a node.)
     let coreId = null, bestScore = -1;
     for (const n of nodes) {
       const deg = (adj.get(n.id) || []).length;
-      const score = deg * 1000 + Math.min(999, n.val);
+      const score = (n.gravity || 0.1) * 100000 + deg * 1000 + Math.min(999, n.val);
       if (score > bestScore) { bestScore = score; coreId = n.id; }
     }
     return { nodes, byId, edges, adj, coreId };
@@ -1028,6 +1037,8 @@
     for (const f of L.fx) { try { f.dispose(scene); } catch (e) { /* already gone */ } }
     if (L.badge.parentNode) L.badge.parentNode.removeChild(L.badge);
     if (L.ticker.parentNode) L.ticker.parentNode.removeChild(L.ticker);
+    if (S.corePanel) { S.corePanel.remove(); S.corePanel = null; }
+    S.corePanelOff = false;
     if (S.liveBtn) { S.liveBtn.textContent = 'Live'; S.liveBtn.setAttribute('aria-pressed', 'false'); }
     for (const n of S.graph.graphData().nodes) {
       if (n._halo && n._liveKind) { n._halo.material.color.set(haloColor(n)); n._liveKind = null; }
@@ -1058,6 +1069,7 @@
     if (!S || !S.live || !S.live.on || seq !== S.live.seq) return;
     if (st) {
       S.live.state = st;
+      renderCorePanel(st);
       if (st.beat !== S.live.lastBeat) { S.live.lastBeat = st.beat; onBeat(st); }
     }
     paintBadge();
@@ -1067,6 +1079,8 @@
   // INTERIOR response (core pulse + echo glows). No arrivals = interior only.
   function onBeat(st) {
     renderTicker(st);
+    S.corePanelOff = false; // fresh thought resurfaces a dismissed panel
+    renderCorePanel(st);
     const arrivals = Array.isArray(st.arrivals) ? st.arrivals.filter(Boolean).slice(0, 8) : [];
     const touched = Array.isArray(st.touched) ? st.touched.filter(Boolean) : [];
     const applyEcho = () => {
@@ -1103,6 +1117,46 @@
       row.append(h('span', 'live-kicker', 'CORE'), h('span', 'live-text', String(d).slice(0, 160)));
       box.append(row);
     });
+  }
+
+  // Core readout: what the mind is thinking right now. Small, dismissible,
+  // plain words (labels, never F-IDs). Hidden when the core has nothing staged.
+  function renderCorePanel(st) {
+    const core = st && st.core;
+    if (S.corePanelOff || !core || !Array.isArray(core.focus) || !core.focus.length) {
+      if (S.corePanel) { S.corePanel.remove(); S.corePanel = null; }
+      return;
+    }
+    let panel = S.corePanel;
+    if (!panel) {
+      panel = h('div', 'core-panel');
+      const head = h('div', 'core-panel-head');
+      head.append(h('span', 'core-panel-title', 'CORE · THINKING'));
+      const x = h('button', 'core-panel-x', '×');
+      x.type = 'button';
+      x.title = 'Dismiss';
+      x.addEventListener('click', () => { S.corePanelOff = true; if (S.corePanel) { S.corePanel.remove(); S.corePanel = null; } });
+      head.append(x);
+      panel.append(head);
+      panel._body = h('div', 'core-panel-body');
+      panel.append(panel._body);
+      S.ui.append(panel);
+      S.corePanel = panel;
+    }
+    const body = panel._body;
+    body.textContent = '';
+    const ul = h('ul', 'core-panel-focus');
+    for (const f of core.focus.slice(0, 3)) {
+      const li = h('li');
+      li.append(h('span', null, String(f.label || '').slice(0, 90)));
+      if (f.why) li.append(h('span', 'why', String(f.why).slice(0, 120)));
+      ul.append(li);
+    }
+    body.append(ul);
+    const meta = [];
+    if (typeof core.open_questions === 'number') meta.push(core.open_questions + ' open question' + (core.open_questions === 1 ? '' : 's'));
+    if (core.last_think) meta.push('last think ' + String(core.last_think).slice(0, 16).replace('T', ' '));
+    if (meta.length) body.append(h('div', 'core-panel-meta', meta.join(' · ')));
   }
 
   function paintBadge() {

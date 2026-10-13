@@ -1112,3 +1112,29 @@ body.view-3d .node-panel { display: none; }
   .live-badge { top: 70px; }
   .live-ticker { bottom: 70px; }
 }
+
+/* Core readout: what the mind is thinking. Minimal, no decoration. */
+.core-panel {
+  position: absolute;
+  top: 82px;
+  left: 18px;
+  width: min(300px, calc(100vw - 36px));
+  padding: 10px 12px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+  z-index: 5;
+  font: 400 11.5px var(--font);
+  color: var(--text-2);
+}
+.core-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.core-panel-title { font: 600 10px var(--mono); letter-spacing: 1.5px; color: var(--text-3); }
+.core-panel-x { background: none; border: none; color: var(--text-3); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
+.core-panel-x:hover { color: var(--text); }
+.core-panel-focus { margin: 0 0 6px; padding: 0; list-style: none; }
+.core-panel-focus li { margin: 0 0 5px; color: var(--text); font-size: 11.5px; line-height: 1.35; }
+.core-panel-focus .why { display: block; color: var(--text-3); font-size: 10.5px; margin-top: 1px; }
+.core-panel-meta { color: var(--text-3); font-size: 10.5px; font-family: var(--mono); }
