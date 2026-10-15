@@ -182,7 +182,8 @@
     // Fresh nodes (just synced) glow white-hot for 60s — unmissable.
     if (isFresh(n.id)) return FRESH_COLOR;
     const c = DOMAIN_COLORS[n.domain] || FALLBACK_NODE;
-    const a = (n.status === 'superseded' ? 0.35 : 1) * (f == null ? 1 : f);
+    // 4D: dormant/merged host nodes dim exactly like superseded facts.
+    const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * (f == null ? 1 : f);
     return a === 1 ? c : hexToRgba(c, a);
   }
 
@@ -213,6 +214,20 @@
       for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); }
       return ((x >>> 0) % 10000) / 10000;
     };
+    // 4D: node lifecycle hooks. data.lifecycle carries {node, kind, state?, redirectsTo?}
+    // per fact-hosting node page — ids and states only, never fact text. Dormant or
+    // merged host pages dim exactly like superseded facts (0.35): same visual
+    // language, no new decoration. Read-time dormancy is never published (F3),
+    // so `state` here is explicit frontmatter state only.
+    const lifecycle = new Map();
+    for (const e of Array.isArray(data && data.lifecycle) ? data.lifecycle : []) {
+      if (!e || e.node == null) continue;
+      lifecycle.set(String(e.node), {
+        kind: String(e.kind || ''),
+        state: String(e.state || 'active'),
+        redirectsTo: e.redirectsTo == null ? '' : String(e.redirectsTo),
+      });
+    }
     for (const n of Array.isArray(data && data.nodes) ? data.nodes : []) {
       if (!n || n.id == null) continue;
       const id = String(n.id);
@@ -232,6 +247,7 @@
         gravity: grav,
         color: DOMAIN_COLORS[n.domain] || FALLBACK_NODE,
         domain: String(n.domain || ''),
+        node: String(n.node || ''), // host node page id (4D lifecycle lookup)
         status: String(n.status || ''),
         date: String(n.date || ''),
         cmt: String(n.cmt || ''), // fact.v2 share-time comment; not rendered yet
@@ -239,6 +255,10 @@
         y: c.y * 0.25 + gR * Math.sin(ph) * Math.sin(th) + (hash01(id + ':y') - 0.5) * SEED_J,
         z: c.z * 0.25 + gR * Math.cos(ph) + (hash01(id + ':z') - 0.5) * SEED_J,
       };
+      // 4D: lifecycle state of the host node page. '' = no lifecycle dim.
+      const lc = lifecycle.get(node.node);
+      node.life = lc && (lc.state === 'dormant' || lc.state === 'merged') ? lc.state : '';
+      node.redirectsTo = lc && lc.redirectsTo ? lc.redirectsTo : '';
       node.color = nodeColor(node);
       nodes.push(node);
       byId.set(id, node);
@@ -391,7 +411,7 @@
       // Rest state: halo off. Only the selected node and fresh nodes earn a glow.
       const show = (S.selected === n.id) || isFresh(n.id);
       if (!show) { n._halo.material.opacity = 0; continue; }
-      const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
+      const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id);
       const boost = (S.selected === n.id) ? 1.6 : 1;
       const fresh = isFresh(n.id) ? 1.9 : 1;
       n._halo.material.opacity = Math.min(0.5, HALO_OPACITY * a * boost * fresh);
@@ -544,6 +564,12 @@
     if (node.status) chips.append(chip(node.status));
     if (node.date) chips.append(chip(node.date));
     S.panel.append(chips);
+
+    // 4D: merged nodes show a redirect to the target node (read-only, same
+    // muted text style as the rest of the panel — no new decoration).
+    if (node.life === 'merged' && node.redirectsTo) {
+      S.panel.append(h('p', 'u-muted', 'This node was merged into ' + node.redirectsTo + '.'));
+    }
 
     const actions = h('div', 'u-actions');
     const focus = h('button', 'u-btn', 'Focus');
@@ -1461,7 +1487,7 @@
     const depth = [0.7, 1.0, 1.3, 1.6][formationIndex()] || 1.0;
     for (const n of nodes) {
       if (!n._halo) continue;
-      const a = (n.status === 'superseded' ? 0.35 : 1) * focusOpacity(n.id);
+      const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id);
       // Rest state: halo off — no bubble. Glow only for live events, selection,
       // fresh nodes, and the breathing core.
       let o = 0;
