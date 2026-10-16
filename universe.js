@@ -779,10 +779,30 @@
     const tCount = new Map();
     for (const e of S.data.edges) tCount.set(e.type, (tCount.get(e.type) || 0) + 1);
 
-    box.append(h('h3', 'u-legend-title', 'Domains'));
-    for (const d of DOMAINS) box.append(legendRow('domain', d, DOMAIN_COLORS[d], dCount.get(d) || 0));
-    box.append(h('h3', 'u-legend-title', 'Relations'));
-    for (const t of TYPES) box.append(legendRow('type', t, TYPE_COLORS[t], tCount.get(t) || 0));
+    // Collapsible legend sections (his call 2026-10-16): tap the header to
+    // expand/collapse. Same visual language — header becomes a button, rows
+    // hide with the section. No redesign.
+    function collapsibleSection(title, rows) {
+      const sec = h('div', 'u-legend-sec');
+      const head = h('button', 'u-legend-title');
+      head.type = 'button';
+      head.setAttribute('aria-expanded', 'true');
+      head.append(h('span', null, title), h('span', 'u-legend-caret', '▾'));
+      const body = h('div', 'u-legend-rows');
+      for (const r of rows) body.append(r);
+      head.addEventListener('click', () => {
+        const collapsed = body.classList.toggle('collapsed');
+        head.setAttribute('aria-expanded', String(!collapsed));
+        head.querySelector('.u-legend-caret').textContent = collapsed ? '▸' : '▾';
+      });
+      sec.append(head, body);
+      return sec;
+    }
+
+    const dRows = DOMAINS.map((d) => legendRow('domain', d, DOMAIN_COLORS[d], dCount.get(d) || 0));
+    const tRows = TYPES.map((t) => legendRow('type', t, TYPE_COLORS[t], tCount.get(t) || 0));
+    box.append(collapsibleSection('Domains', dRows));
+    box.append(collapsibleSection('Relations', tRows));
     return box;
   }
 
