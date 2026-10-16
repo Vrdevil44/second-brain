@@ -48,6 +48,7 @@
     places: '#facc15',
     patterns: '#fb923c',
     library: '#f97316',
+    core: '#a5f3fc',
   };
   // Relation types: categorical palette, one hue per type.
   const TYPE_COLORS = {
