@@ -291,7 +291,12 @@
       const score = (n.gravity || 0.1) * 100000 + deg * 1000 + Math.min(999, n.val);
       if (score > bestScore) { bestScore = score; coreId = n.id; }
     }
-    return { nodes, byId, edges, adj, coreId };
+    // The core's confirmed facts ride the payload (never as nodes): tapping
+    // the ONE central core lists them. Sanitized at build time.
+    const coreFacts = Array.isArray(data && data.coreFacts)
+      ? data.coreFacts.filter((f) => f && f.id && f.text).map((f) => ({ id: String(f.id), text: String(f.text), date: String(f.date || '') }))
+      : [];
+    return { nodes, byId, edges, adj, coreId, coreFacts };
   }
 
   // Which nodes/links are on screen given filters + isolation.
@@ -565,6 +570,20 @@
     if (node.status) chips.append(chip(node.status));
     if (node.date) chips.append(chip(node.date));
     S.panel.append(chips);
+
+    // THE core: tapping the center lists every confirmed fact it holds.
+    // One core, one list — the self, readable.
+    if (node.id === 'core' && S.data.coreFacts && S.data.coreFacts.length) {
+      const sec = h('section', 'u-group');
+      sec.append(h('h3', 'u-group-title', 'Core facts (' + S.data.coreFacts.length + ')'));
+      for (const cf of S.data.coreFacts) {
+        const row = h('div', 'u-why');
+        row.append(h('div', 'u-neighbor-dir', cf.id + (cf.date ? ' · ' + cf.date : '')));
+        row.append(h('div', '', cf.text));
+        sec.append(row);
+      }
+      S.panel.append(sec);
+    }
 
     // 4D: merged nodes show a redirect to the target node (read-only, same
     // muted text style as the rest of the panel — no new decoration).
