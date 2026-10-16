@@ -1206,7 +1206,12 @@
       for (const t of touched) {
         if (t && t.id && LIVE_COLORS[t.kind]) S.live.glow.set(String(t.id), { kind: t.kind, until });
       }
-      interiorPulse();
+      // The core is HUNGRY: its pulse strengthens with unprocessed data.
+      // inbox backlog → more wavefronts, brighter glow. Empty inbox →
+      // calm baseline pulse. (his ask 2026-10-16: core ki bhookh dikhe)
+      const inbox = Number(st.inbox) || 0;
+      const hunger = Math.min(1, inbox / 40);
+      interiorPulse(3 + Math.round(hunger * 4), 2800, 0.55 + hunger * 0.3);
       updateFocus();
     };
     if (!arrivals.length) { applyEcho(); return; }
