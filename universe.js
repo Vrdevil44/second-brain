@@ -256,6 +256,10 @@
         y: c.y * 0.25 + gR * Math.sin(ph) * Math.sin(th) + (hash01(id + ':y') - 0.5) * SEED_J,
         z: c.z * 0.25 + gR * Math.cos(ph) + (hash01(id + ':z') - 0.5) * SEED_J,
       };
+      // THE core is pinned to the absolute center: it is the origin every
+      // beat's pulse emanates from, and the gravity well the mesh settles
+      // around. fx/fy/fz are honored by the force sim as fixed positions.
+      if (id === 'core') { node.fx = 0; node.fy = 0; node.fz = 0; }
       // 4D: lifecycle state of the host node page. '' = no lifecycle dim.
       const lc = lifecycle.get(node.node);
       node.life = lc && (lc.state === 'dormant' || lc.state === 'merged') ? lc.state : '';
