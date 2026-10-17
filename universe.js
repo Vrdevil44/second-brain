@@ -1023,10 +1023,10 @@
       .nodeId('id')
       .nodeVal('val')
       .nodeColor('color')
-      // Node variety (his call): seeded size jitter + solid-vs-faint mix so the
-      // brain looks organic, not uniform. Deterministic per id — stable across loads.
+      // Node variety (his call): seeded size jitter so the brain looks organic,
+      // not uniform. Opacity stays full — nodes must glow like stars, never faint.
       .nodeRelSize((n) => 4 * (0.7 + 0.6 * hash01('sz' + (n && n.id))))
-      .nodeOpacity((n) => (!n || n.id === 'core' ? 1 : 0.55 + 0.45 * hash01('op' + n.id)))
+      .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
       .linkColor('color')
