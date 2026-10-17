@@ -1162,6 +1162,15 @@ body.view-3d .node-panel { display: none; }
 }
 .hud-stage { font: 600 10px var(--mono); letter-spacing: 1.5px; color: var(--text-3); text-transform: uppercase; }
 .hud-beat { font: 600 10px var(--mono); letter-spacing: 1px; color: var(--text-3); }
+/* Sync dial: tiny ring showing bridge-relay sync percent. Teal when idle,
+   amber while a sync is in flight. Same quiet language as the rest of the HUD. */
+.hud-sync { --p: 100%; width: 13px; height: 13px; border-radius: 50%; flex: none; align-self: center;
+  background: conic-gradient(var(--idea) var(--p), rgba(255,255,255,.14) 0);
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 59%);
+  mask: radial-gradient(circle, transparent 58%, #000 59%);
+  display: none; }
+.hud-sync.on { display: inline-block; }
+.hud-sync.busy { background: conic-gradient(var(--target) var(--p), rgba(255,255,255,.14) 0); }
 .hud-body { padding: 0 12px 11px; }
 .hud.collapsed .hud-body { display: none; }
 .hud-focus { margin: 2px 0 6px; padding: 0; list-style: none; }

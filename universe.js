@@ -1261,8 +1261,10 @@
       hud._head.type = 'button';
       hud._head.setAttribute('aria-expanded', 'true');
       hud._stage = h('span', 'hud-stage');
+      hud._sync = h('span', 'hud-sync');
+      hud._sync.setAttribute('role', 'img');
       hud._beat = h('span', 'hud-beat');
-      hud._head.append(hud._stage, hud._beat);
+      hud._head.append(hud._stage, hud._sync, hud._beat);
       hud._head.addEventListener('click', (e) => { e.stopPropagation(); setHudCollapsed(!S.hudCollapsed); });
       hud._body = h('div', 'hud-body');
       hud._focus = h('ul', 'hud-focus');
@@ -1286,6 +1288,19 @@
     }
     hud._stage.textContent = (fm && fm.words) || (core ? 'the core is awake' : 'listening');
     hud._beat.textContent = 'beat ' + st.beat;
+    // Sync dial: the bridge relay's live sync face (st.sync). Ring fills with
+    // percent; amber while syncing, teal when idle. Tooltip carries the words.
+    const sy = st.sync;
+    if (sy && sy.dial && typeof sy.dial.percent === 'number') {
+      const p = Math.max(0, Math.min(100, sy.dial.percent));
+      hud._sync.style.setProperty('--p', p + '%');
+      hud._sync.title = sy.words || 'sync';
+      hud._sync.setAttribute('aria-label', 'sync ' + p + '% — ' + (sy.words || ''));
+      hud._sync.classList.toggle('busy', sy.state === 'delivering' || sy.state === 'peek');
+      hud._sync.classList.add('on');
+    } else {
+      hud._sync.classList.remove('on');
+    }
     const ul = hud._focus;
     ul.textContent = '';
     if (core && Array.isArray(core.focus)) {
