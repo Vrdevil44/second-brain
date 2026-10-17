@@ -1042,11 +1042,14 @@
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
       .linkColor((l) => {
-        // His call 2026-10-17: DOMAIN flow channels stay visible (0.38).
-        // Scattered layout disperses them naturally — no need to fade out.
-        // They carry pulses; they don't divide the brain into parts.
+        // His call 2026-10-17: core->hub stays visible (0.38);
+        // end->domain (fact->hub) slightly fainter (0.25);
+        // end-to-end relations untouched.
         if (l && (l.type || '').toUpperCase() === 'DOMAIN') {
-          return 'rgba(234, 246, 255, 0.38)';
+          const s = l.source, tg = l.target;
+          const sId = s && (s.id || s), tId = tg && (tg.id || tg);
+          if (sId === 'core' || tId === 'core') return 'rgba(234, 246, 255, 0.38)';
+          return 'rgba(234, 246, 255, 0.25)';
         }
         return l.color || '#9aa0b4';
       })
