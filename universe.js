@@ -1139,9 +1139,35 @@
     };
     document.addEventListener('pointerdown', S._hudOutside);
     S.live.timer = setInterval(pollLive, LIVE_POLL_MS);
+    S.live.syncTimer = setInterval(pollSyncDial, 60000);
     S.live.raf = requestAnimationFrame(liveTick);
     updateFocus();
     pollLive();
+    pollSyncDial();
+  }
+
+  // Sync dial live poll: the bridge relay publishes sync-status.json
+  // (unencrypted — counts/percents/words only) on every active sync run.
+  // This keeps the HUD dial live within ~a minute; the st.sync merge in
+  // live-state.json remains as the fallback. A force sync from the portal
+  // button owns the dial while it runs (manual override wins).
+  async function pollSyncDial() {
+    if (!S || !S.live || !S.live.on) return;
+    try {
+      const r = await fetch('sync-status.json', { cache: 'no-store' });
+      if (!r.ok) return;
+      const sy = await r.json();
+      if (!sy || !sy.dial || typeof sy.dial.percent !== 'number') return;
+      if (S.hudSyncManualUntil && Date.now() < S.hudSyncManualUntil) return;
+      if (!S.hud || !S.hud._sync) return;
+      const p = Math.max(0, Math.min(100, sy.dial.percent));
+      const el = S.hud._sync;
+      el.style.setProperty('--p', p + '%');
+      el.title = sy.words || 'sync';
+      el.setAttribute('aria-label', 'sync ' + p + '% — ' + (sy.words || ''));
+      el.classList.toggle('busy', sy.state === 'delivering' || sy.state === 'peek');
+      el.classList.add('on');
+    } catch (e) { /* keep last dial state */ }
   }
 
   function stopLiving() {
@@ -1149,6 +1175,7 @@
     const L = S.live;
     S.live = null;
     clearInterval(L.timer);
+    if (L.syncTimer) clearInterval(L.syncTimer);
     cancelAnimationFrame(L.raf);
     const scene = liveScene();
     for (const f of L.fx) { try { f.dispose(scene); } catch (e) { /* already gone */ } }
@@ -1290,8 +1317,13 @@
     hud._beat.textContent = 'beat ' + st.beat;
     // Sync dial: the bridge relay's live sync face (st.sync). Ring fills with
     // percent; amber while syncing, teal when idle. Tooltip carries the words.
+    // A force sync from the portal button owns the dial while it runs
+    // (setSyncDial) — renderHUD hands off until releaseSyncDial().
+    const manual = S.hudSyncManualUntil && Date.now() < S.hudSyncManualUntil;
     const sy = st.sync;
-    if (sy && sy.dial && typeof sy.dial.percent === 'number') {
+    if (manual) {
+      // Force sync owns the dial right now — hands off.
+    } else if (sy && sy.dial && typeof sy.dial.percent === 'number') {
       const p = Math.max(0, Math.min(100, sy.dial.percent));
       hud._sync.style.setProperty('--p', p + '%');
       hud._sync.title = sy.words || 'sync';
@@ -1706,6 +1738,25 @@
     },
     getOpacity: (id) => focusOpacity(id),
     getSelectedId: () => (S ? S.selected : null),
+    // Force-sync dial: the portal Sync button drives the HUD dial directly
+    // while its workflow runs (percent + words). renderHUD leaves the dial
+    // alone until releaseSyncDial() hands it back to the relay's st.sync.
+    setSyncDial(pct, words, busy) {
+      if (!S || !S.hud || !S.hud._sync) return false;
+      const el = S.hud._sync;
+      const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
+      el.style.setProperty('--p', p + '%');
+      el.title = String(words || 'sync');
+      el.setAttribute('aria-label', 'sync ' + p + '% — ' + String(words || ''));
+      el.classList.toggle('busy', !!busy);
+      el.classList.add('on');
+      S.hudSyncManualUntil = Date.now() + 60000;
+      return true;
+    },
+    releaseSyncDial() {
+      if (S) S.hudSyncManualUntil = 0;
+      return true;
+    },
     getPanelRows,
     markFresh,
     focusNode: (id) => {

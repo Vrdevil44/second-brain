@@ -646,7 +646,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=a5b6e81');
+        await loadScriptOnce('universe.js?v=7179f26');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1500,6 +1500,7 @@
     try {
       // 0. Snapshot before.
       label.textContent = 'Starting…';
+      if (window.BrainUniverse && window.BrainUniverse.setSyncDial) { try { window.BrainUniverse.setSyncDial(5, 'Force sync starting…', true); } catch (e) { /* never break sync */ } }
       // DYNAMIC UI v1: show the harvest happening — a sweep leaves the core.
       if (window.BrainUniverse && window.BrainUniverse.syncSweep) { try { window.BrainUniverse.syncSweep(); } catch (e) { /* never break sync */ } }
       const before = await getNodeCount();
@@ -1516,6 +1517,7 @@
       let runId = null;
       for (let i = 0; i < 6 && !runId; i++) {
         label.textContent = 'Queued…';
+        if (window.BrainUniverse && window.BrainUniverse.setSyncDial) { try { window.BrainUniverse.setSyncDial(10, 'Sync queued on GitHub…', true); } catch (e) { /* never break sync */ } }
         await new Promise((r) => setTimeout(r, 3000));
         try {
           const runs = await api('/repos/Vrdevil44/dream-brain/actions/workflows/sync.yml/runs?per_page=5');
@@ -1548,19 +1550,28 @@
           const steps = job.steps || [];
           const current = steps.find((s) => s.status === 'in_progress');
           const completed = steps.filter((s) => s.status === 'completed').length;
+          const dial = (pct, words) => { if (window.BrainUniverse && window.BrainUniverse.setSyncDial) { try { window.BrainUniverse.setSyncDial(pct, words, true); } catch (e) { /* never break sync */ } } };
           if (current) {
             if (!seenSteps.has(current.name)) {
               seenSteps.add(current.name);
             }
             label.textContent = `${completed + 1}/${steps.length}: ${current.name.slice(0, 24)}…`;
+            dial(steps.length ? Math.round((completed / steps.length) * 100) : 0, current.name);
           } else if (status === 'in_progress') {
             label.textContent = `Syncing… ${completed}/${steps.length} steps`;
+            dial(steps.length ? Math.round((completed / steps.length) * 100) : 0, 'Syncing…');
           }
 
           if (status === 'completed') break;
         } catch { /* keep polling */ }
       }
       btn.classList.remove('syncing');
+      // The HUD dial lands at 100% with the outcome in words, then hands back
+      // to the relay's live sync face after 10s.
+      const dialDone = (words) => {
+        if (window.BrainUniverse && window.BrainUniverse.setSyncDial) { try { window.BrainUniverse.setSyncDial(100, words, false); } catch (e) { /* never break sync */ } }
+        setTimeout(() => { if (window.BrainUniverse && window.BrainUniverse.releaseSyncDial) { try { window.BrainUniverse.releaseSyncDial(); } catch (e) { /* noop */ } } }, 10000);
+      };
 
       if (status === 'completed' && conclusion === 'success') {
         // 4. Diff nodes.
@@ -1572,6 +1583,7 @@
           const diff = after.count - before.count;
           if (diff > 0) {
             toast(`Sync complete: ${diff} new node${diff === 1 ? '' : 's'} added.`, 'ok');
+            dialDone(`Sync complete: ${diff} new node${diff === 1 ? '' : 's'} added`);
             // Mark fresh for 60s glow.
             if (window.BrainUniverse && window.BrainUniverse.markFresh) {
               window.BrainUniverse.markFresh(newIds);
@@ -1583,18 +1595,23 @@
             loadUpdatesLog();
           } else {
             toast('Sync complete: no new nodes.', 'ok');
+            dialDone('Sync complete: no new nodes');
             if (window.BrainUniverse && window.BrainUniverse.syncDone) { try { window.BrainUniverse.syncDone(0, []); } catch (e) { /* never break sync */ } }
           }
         } else {
           toast('Sync complete.', 'ok');
+          dialDone('Sync complete');
         }
       } else if (status === 'completed') {
         toast('Sync finished: ' + conclusion, 'err');
+        dialDone('Sync finished: ' + conclusion);
       } else {
         toast('Sync still running — check Actions on GitHub.', 'ok');
+        dialDone('Sync still running — check Actions on GitHub');
       }
     } catch (err) {
       btn.classList.remove('syncing');
+      if (window.BrainUniverse && window.BrainUniverse.releaseSyncDial) { try { window.BrainUniverse.releaseSyncDial(); } catch (e) { /* noop */ } }
       toast('Sync failed: ' + err.message, 'err');
     } finally {
       label.textContent = origLabel;
