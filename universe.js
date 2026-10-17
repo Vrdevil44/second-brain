@@ -1026,17 +1026,17 @@
       .backgroundColor('rgba(0,0,0,0)') // transparent: deep-space background shows through
       .showNavInfo(false)
       .nodeId('id')
-      .nodeVal((n) => (n && n.size) || 4)
+      .nodeVal((n) => {
+        // His call 2026-10-17: core largest, domain hubs medium, end nodes smallest.
+        if (!n) return 4;
+        if (n.id === 'core') return 8;
+        if (n.id && String(n.id).startsWith('domain-')) return 6;
+        return (n.size || 4);
+      })
       .nodeColor('color')
       // Node variety (his call): seeded size jitter so the brain looks organic,
       // not uniform. Opacity stays full — nodes must glow like stars, never faint.
-      .nodeRelSize((n) => {
-        // His call 2026-10-17: core largest, domain hubs medium, end nodes smallest.
-        if (!n) return 3;
-        if (n.id === 'core') return 5;
-        if (n.id && String(n.id).startsWith('domain-')) return 4;
-        return 3;
-      })
+      .nodeRelSize(4)
       .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
