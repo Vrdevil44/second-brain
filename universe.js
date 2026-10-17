@@ -1795,6 +1795,40 @@
       }
       return results.sort((a, b) => b.score - a.score).slice(0, 20);
     },
+    searchRelations: (q) => {
+      // Relation search: "contradicts" finds CONTRADICTS edges, "F-0308"
+      // finds everything wired to that fact. Returns both endpoints' labels.
+      if (!S || !S.graph) return [];
+      const query = q.toLowerCase().trim();
+      if (query.length < 2) return [];
+      const data = S.graph.graphData();
+      const edges = data.edges || [];
+      const nodes = data.nodes || [];
+      const labelOf = (id) => {
+        const n = nodes.find((x) => String(x.id).toUpperCase() === String(id).toUpperCase());
+        return n ? (n.name || n.label || n.id) : id;
+      };
+      const fidM = query.match(/^f-?(\d+)$/);
+      const fid = fidM ? 'F-' + fidM[1] : null;
+      const results = [];
+      const seen = new Set();
+      for (const e of edges) {
+        const src = String((e.source && e.source.id) || e.source || '');
+        const tgt = String((e.target && e.target.id) || e.target || '');
+        const type = String(e.type || '').toUpperCase();
+        if (!src || !tgt || !type) continue;
+        let hit = false;
+        if (fid && (src.toUpperCase() === fid || tgt.toUpperCase() === fid)) hit = true;
+        else if (type.toLowerCase().includes(query)) hit = true;
+        if (!hit) continue;
+        const key = src + '|' + type + '|' + tgt;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        results.push({ from: src, fromLabel: labelOf(src), type, to: tgt, toLabel: labelOf(tgt) });
+        if (results.length >= 20) break;
+      }
+      return results;
+    },
     getLegend: () => (S && S.legendBox) ? S.legendBox : null,
     setDomainFilter: (domains) => {
       // Filter visible nodes by domain — for mobile domain toggles.

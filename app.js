@@ -646,7 +646,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=46c2ced');
+        await loadScriptOnce('universe.js?v=47f0fdc');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2695,7 +2695,7 @@
     panel.style.cssText = 'position:fixed;top:56px;left:12px;right:12px;z-index:50;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.5);max-height:45vh;display:flex;flex-direction:column;overflow:hidden;';
     const input = document.createElement('input');
     input.type = 'search';
-    input.placeholder = 'Search facts…';
+    input.placeholder = 'Search facts, relations…';
     input.style.cssText = 'width:100%;padding:12px 14px;border:none;border-bottom:1px solid var(--border);background:transparent;color:var(--text);font-size:16px;outline:none;';
     const results = document.createElement('div');
     results.id = 'mobile-search-results';
@@ -2711,6 +2711,12 @@
       if (window.BrainUniverse && window.BrainUniverse.searchNodes) {
         matches.push(...window.BrainUniverse.searchNodes(q));
       }
+      // Search relations too ("contradicts", "blocks", "F-0308"…).
+      let relMatches = [];
+      if (window.BrainUniverse && window.BrainUniverse.searchRelations) {
+        try { relMatches = window.BrainUniverse.searchRelations(q); } catch (e) { /* noop */ }
+      }
+      const closePanel = () => { panel.remove(); document.removeEventListener('click', outsideCloser, true); };
       for (const m of matches.slice(0, 20)) {
         const div = document.createElement('div');
         div.style.cssText = 'padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;';
@@ -2718,15 +2724,40 @@
         div.querySelector('div').textContent = m.label || m.id;
         div.querySelector('.muted').textContent = m.id;
         div.addEventListener('click', () => {
-          panel.remove();
-          document.removeEventListener('click', outsideCloser, true);
+          closePanel();
           if (window.BrainUniverse && window.BrainUniverse.focusNode) {
             window.BrainUniverse.focusNode(m.id);
           }
         });
         results.appendChild(div);
       }
-      if (matches.length === 0) {
+      if (relMatches.length) {
+        const head = document.createElement('div');
+        head.style.cssText = 'padding:8px 14px 4px;font-size:10px;letter-spacing:1.5px;color:var(--text-3);font-weight:600;';
+        head.textContent = 'RELATIONS';
+        results.appendChild(head);
+        for (const r of relMatches) {
+          const div = document.createElement('div');
+          div.style.cssText = 'padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;';
+          div.innerHTML = '<div style="font-size:13px;"></div><div class="muted" style="font-size:12px;margin-top:2px;"></div>';
+          div.querySelector('div').innerHTML = '';
+          const s1 = document.createElement('span'); s1.textContent = (r.fromLabel || r.from).slice(0, 40);
+          const tp = document.createElement('span');
+          tp.textContent = ' ' + r.type + ' → ';
+          tp.style.cssText = 'color:var(--idea);font-weight:700;font-size:11px;';
+          const s2 = document.createElement('span'); s2.textContent = (r.toLabel || r.to).slice(0, 40);
+          div.querySelector('div').append(s1, tp, s2);
+          div.querySelector('.muted').textContent = r.from + ' → ' + r.to;
+          div.addEventListener('click', () => {
+            closePanel();
+            if (window.BrainUniverse && window.BrainUniverse.focusNode) {
+              window.BrainUniverse.focusNode(r.from);
+            }
+          });
+          results.appendChild(div);
+        }
+      }
+      if (matches.length === 0 && relMatches.length === 0) {
         results.innerHTML = '<div class="muted" style="padding:16px;text-align:center;">No matches</div>';
       }
     });
