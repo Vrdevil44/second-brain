@@ -1021,7 +1021,7 @@
       .backgroundColor('rgba(0,0,0,0)') // transparent: deep-space background shows through
       .showNavInfo(false)
       .nodeId('id')
-      .nodeVal('val')
+      .nodeVal((n) => (n && n.size) || 4)
       .nodeColor('color')
       // Node variety (his call): seeded size jitter so the brain looks organic,
       // not uniform. Opacity stays full — nodes must glow like stars, never faint.
