@@ -1042,8 +1042,18 @@
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
       .linkColor('color')
       .linkOpacity(0.55)
-      .linkWidth(0.6)
-      .linkDirectionalParticles((l) => particleCount(l))
+      .linkWidth((l) => {
+        // His call 2026-10-17: show the data flow — core to domain hubs
+        // (sub-cores) and domain hubs to their clusters get thick links.
+        const t = l && l.type;
+        if (t === 'DOMAIN') return 2.2;
+        return 0.6;
+      })
+      .linkDirectionalParticles((l) => {
+        // Flow particles on DOMAIN links: data streaming toward the core.
+        if (l && l.type === 'DOMAIN') return 3;
+        return particleCount(l);
+      })
       .linkDirectionalParticleWidth(1.6)
       // Packet desync (his call): was a constant 0.004 — every packet on every
       // edge marched in lockstep like clockwork. Now a seeded ~4x speed range
