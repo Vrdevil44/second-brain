@@ -251,6 +251,26 @@
     return m;
   }
 
+  // Static canvas starfield, shown through the transparent WebGL canvas.
+  // Zero WebGL cost; data: URL is allowed by the portal CSP (img-src data:).
+  // Deliberately faint: ~250 tiny 1px stars at 0.05–0.25 alpha, no sparkle
+  // crosses — atmosphere, not decoration.
+  let starURL = null;
+  function starfieldURL() {
+    if (starURL) return starURL;
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 1024;
+    const g = c.getContext('2d');
+    for (let i = 0; i < 250; i++) {
+      const x = Math.random() * 1024, y = Math.random() * 1024;
+      const a = 0.05 + Math.random() * 0.20;
+      g.fillStyle = 'rgba(174,194,224,' + a.toFixed(2) + ')';
+      g.fillRect(x, y, 1, 1);
+    }
+    starURL = c.toDataURL('image/png');
+    return starURL;
+  }
+
   // f = focus factor (1 = normal, DIM = outside the focused neighborhood).
   function nodeColor(n, f) {
     // Fresh nodes (just synced) glow white-hot for 60s — unmissable.
@@ -577,6 +597,22 @@
     return { x: x / nodes.length, y: y / nodes.length, z: z / nodes.length };
   }
 
+  // Distance from the camera to its current orbit target. Used to tell overview
+  // (zoomed out) apart from exploration (zoomed in close to a node).
+  function cameraDistToTarget() {
+    if (!S || !S.graph) return Infinity;
+    try {
+      const cam = S.graph.camera();
+      const t = S.graph.controls().target;
+      const dx = cam.position.x - t.x, dy = cam.position.y - t.y, dz = cam.position.z - t.z;
+      return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    } catch (e) { return Infinity; }
+  }
+
+  // Zoom threshold: beyond this distance we're in overview (orbit around the
+  // core is fine); within it the user is exploring — hands off the camera.
+  const OVERVIEW_DIST = 300;
+
   // Clears selection, closes the panel, restores full opacity.
   function closePanel() {
     if (!S) return;
@@ -587,14 +623,17 @@
     S.panelNode = null;
     S.panel.hidden = true;
     S.tip.hidden = true;
-    // Return the orbit target to the middle of the network so rotation isn't
-    // left pinned to the last focused node.
-    const cam = S.graph.camera();
-    S.graph.cameraPosition(
-      { x: cam.position.x, y: cam.position.y, z: cam.position.z },
-      graphCenter(),
-      800
-    );
+    // Return the orbit target to the middle of the network ONLY when zoomed out
+    // (overview). When zoomed in exploring a node, leave the target where the
+    // user put it — exploration-first, no sticky snap-back (his call 2026-10-17).
+    if (cameraDistToTarget() > OVERVIEW_DIST) {
+      const cam = S.graph.camera();
+      S.graph.cameraPosition(
+        { x: cam.position.x, y: cam.position.y, z: cam.position.z },
+        graphCenter(),
+        800
+      );
+    }
     updateFocus();
   }
 
@@ -1078,10 +1117,15 @@
     S.onResize = onResize;
     window.addEventListener('resize', S.onResize);
 
-    // Deep-space background only — no starfield (his call: the void stays clean;
-    // celestial events are the arrivals, not the backdrop).
-    S.stage.style.backgroundColor = BG;
-    S.stage.style.backgroundImage = 'none';
+    // Deep-space backdrop with a whisper of stars (his call 2026-10-17: "thoda sa
+    // space jaise lage, like stars"). Static canvas, zero WebGL cost, data: URL
+    // allowed by the CSP. Extremely subtle — the brain is the hero, space is air.
+    try {
+      S.stage.style.backgroundColor = BG;
+      S.stage.style.backgroundImage = 'url("' + starfieldURL() + '")';
+      S.stage.style.backgroundSize = 'cover';
+      S.stage.style.backgroundPosition = 'center';
+    } catch (e) { /* starfield is decorative — never break init */ }
 
     // Gentle auto-rotation until the visitor first grabs the scene.
     try {
