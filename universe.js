@@ -1043,15 +1043,24 @@
       .linkColor('color')
       .linkOpacity(0.55)
       .linkWidth((l) => {
-        // His call 2026-10-17: show the data flow — core to domain hubs
-        // (sub-cores) and domain hubs to their clusters get thick links.
+        // His call 2026-10-17: core -> domain hubs slightly thicker (highways);
+        // domain -> end nodes and end <-> end stay thin (streets), as before.
         const t = l && l.type;
-        if (t === 'DOMAIN') return 2.2;
+        if (t === 'DOMAIN') {
+          const s = l.source, tg = l.target;
+          const sId = s && (s.id || s), tId = tg && (tg.id || tg);
+          // Core <-> domain hub: thicker. Domain hub <-> fact: thin.
+          if (sId === 'core' || tId === 'core') return 1.6;
+        }
         return 0.6;
       })
       .linkDirectionalParticles((l) => {
-        // Flow particles on DOMAIN links: data streaming toward the core.
-        if (l && l.type === 'DOMAIN') return 3;
+        // Flow particles only on core <-> domain highways.
+        if (l && l.type === 'DOMAIN') {
+          const s = l.source, tg = l.target;
+          const sId = s && (s.id || s), tId = tg && (tg.id || tg);
+          if (sId === 'core' || tId === 'core') return 2;
+        }
         return particleCount(l);
       })
       .linkDirectionalParticleWidth(1.6)
