@@ -342,6 +342,11 @@
       color: TYPE_COLORS[e.type] || FALLBACK_LINK,
     }));
     S.graph.graphData({ nodes: vNodes, links });
+    // Pin the core at the absolute center (his vision 2026-10-16) — node
+    // objects persist across applyData calls, so this is idempotent.
+    for (const n of vNodes) {
+      if (n.id === 'core') { n.fx = 0; n.fy = 0; n.fz = 0; break; }
+    }
     if (S.api && typeof S.api.onMeta === 'function') {
       const iso = S.isolated ? ' · isolated' : '';
       S.api.onMeta(vNodes.length + ' facts · ' + vEdges.length + ' relations' + iso);
@@ -964,7 +969,33 @@
         } else {
           S.fitOnStop = false;
         }
-      });
+      }); // end .onEngineStop chain
+
+    // ---- Force tuning: the living-brain layout (his vision 2026-10-16) ----
+    // Stronger repulsion -> neurons disperse evenly, the 3D space feels full
+    // (bhar bhar) instead of clumping. Confidence gravity -> each node's orbit
+    // radius is set by its gravity score: high-confidence facts hug the core,
+    // uncertain ones drift to the rim; domain hubs (0.85) form the inner shell.
+    try {
+      const charge = S.graph.d3Force('charge');
+      if (charge && typeof charge.strength === 'function') charge.strength(-110);
+    } catch (e) { /* force unavailable — non-fatal */ }
+    S.graph.d3Force('brainGravity', (alpha) => {
+      if (!S || !S.graph) return;
+      const nodes = S.graph.graphData().nodes;
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (n.id === 'core') continue; // core is pinned at center
+        const g = typeof n.gravity === 'number' ? n.gravity : 0.10;
+        const targetR = 70 + (1 - g) * 320; // core surface ~70, rim ~390
+        const x = n.x || 0, y = n.y || 0, z = n.z || 0;
+        const r = Math.sqrt(x * x + y * y + z * z) || 0.001;
+        const pull = ((r - targetR) / r) * alpha * 0.35;
+        n.vx = (n.vx || 0) - x * pull;
+        n.vy = (n.vy || 0) - y * pull;
+        n.vz = (n.vz || 0) - z * pull;
+      }
+    });
 
     S.onResize = onResize;
     window.addEventListener('resize', S.onResize);
@@ -1802,7 +1833,8 @@
       const query = q.toLowerCase().trim();
       if (query.length < 2) return [];
       const data = S.graph.graphData();
-      const edges = data.edges || [];
+      // 'DOMAIN' edges are visual scaffolding (core -> hub -> facts), not knowledge — excluded.
+      const edges = (data.edges || []).filter((e) => (e.type || '').toUpperCase() !== 'DOMAIN');
       const nodes = data.nodes || [];
       const labelOf = (id) => {
         const n = nodes.find((x) => String(x.id).toUpperCase() === String(id).toUpperCase());
