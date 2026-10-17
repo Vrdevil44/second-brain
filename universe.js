@@ -63,6 +63,7 @@
     'CONTRADICTS': '#ff4d94',
     'INSTANCE': '#a29bfe',
     'COMPONENT': '#74b9ff',
+    'DOMAIN': '#eaf6ff', // visual scaffolding: core -> hub -> facts (his call 2026-10-17)
   };
   const DOMAINS = Object.keys(DOMAIN_COLORS);
   const TYPES = Object.keys(TYPE_COLORS);
