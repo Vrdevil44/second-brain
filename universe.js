@@ -160,20 +160,74 @@
     return DOMAIN_COLORS[node.domain] || FALLBACK_NODE;
   }
 
-  // nodeThreeObject builder: an additive-blend halo shell around the default
+  // ---- Premium glow craft (his bar 2026-10-17: Apple/Jarvis, not a toy) ----
+  // Layered gradient halos: 3 nested additive shells approximate a radial
+  // gradient falloff (hot core → soft edge) with plain meshes — no
+  // postprocessing, no new deps. This is the craft that makes glow premium.
+  const HALO_LAYERS = [
+    { s: 1.7, k: 1.0 },   // inner hot core
+    { s: 2.8, k: 0.45 },  // mid glow
+    { s: 4.6, k: 0.18 },  // outer soft falloff
+  ];
+  // The core gets an extra shell — denser, hotter, unmistakably the heart.
+  const CORE_LAYERS = [
+    { s: 1.5, k: 1.0 },
+    { s: 2.2, k: 0.75 },
+    { s: 3.4, k: 0.45 },
+    { s: 5.2, k: 0.20 },
+  ];
+  function haloGroup() {
+    // window.THREE is partially exposed by the 3d-force-graph UMD bundle
+    // (Group is available; Sprite/ShaderMaterial are not).
+    const T = (typeof window !== 'undefined' && window.THREE) || {};
+    return T.Group ? new T.Group() : null;
+  }
+  function setHaloOpacity(halo, o) {
+    if (!halo) return;
+    const kids = halo.children && halo.children.length ? halo.children : [halo];
+    for (const c of kids) {
+      if (c.material) c.material.opacity = Math.min(0.65, o * (c.userData.k == null ? 1 : c.userData.k));
+    }
+  }
+  function setHaloColor(halo, color) {
+    if (!halo) return;
+    const kids = halo.children && halo.children.length ? halo.children : [halo];
+    for (const c of kids) if (c.material) c.material.color.set(color);
+  }
+  function haloHex(halo) {
+    const kids = halo && halo.children && halo.children.length ? halo.children : (halo ? [halo] : []);
+    const m = kids.length && kids[0].material;
+    return m ? '#' + m.color.getHexString() : '';
+  }
+
+  // nodeThreeObject builder: layered additive halo shells around the default
   // core sphere (nodeThreeObjectExtend(true) keeps the core library-managed,
   // so its colour-alpha dimming path is untouched).
   function buildHalo(node) {
-    const mat = glowTpl.matProto.clone();
-    mat.color.set(haloColor(node));
-    mat.transparent = true;
-    mat.opacity = 0; // rest state: no bubble — halos only light up for live events,
-    mat.blending = BLEND_ADDITIVE; // selection, fresh nodes, and the breathing core
-    mat.depthWrite = false;
-    const m = new glowTpl.Mesh(glowTpl.geo, mat);
+    const grp = haloGroup();
     const R = 4 * Math.cbrt(Math.max(1, Number(node.val) || 1)); // nodeRelSize(4)
-    m.scale.setScalar(R * HALO_SCALE);
-    m.raycast = function () {}; // halos must not steal hover/click picking
+    const mkShell = (layer) => {
+      const mat = glowTpl.matProto.clone();
+      mat.color.set(haloColor(node));
+      mat.transparent = true;
+      mat.opacity = 0; // rest state: no bubble — halos only light up for live events,
+      mat.blending = BLEND_ADDITIVE; // selection, fresh nodes, and the breathing core
+      mat.depthWrite = false;
+      const m = new glowTpl.Mesh(glowTpl.geo, mat);
+      m.scale.setScalar(R * layer.s);
+      m.raycast = function () {}; // halos must not steal hover/click picking
+      m.userData.k = layer.k;
+      return m;
+    };
+    if (grp) {
+      const layers = (node.id === 'core') ? CORE_LAYERS : HALO_LAYERS;
+      for (const layer of layers) grp.add(mkShell(layer));
+      grp.traverse((o) => { o.raycast = function () {}; });
+      node._halo = grp;
+      return grp;
+    }
+    // Fallback: single shell (should never happen — Group is exposed).
+    const m = mkShell(HALO_LAYERS[0]);
     node._halo = m;
     return m;
   }
@@ -425,11 +479,11 @@
       if (!n._halo) continue;
       // Rest state: halo off. Only the selected node and fresh nodes earn a glow.
       const show = (S.selected === n.id) || isFresh(n.id);
-      if (!show) { n._halo.material.opacity = 0; continue; }
+      if (!show) { setHaloOpacity(n._halo, 0); continue; }
       const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id);
       const boost = (S.selected === n.id) ? 1.6 : 1;
       const fresh = isFresh(n.id) ? 1.9 : 1;
-      n._halo.material.opacity = Math.min(0.5, HALO_OPACITY * a * boost * fresh);
+      setHaloOpacity(n._halo, Math.min(0.5, HALO_OPACITY * a * boost * fresh));
     }
   }
 
@@ -1024,6 +1078,7 @@
         S.graph.nodeThreeObject(buildHalo).nodeThreeObjectExtend(true);
         S.graph.refresh();
         updateFocus();
+        setTimeout(bootSequence, 600); // halos mounted — the brain wakes
       } else if (!glowReady && ++glowTries < 600) {
         requestAnimationFrame(glowPoll);
       }
@@ -1041,6 +1096,40 @@
     // One view, always alive (his call 2026-10-13): the ambient systems start
     // with the scene. No mode to enter.
     startLiving();
+  }
+
+  // ---- Boot sequence (his vision 2026-10-17) ----
+  // When the brain opens: the core flashes bright, ripples cascade outward,
+  // and the mesh wakes in a wave from the core — high-gravity nodes first,
+  // like consciousness spreading. Premium, not a loading spinner.
+  let bootDone = false;
+  function bootSequence() {
+    if (bootDone || !S || !S.live || !S.live.on) return;
+    bootDone = true;
+    // 1. Core flash: bright multi-wavefront pulse from the center.
+    interiorPulse(6, 3200, 0.85);
+    // 2. Halo wake wave: nodes light up in gravity order (inner → outer),
+    //    staggered so the wake visibly spreads from the core.
+    const nodes = S.graph.graphData().nodes;
+    const wake = nodes
+      .filter((n) => n._halo && n.id !== 'core')
+      .map((n) => ({ n, g: typeof n.gravity === 'number' ? n.gravity : 0.10 }))
+      .sort((a, b) => b.g - a.g);
+    wake.forEach((w, i) => {
+      const delay = 400 + (wake.length > 1 ? (i / (wake.length - 1)) : 0) * 2200;
+      setTimeout(() => {
+        if (!S || !S.live || !S.live.on || !w.n._halo) return;
+        S.live.glow.set(String(w.n.id), { kind: 'fresh', until: Date.now() + 1400 });
+      }, delay);
+    });
+    // 3. Domain hubs pulse in sequence as the wave reaches them.
+    const hubs = nodes.filter((n) => n.id && String(n.id).startsWith('domain-'));
+    hubs.forEach((h, i) => {
+      setTimeout(() => {
+        if (!S || !S.live || !S.live.on) return;
+        S.live.glow.set(String(h.id), { kind: 'newlink', until: Date.now() + 1800 });
+      }, 2600 + i * 280);
+    });
   }
 
   function destroy() {
@@ -1216,7 +1305,7 @@
     if (S._holdOff) { window.removeEventListener('pointerup', S._holdOff); window.removeEventListener('pointercancel', S._holdOff); S._holdOff = null; }
     if (S.hud) { S.hud.remove(); S.hud = null; }
     for (const n of S.graph.graphData().nodes) {
-      if (n._halo && n._liveKind) { n._halo.material.color.set(haloColor(n)); n._liveKind = null; }
+      if (n._halo && n._liveKind) { setHaloColor(n._halo, haloColor(n)); n._liveKind = null; }
     }
     updateFocus();
   }
@@ -1448,10 +1537,11 @@
       const t0 = performance.now();
       S.live.fx.push({
         update(now) {
-          const t = Math.min(1, (now - t0) / 420);
+          const raw = Math.min(1, (now - t0) / 420);
+          const t = easeOutCubic(raw);
           flash.scale.setScalar(8 + t * 46);
           flash.material.opacity = 0.9 * (1 - t);
-          return t < 1;
+          return raw < 1;
         },
         dispose(sc) { (sc || scene).remove(flash); flash.material.dispose(); },
       });
@@ -1463,6 +1553,12 @@
       updateFocus();
     }
   }
+
+  // ---- Motion craft (his bar 2026-10-17: designed, not programmed) ----
+  // Linear tweens read as mechanical; eased curves read as alive.
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+  const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const easeOutBack = (t) => { const c = 1.70158; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
 
   function interiorPulse(waves, dur, opacity) {
     const scene = liveScene();
@@ -1482,12 +1578,13 @@
         const t0 = performance.now();
         S.live.fx.push({
           update(now) {
-            const t = Math.min(1, (now - t0) / D);
+            const raw = Math.min(1, (now - t0) / D);
+            const t = easeOutCubic(raw); // designed motion: fast bloom, gentle settle
             const cc = coreNode();
             if (cc) ring.position.set(cc.x, cc.y, cc.z);
             ring.scale.setScalar(20 + t * 280);
             ring.material.opacity = O * (1 - t);
-            return t < 1;
+            return raw < 1;
           },
           dispose(s2) { (s2 || sc).remove(ring); ring.material.dispose(); },
         });
@@ -1636,9 +1733,9 @@
       }
       if (n._liveKind !== kind) {
         n._liveKind = kind;
-        n._halo.material.color.set(kind && LIVE_COLORS[kind] ? LIVE_COLORS[kind] : haloColor(n));
+        setHaloColor(n._halo, kind && LIVE_COLORS[kind] ? LIVE_COLORS[kind] : haloColor(n));
       }
-      n._halo.material.opacity = Math.min(0.6, o);
+      setHaloOpacity(n._halo, Math.min(0.6, o));
     }
   }
 
@@ -1724,8 +1821,7 @@
       const nodes = S.graph.graphData().nodes;
       for (const id of (ids || [])) {
         const n = nodes.find((x) => x.id === String(id));
-        out[id] = (n && n._halo && n._halo.material && n._halo.material.color)
-          ? '#' + n._halo.material.color.getHexString() : '';
+        out[id] = (n && n._halo) ? haloHex(n._halo) : '';
       }
       return out;
     },
