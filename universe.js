@@ -1025,7 +1025,7 @@
       .nodeColor('color')
       // Node variety (his call): seeded size jitter so the brain looks organic,
       // not uniform. Opacity stays full — nodes must glow like stars, never faint.
-      .nodeRelSize(12)
+      .nodeRelSize(4)
       .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
@@ -1174,8 +1174,9 @@
   function bootSequence() {
     if (bootDone || !S || !S.live || !S.live.on) return;
     bootDone = true;
-    // 1. Core flash: bright multi-wavefront pulse from the center.
-    interiorPulse(6, 3200, 0.85);
+    // 1. Core flash: subtle single pulse from the center (his call 2026-10-17:
+    //    ripple ONLY on the main core, subtle not heavy).
+    interiorPulse(2, 2000, 0.35);
     // 2. Halo wake wave: nodes light up in gravity order (inner → outer),
     //    staggered so the wake visibly spreads from the core.
     const nodes = S.graph.graphData().nodes;
@@ -1190,14 +1191,8 @@
         S.live.glow.set(String(w.n.id), { kind: 'fresh', until: Date.now() + 1400 });
       }, delay);
     });
-    // 3. Domain hubs pulse in sequence as the wave reaches them.
-    const hubs = nodes.filter((n) => n.id && String(n.id).startsWith('domain-'));
-    hubs.forEach((h, i) => {
-      setTimeout(() => {
-        if (!S || !S.live || !S.live.on) return;
-        S.live.glow.set(String(h.id), { kind: 'newlink', until: Date.now() + 1800 });
-      }, 2600 + i * 280);
-    });
+    // 3. Domain hubs: no boot pulse (his call 2026-10-17 — ripple is core-only).
+    //    (Removed the sequential hub glow that was landing on domain nodes.)
   }
 
   function destroy() {
