@@ -72,61 +72,6 @@
   const DBLCLICK_MS = 280;
   const DIM = 0.15; // opacity factor for nodes/links outside the focus neighborhood
 
-  // ---- Proportional brain layout (his spec 2026-10-17, exact numbers) ----
-  // The brain is a sphere of radius 100. Confidence = the core's gravitational
-  // pull = distance from core. The core (size 10) is pinned at the origin and
-  // is the ONLY pure-white node. Domains live at radius 30-60, evenly spread
-  // in angle (fibonacci sphere — never bunched on one side). Facts orbit at
-  // radius 10-100 by confidence: confident 10-30, regular 30-70, newly
-  // formed/on-demand 70-100. As a fact becomes unchanging it moves inward.
-  const BRAIN_R = 100;
-  const CORE_R = 10;
-  const CONF_R_OUT = 100, CONF_R_IN = 10;
-  // Observed gravity in graph data: core=1, hubs=0.85, facts ~0.10-0.36.
-  const G_LO = 0.10, G_HI = 0.40;
-  function confidenceRadius(g) {
-    const gn = Math.min(1, Math.max(0, ((+g || G_LO) - G_LO) / (G_HI - G_LO)));
-    return CONF_R_OUT - gn * (CONF_R_OUT - CONF_R_IN);
-  }
-  // Golden-angle fibonacci sphere: n evenly spread directions, deterministic.
-  function fibDir(i, n) {
-    const ga = Math.PI * (3 - Math.sqrt(5));
-    const y = n <= 1 ? 1 : 1 - (i / (n - 1)) * 2;
-    const r = Math.sqrt(Math.max(0, 1 - y * y));
-    const th = ga * i;
-    return { x: Math.cos(th) * r, y, z: Math.sin(th) * r };
-  }
-  // Visual radius of a node in brain units. Core is capped at 10 (his spec);
-  // facts stay small so relations stay visible.
-  const NODE_REL = 1.15;
-  function nodeRadius(n) {
-    if (n && n.id === 'core') return CORE_R;
-    return NODE_REL * Math.cbrt(Math.max(1, Number(n && n.val) || 1));
-  }
-  // Domain of a synthetic hub ('domain-people' -> 'people').
-  function hubDomain(id) {
-    const m = /^domain-(.+)$/.exec(String(id || ''));
-    return m ? m[1] : '';
-  }
-  // Tinted version of a hex color (mixed toward white by k). Hub nodes wear
-  // their domain's color as a tint; only the central core is pure white.
-  function tintColor(hex, k) {
-    const n = parseInt(String(hex).slice(1), 16);
-    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-    const t = Math.min(1, Math.max(0, k));
-    const mix = (c) => Math.round(c + (255 - c) * t);
-    return '#' + ((1 << 24) + (mix(r) << 16) + (mix(g) << 8) + mix(b)).toString(16).slice(1);
-  }
-  // Base color before focus-dimming: core is pure white, hubs wear their
-  // domain tint, facts wear their domain color.
-  function baseNodeColor(n) {
-    if (!n) return FALLBACK_NODE;
-    if (n.id === 'core') return '#ffffff';
-    const hd = hubDomain(n.id);
-    if (hd && DOMAIN_COLORS[hd]) return tintColor(DOMAIN_COLORS[hd], 0.35);
-    return DOMAIN_COLORS[n.domain] || FALLBACK_NODE;
-  }
-
   let S = null; // live state; null when not initialised
 
   // ---- Tiny DOM helpers (textContent only: labels are untrusted text) ---------
@@ -183,6 +128,23 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
+  // Seeded 0..1 hash (FNV-1a): deterministic per key, stable across page loads.
+  // Used for organic variety — node sizes, opacity, packet speeds — so the brain
+  // looks alive, never uniform.
+  function hash01(str) {
+    let h = 2166136261;
+    const s = String(str);
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return ((h >>> 0) % 100000) / 100000;
+  }
+
+  // Stable edge key for per-link seeded variation (endpoints may be objects or ids).
+  function linkKey(l) {
+    const a = l && l.source, b = l && l.target;
+    const sa = (a && a.id !== undefined) ? a.id : a, sb = (b && b.id !== undefined) ? b.id : b;
+    return String(sa) + '>' + String(sb);
+  }
+
   // ---- Premium glow treatment -------------------------------------------------
   // The vendored 3d-force-graph keeps Three.js module-private (no THREE global),
   // so halo meshes are cloned from a live default node object: its constructor,
@@ -212,52 +174,24 @@
 
   function haloColor(node) {
     if (isFresh(node.id)) return FRESH_COLOR;
-    return baseNodeColor(node);
+    return DOMAIN_COLORS[node.domain] || FALLBACK_NODE;
   }
 
   // ---- Premium glow craft (his bar 2026-10-17: Apple/Jarvis, not a toy) ----
-  // TRUE radial gradient halos, per-pixel in-shader. The old nested solid
-  // shells rendered as flat white discs at large scale (he called it cheap —
-  // he was right). Now each shell's alpha fades by the view-space normal's
-  // facing ratio: disc center faces the camera (hot), the silhouette edge is
-  // perpendicular (transparent). A real smooth falloff, never a solid disc.
-  // Zero new dependencies: MeshLambertMaterial + onBeforeCompile on the
-  // vendored bundle's own material prototype.
-  function glowMaterial(hexColor, baseOpacity) {
-    const mat = glowTpl.matProto.clone();
-    mat.color.set(hexColor);
-    mat.transparent = true;
-    mat.opacity = baseOpacity;
-    mat.blending = BLEND_ADDITIVE;
-    mat.depthWrite = false;
-    mat.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <dithering_fragment>',
-        [
-          '#include <dithering_fragment>',
-          '{',
-          '  float facing = abs(dot(normalize(vNormal), vec3(0.0, 0.0, 1.0)));',
-          '  gl_FragColor.a *= pow(facing, 2.0);',
-          '}',
-        ].join('\n')
-      );
-    };
-    // Identical shader code for every glow -> one shared program.
-    mat.customProgramCacheKey = () => 'brain-glow-radial-v1';
-    return mat;
-  }
-  // Two shells for facts (hot core + soft falloff), three for the core.
-  // With a true gradient per shell, fewer layers read as deeper and cleaner.
+  // Layered gradient halos: 3 nested additive shells approximate a radial
+  // gradient falloff (hot core → soft edge) with plain meshes — no
+  // postprocessing, no new deps. This is the craft that makes glow premium.
   const HALO_LAYERS = [
-    { s: 1.8, k: 1.0 },   // inner hot core
-    { s: 3.2, k: 0.5 },   // outer soft falloff
+    { s: 1.7, k: 1.0 },   // inner hot core
+    { s: 2.8, k: 0.45 },  // mid glow
+    { s: 4.6, k: 0.18 },  // outer soft falloff
   ];
   // The core gets an extra shell — denser, hotter, unmistakably the heart.
-  // Pure white (it is the ONLY white node), fading silk-smooth to nothing.
   const CORE_LAYERS = [
-    { s: 1.4, k: 1.0 },
-    { s: 2.4, k: 0.6 },
-    { s: 4.0, k: 0.3 },
+    { s: 1.5, k: 1.0 },
+    { s: 2.2, k: 0.75 },
+    { s: 3.4, k: 0.45 },
+    { s: 5.2, k: 0.20 },
   ];
   function haloGroup() {
     // window.THREE is partially exposed by the 3d-force-graph UMD bundle
@@ -283,15 +217,19 @@
     return m ? '#' + m.color.getHexString() : '';
   }
 
-  // nodeThreeObject builder: gradient halo shells around the default core
-  // sphere (nodeThreeObjectExtend(true) keeps the core library-managed, so
-  // its colour-alpha dimming path is untouched). Each shell carries a true
-  // in-shader radial gradient — soft premium glow, never a flat disc.
+  // nodeThreeObject builder: layered additive halo shells around the default
+  // core sphere (nodeThreeObjectExtend(true) keeps the core library-managed,
+  // so its colour-alpha dimming path is untouched).
   function buildHalo(node) {
     const grp = haloGroup();
-    const R = nodeRadius(node);
+    const R = 4 * Math.cbrt(Math.max(1, Number(node.val) || 1)); // nodeRelSize(4)
     const mkShell = (layer) => {
-      const mat = glowMaterial(haloColor(node), 0); // rest: halos light for live events only
+      const mat = glowTpl.matProto.clone();
+      mat.color.set(haloColor(node));
+      mat.transparent = true;
+      mat.opacity = 0; // rest state: no bubble — halos only light up for live events,
+      mat.blending = BLEND_ADDITIVE; // selection, fresh nodes, and the breathing core
+      mat.depthWrite = false;
       const m = new glowTpl.Mesh(glowTpl.geo, mat);
       m.scale.setScalar(R * layer.s);
       m.raycast = function () {}; // halos must not steal hover/click picking
@@ -299,8 +237,7 @@
       return m;
     };
     if (grp) {
-      // Halo shells: CORE ONLY (his call 2026-10-17 — the halo was landing on
-      // random domain nodes). Domain/fact nodes get the bare library sphere.
+      // Halo shells: CORE ONLY (his call — the halo was landing on random domain nodes).
       if (node.id === 'core') {
         for (const layer of CORE_LAYERS) grp.add(mkShell(layer));
       }
@@ -318,7 +255,7 @@
   function nodeColor(n, f) {
     // Fresh nodes (just synced) glow white-hot for 60s — unmissable.
     if (isFresh(n.id)) return FRESH_COLOR;
-    const c = baseNodeColor(n);
+    const c = DOMAIN_COLORS[n.domain] || FALLBACK_NODE;
     // 4D: dormant/merged host nodes dim exactly like superseded facts.
     const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * (f == null ? 1 : f);
     return a === 1 ? c : hexToRgba(c, a);
@@ -330,37 +267,27 @@
   function prepare(data) {
     const nodes = [];
     const byId = new Map();
-    // ---- Sphered-out tree seeding (his vision 2026-10-17) ----
-    // Core at the origin. Each domain is a branch: its hub sits at radius
-    // 30-60 (denser domains nearer the core), in a fibonacci-sphere direction
-    // so branches spread evenly in angle — never bunched on one side. Facts
-    // seed along their domain's branch at their confidence radius (10-100),
-    // with jitter. The force sim refines from here; the tree reads instantly.
-    const rawNodes = Array.isArray(data && data.nodes) ? data.nodes : [];
-    const domCounts = {};
-    for (const n of rawNodes) {
-      if (!n || n.id == null) continue;
-      const id = String(n.id);
-      if (id === 'core' || hubDomain(id)) continue;
-      const d = String(n.domain || '');
-      if (DOMAIN_COLORS[d]) domCounts[d] = (domCounts[d] || 0) + 1;
-    }
-    const domList = Object.keys(DOMAIN_COLORS).filter((d) => d !== 'core');
-    const maxCount = Math.max(1, ...domList.map((d) => domCounts[d] || 0));
-    const hubInfo = {}; // domain -> { dir, r }
-    domList.forEach((d, i) => {
-      const dir = fibDir(i, domList.length);
-      // Denser domains nearer the core: 30 (densest) .. 60 (sparsest).
-      const r = 60 - ((domCounts[d] || 0) / maxCount) * 30;
-      hubInfo[d] = { dir, r };
+    // Domain galaxy seeding: each domain gets a home on a large sphere, so the
+    // first paint already reads as colored clusters instead of scattered dust.
+    // (131 of ~191 facts have no relations; without seeding they'd drift
+    // randomly.) Offsets are hashed from the node id, so the layout is stable
+    // across loads. The force simulation still refines from here.
+    const SEED_R = 300, SEED_J = 170;
+    const centers = {};
+    DOMAINS.forEach((d, i) => {
+      const a = (i / DOMAINS.length) * Math.PI * 2;
+      const b = Math.acos(1 - (2 * (i + 0.5)) / DOMAINS.length);
+      centers[d] = {
+        x: SEED_R * Math.sin(b) * Math.cos(a),
+        y: SEED_R * Math.cos(b) * 0.7,
+        z: SEED_R * Math.sin(b) * Math.sin(a),
+      };
     });
-    const SEED_J = 7; // positional jitter, brain units
     const hash01 = (s) => {
       let x = 2166136261;
       for (let i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); }
       return ((x >>> 0) % 10000) / 10000;
     };
-    const jit = (id, k) => (hash01(id + k) - 0.5) * 2; // -1..1 deterministic
     // 4D: node lifecycle hooks. data.lifecycle carries {node, kind, state?, redirectsTo?}
     // per fact-hosting node page — ids and states only, never fact text. Dormant or
     // merged host pages dim exactly like superseded facts (0.35): same visual
@@ -375,36 +302,18 @@
         redirectsTo: e.redirectsTo == null ? '' : String(e.redirectsTo),
       });
     }
-    for (const n of rawNodes) {
+    for (const n of Array.isArray(data && data.nodes) ? data.nodes : []) {
       if (!n || n.id == null) continue;
       const id = String(n.id);
       if (byId.has(id)) continue;
+      const c = centers[n.domain] || { x: 0, y: 0, z: 0 };
       // Gravity: the core's pull. High-gravity nodes start near the center so
       // the mesh visibly settles around the mind; low-gravity drifts outward.
+      // Subtle and stable: initial bias only, the force sim does the rest.
       const grav = Math.min(1, Math.max(0, Number(n.gravity) || 0.10));
-      let px = 0, py = 0, pz = 0, orbitR = 0;
-      const hd = hubDomain(id);
-      if (id === 'core') {
-        px = 0; py = 0; pz = 0; orbitR = 0;
-      } else if (hd && hubInfo[hd]) {
-        // Hubs ride their branch at the density-set radius (30-60).
-        const hi = hubInfo[hd];
-        orbitR = hi.r;
-        px = hi.dir.x * hi.r + jit(id, ':x') * SEED_J;
-        py = hi.dir.y * hi.r + jit(id, ':y') * SEED_J;
-        pz = hi.dir.z * hi.r + jit(id, ':z') * SEED_J;
-      } else {
-        // Facts: along their domain's branch, at their confidence radius.
-        const hi = hubInfo[String(n.domain || '')] || { dir: fibDir(hash01(id) * 6.28, 7), r: 60 };
-        const jx = hi.dir.x + jit(id, ':jx') * 0.45;
-        const jy = hi.dir.y + jit(id, ':jy') * 0.45;
-        const jz = hi.dir.z + jit(id, ':jz') * 0.45;
-        const jl = Math.sqrt(jx * jx + jy * jy + jz * jz) || 1;
-        orbitR = confidenceRadius(grav);
-        px = (jx / jl) * orbitR + jit(id, ':x') * SEED_J * 0.5;
-        py = (jy / jl) * orbitR + jit(id, ':y') * SEED_J * 0.5;
-        pz = (jz / jl) * orbitR + jit(id, ':z') * SEED_J * 0.5;
-      }
+      const gR = 300 * (1.25 - grav); // grav 1 -> r=75, grav 0.1 -> r=345
+      const th = hash01(id + ':gt') * Math.PI * 2;
+      const ph = Math.acos(2 * hash01(id + ':gp') - 1);
       const node = {
         id,
         name: String(n.label == null ? id : n.label),
@@ -416,8 +325,9 @@
         status: String(n.status || ''),
         date: String(n.date || ''),
         cmt: String(n.cmt || ''), // fact.v2 share-time comment; not rendered yet
-        x: px, y: py, z: pz,
-        _orbitR: orbitR, // proportional-layout target radius (brainGravity holds it)
+        x: c.x * 0.25 + gR * Math.sin(ph) * Math.cos(th) + (hash01(id + ':x') - 0.5) * SEED_J,
+        y: c.y * 0.25 + gR * Math.sin(ph) * Math.sin(th) + (hash01(id + ':y') - 0.5) * SEED_J,
+        z: c.z * 0.25 + gR * Math.cos(ph) + (hash01(id + ':z') - 0.5) * SEED_J,
       };
       // THE core is pinned to the absolute center: it is the origin every
       // beat's pulse emanates from, and the gravity well the mesh settles
@@ -504,20 +414,6 @@
       source: e.source, target: e.target, type: e.type,
       color: TYPE_COLORS[e.type] || FALLBACK_LINK,
     }));
-    // Branch guides: the sphered-out tree skeleton (core -> hub -> facts).
-    // DOMAIN edges are knowledge-scaffolding, not knowledge — rendered as
-    // ultra-subtle guides so the tree structure reads without shouting.
-    // They bypass the type filter (structure, not content) and carry no
-    // particles.
-    const vIds = new Set(vNodes.map((n) => n.id));
-    for (const e of S.data.edges) {
-      if (!e || e.type !== 'DOMAIN') continue;
-      if (!vIds.has(e.source) || !vIds.has(e.target)) continue;
-      links.push({
-        source: e.source, target: e.target, type: 'DOMAIN', _branch: true,
-        color: 'rgba(148,163,184,0.13)',
-      });
-    }
     S.graph.graphData({ nodes: vNodes, links });
     // Pin the core at the absolute center (his vision 2026-10-16) — node
     // objects persist across applyData calls, so this is idempotent.
@@ -568,7 +464,6 @@
   // render full-bright on a dimmed link).
   function particleCount(l) {
     if (!S || !S.focusSet) return 1;
-    if (l && l._branch) return 0; // branch guides are silent structure
     return (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : 0;
   }
 
@@ -580,9 +475,7 @@
       .nodeColor((n) => nodeColor(n, focusOpacity(n.id)))
       .linkColor((l) => {
         const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : DIM;
-        // Branch guides carry an rgba color already; dim via alpha scaling.
-        let c = f === 1 ? l.color
-          : (String(l.color).indexOf('rgba') === 0 ? scaleAlpha(l.color, f) : hexToRgba(l.color, f));
+        let c = f === 1 ? l.color : hexToRgba(l.color, f);
         // Domain breath: links inside the most active domain oscillate ±0.03 —
         // almost imperceptible, and only when there is real recent activity.
         const bd = S.live && S.live.breathDomain;
@@ -632,7 +525,7 @@
   // ---- Camera -----------------------------------------------------------------
   function flyTo(node) {
     if (!S || !node) return;
-    const dist = 45;
+    const dist = 110;
     const mag = Math.hypot(node.x || 0, node.y || 0, node.z || 0);
     const pos = mag > 0.001
       ? { x: node.x * (1 + dist / mag), y: node.y * (1 + dist / mag), z: node.z * (1 + dist / mag) }
@@ -1089,18 +982,23 @@
       .backgroundColor('rgba(0,0,0,0)') // transparent: deep-space background shows through
       .showNavInfo(false)
       .nodeId('id')
-      .nodeVal((n) => Math.pow(nodeRadius(n) / NODE_REL, 3))
+      .nodeVal('val')
       .nodeColor('color')
-      .nodeRelSize(NODE_REL)
-      .nodeOpacity(0.95)
+      // Node variety (his call): seeded size jitter + solid-vs-faint mix so the
+      // brain looks organic, not uniform. Deterministic per id — stable across loads.
+      .nodeRelSize((n) => 4 * (0.7 + 0.6 * hash01('sz' + (n && n.id))))
+      .nodeOpacity((n) => (!n || n.id === 'core' ? 1 : 0.55 + 0.45 * hash01('op' + n.id)))
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
       .linkColor('color')
       .linkOpacity(0.55)
-      .linkWidth((l) => (l && l._branch ? 0.45 : 1.0))
+      .linkWidth(0.6)
       .linkDirectionalParticles((l) => particleCount(l))
       .linkDirectionalParticleWidth(1.6)
-      .linkDirectionalParticleSpeed(0.004)
+      // Packet desync (his call): was a constant 0.004 — every packet on every
+      // edge marched in lockstep like clockwork. Now a seeded ~4x speed range
+      // per edge: packets drift out of phase, like neural firing, not a metronome.
+      .linkDirectionalParticleSpeed((l) => 0.0018 + 0.0052 * hash01('ps' + linkKey(l)))
       .linkLabel(() => '') // we render our own tooltip
       .cooldownTime(15000)
       .enableNodeDrag(false) // P2-T3: node micro-drags swallowed taps (clickAfterDrag defaults false); orbit/pan unaffected, nothing uses onNodeDrag
@@ -1152,14 +1050,13 @@
       }); // end .onEngineStop chain
 
     // ---- Force tuning: the living-brain layout (his vision 2026-10-16) ----
-    // Gentle repulsion -> neurons disperse evenly, the 3D space feels full
-    // (bhar bhar) instead of clumping. Confidence gravity -> each node is
-    // held at its proportional orbit radius (10-100 by confidence; hubs at
-    // their density-set 30-60; core pinned at 0). Seeding already places
-    // nodes near-correct, so the force only refines.
+    // Stronger repulsion -> neurons disperse evenly, the 3D space feels full
+    // (bhar bhar) instead of clumping. Confidence gravity -> each node's orbit
+    // radius is set by its gravity score: high-confidence facts hug the core,
+    // uncertain ones drift to the rim; domain hubs (0.85) form the inner shell.
     try {
       const charge = S.graph.d3Force('charge');
-      if (charge && typeof charge.strength === 'function') charge.strength(-35);
+      if (charge && typeof charge.strength === 'function') charge.strength(-110);
     } catch (e) { /* force unavailable — non-fatal */ }
     S.graph.d3Force('brainGravity', (alpha) => {
       if (!S || !S.graph) return;
@@ -1167,10 +1064,11 @@
       for (let i = 0; i < nodes.length; i++) {
         const n = nodes[i];
         if (n.id === 'core') continue; // core is pinned at center
-        const targetR = typeof n._orbitR === 'number' ? n._orbitR : confidenceRadius(n.gravity);
+        const g = typeof n.gravity === 'number' ? n.gravity : 0.10;
+        const targetR = 70 + (1 - g) * 320; // core surface ~70, rim ~390
         const x = n.x || 0, y = n.y || 0, z = n.z || 0;
         const r = Math.sqrt(x * x + y * y + z * z) || 0.001;
-        const pull = ((r - targetR) / r) * alpha * 0.5;
+        const pull = ((r - targetR) / r) * alpha * 0.35;
         n.vx = (n.vx || 0) - x * pull;
         n.vy = (n.vy || 0) - y * pull;
         n.vz = (n.vz || 0) - z * pull;
@@ -1348,7 +1246,7 @@
 
   function edgeRadius() {
     const nodes = S.graph.graphData().nodes;
-    let r = BRAIN_R;
+    let r = 200;
     for (const n of nodes) {
       const d = Math.hypot(n.x || 0, n.y || 0, n.z || 0);
       if (d > r) r = d;
@@ -1621,13 +1519,13 @@
     const isDemand = a && a.type === 'demand';
     const color = isDemand ? STREAK_DEMAND : STREAK_KNOWLEDGE;
     const dur = isDemand ? 1100 : 1800;
-    const R = edgeRadius() * 1.4 + 30;
+    const R = edgeRadius() * 1.4 + 120;
     const dir = hashDir('from:' + ((a && (a.id || a.headline)) || 'x'));
     const ox = dir.x * R, oy = dir.y * R, oz = dir.z * R;
     const head = liveMesh(color, 1);
     const trail = liveMesh(color, 0.5);
     if (!head || !trail) return;
-    head.scale.setScalar(2.5);
+    head.scale.setScalar(9);
     scene.add(head); scene.add(trail);
     const t0 = performance.now();
     const dx = target.x - ox, dy = target.y - oy, dz = target.z - oz;
@@ -1665,7 +1563,7 @@
         update(now) {
           const raw = Math.min(1, (now - t0) / 420);
           const t = easeOutCubic(raw);
-          flash.scale.setScalar(2 + t * 12);
+          flash.scale.setScalar(8 + t * 46);
           flash.material.opacity = 0.9 * (1 - t);
           return raw < 1;
         },
@@ -1708,7 +1606,7 @@
             const t = easeOutCubic(raw); // designed motion: fast bloom, gentle settle
             const cc = coreNode();
             if (cc) ring.position.set(cc.x, cc.y, cc.z);
-            ring.scale.setScalar(4 + t * 96);
+            ring.scale.setScalar(20 + t * 280);
             ring.material.opacity = O * (1 - t);
             return raw < 1;
           },
@@ -1733,7 +1631,7 @@
     const O = opacity == null ? 0.5 : opacity, D = dur || 1400;
     const dot = liveMesh(color || '#ffb547', O);
     if (!dot) return;
-    dot.scale.setScalar(1.5);
+    dot.scale.setScalar(5);
     scene.add(dot);
     const t0 = performance.now();
     const ax = a.x, ay = a.y, az = a.z, bx = b.x, by = b.y, bz = b.z;
@@ -1774,7 +1672,7 @@
       scene.add(ring);
     }
     L.rings.forEach((ring, i) => {
-      const R = 14 + i * 9;
+      const R = 46 + i * 30;
       const breathe = 1 + 0.05 * Math.sin(t * 0.8 + i * 1.7);
       ring.position.set(core.x, core.y, core.z);
       ring.scale.set(R * breathe, R * 0.07 * breathe, R * breathe);
@@ -2017,7 +1915,7 @@
       const node = S.graph.graphData().nodes.find((n) => n.id === id);
       if (!node) return false;
       // Move camera to the node and select it.
-      const dist = 50;
+      const dist = 120;
       const pos = {
         x: (node.x || 0) + dist * 0.5,
         y: (node.y || 0) + dist * 0.3,
