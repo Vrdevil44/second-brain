@@ -1041,17 +1041,25 @@
       .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
-      .linkColor('color')
+      .linkColor((l) => {
+        // His call 2026-10-17: DOMAIN flow channels are faint, not bright spokes.
+        // They carry pulses, they don't divide the brain into parts.
+        if (l && (l.type || '').toUpperCase() === 'DOMAIN') {
+          return 'rgba(234, 246, 255, 0.18)';
+        }
+        return l.color || '#9aa0b4';
+      })
       .linkOpacity(0.55)
       .linkWidth((l) => {
         // His call 2026-10-17: core -> domain hubs slightly thicker (highways);
         // domain -> end nodes and end <-> end stay thin (streets), as before.
+        // DOMAIN links are faint flow channels, not bright spokes.
         const t = l && l.type;
         if (t === 'DOMAIN') {
           const s = l.source, tg = l.target;
           const sId = s && (s.id || s), tId = tg && (tg.id || tg);
-          // Core <-> domain hub: thicker. Domain hub <-> fact: thin.
-          if (sId === 'core' || tId === 'core') return 1.6;
+          // Core <-> domain hub: slightly thicker. Domain hub <-> fact: thin.
+          if (sId === 'core' || tId === 'core') return 1.2;
         }
         return 0.6;
       })
@@ -1127,6 +1135,20 @@
     try {
       const charge = S.graph.d3Force('charge');
       if (charge && typeof charge.strength === 'function') charge.strength(-110);
+    } catch (e) { /* force unavailable — non-fatal */ }
+    // His call 2026-10-17: scattered brain, not divisions. DOMAIN edges are
+    // flow channels (core->hub->fact pulses), NOT clustering forces.
+    // End-to-end relation links dominate the layout; DOMAIN links get
+    // near-zero strength so nodes stay scattered by their real relations.
+    try {
+      const link = S.graph.d3Force('link');
+      if (link && typeof link.strength === 'function') {
+        link.strength((l) => {
+          const t = l && (l.type || '').toUpperCase();
+          // DOMAIN: whisper-weak (flow only). Relations: full strength.
+          return t === 'DOMAIN' ? 0.05 : 1.0;
+        });
+      }
     } catch (e) { /* force unavailable — non-fatal */ }
     S.graph.d3Force('brainGravity', (alpha) => {
       if (!S || !S.graph) return;
