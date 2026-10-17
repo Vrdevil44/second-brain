@@ -382,11 +382,16 @@
     // The "core" is the mesh's centre of gravity — the heaviest node,
     // where each beat's pulse originates and which breathes when idle.
     // (A visual anchor only. The real core is the thinking mind, never a node.)
-    let coreId = null, bestScore = -1;
-    for (const n of nodes) {
-      const deg = (adj.get(n.id) || []).length;
-      const score = (n.gravity || 0.1) * 100000 + deg * 1000 + Math.min(999, n.val);
-      if (score > bestScore) { bestScore = score; coreId = n.id; }
+    // His call 2026-10-17: the ONE central core is the node with id 'core' —
+    // never a domain hub, no matter how many neighbors it has.
+    let coreId = nodes.some((n) => n.id === 'core') ? 'core' : null;
+    if (!coreId) {
+      let bestScore = -1;
+      for (const n of nodes) {
+        const deg = (adj.get(n.id) || []).length;
+        const score = (n.gravity || 0.1) * 100000 + deg * 1000 + Math.min(999, n.val);
+        if (score > bestScore) { bestScore = score; coreId = n.id; }
+      }
     }
     // The core's confirmed facts ride the payload (never as nodes): tapping
     // the ONE central core lists them. Sanitized at build time.
@@ -1025,7 +1030,13 @@
       .nodeColor('color')
       // Node variety (his call): seeded size jitter so the brain looks organic,
       // not uniform. Opacity stays full — nodes must glow like stars, never faint.
-      .nodeRelSize(4)
+      .nodeRelSize((n) => {
+        // His call 2026-10-17: core largest, domain hubs medium, end nodes smallest.
+        if (!n) return 3;
+        if (n.id === 'core') return 5;
+        if (n.id && String(n.id).startsWith('domain-')) return 4;
+        return 3;
+      })
       .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
