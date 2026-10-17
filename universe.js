@@ -1025,7 +1025,7 @@
       .nodeColor('color')
       // Node variety (his call): seeded size jitter so the brain looks organic,
       // not uniform. Opacity stays full — nodes must glow like stars, never faint.
-      .nodeRelSize((n) => 4 * (0.7 + 0.6 * hash01('sz' + (n && n.id))))
+      .nodeRelSize(12)
       .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
