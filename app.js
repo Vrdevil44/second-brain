@@ -645,8 +645,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=55b15b0');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=1396381');
+        await loadScriptOnce('universe.js?v=1396381');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2401,10 +2401,39 @@
     if (dot && (!hud || !hud.classList.contains('expanded'))) dot.classList.add('new');
   }
 
+  // ---- Data freshness indicator ------------------------------------------------
+  // R6 quick win: the updates panel header shows how old the newest brain
+  // state is, derived from live-state.json's `ts` field ("data 12 min old").
+  // Wired to every beat that reaches appendBeatUpdates (live tailnet API or
+  // the baked static fallback feed the same path), plus a 30s ticker so the
+  // age keeps climbing between beats. Empty until the first state arrives.
+  let freshState = null; // newest live state seen: { ts }
+  function fmtFreshAge(ms) {
+    if (ms < 0) ms = 0;
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return 'just updated';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + ' min old';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + ' hr' + (h === 1 ? '' : 's') + ' ' + (m % 60) + ' min old';
+    const d = Math.floor(h / 24);
+    return d + ' day' + (d === 1 ? '' : 's') + ' old';
+  }
+  function renderFreshness() {
+    const el = $('#data-freshness');
+    if (!el) return;
+    const t = (freshState && freshState.ts) ? Date.parse(freshState.ts) : NaN;
+    if (!Number.isFinite(t)) { el.textContent = ''; return; }
+    el.textContent = 'data ' + fmtFreshAge(Date.now() - t);
+  }
+  setInterval(renderFreshness, 30000);
+
   function appendBeatUpdates(st) {
     const list = $('#updates-list');
     if (!list || !st) return;
     updateBeatPill(st);
+    freshState = st;
+    renderFreshness();
     const demands = Array.isArray(st.demands) ? st.demands.filter(Boolean).slice(0, 5) : [];
     if (!demands.length) return; // silence holds: quiet beats add nothing
     // Drop the Loading/token placeholder once real entries exist.

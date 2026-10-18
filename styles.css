@@ -243,6 +243,14 @@ a:hover { color: #b0a6ff; }
   letter-spacing: .08em;
   color: var(--text-3);
 }
+.updates-log .freshness {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: 8px;
+}
 .updates-log ul { margin: 0; padding: 0; list-style: none; }
 .updates-log li {
   padding: 5px 0;
