@@ -646,7 +646,7 @@
     if (viewMode === '3d') {
       try {
         await loadScriptOnce('vendor/3d-force-graph.min.js');
-        await loadScriptOnce('universe.js?v=4d6454e');
+        await loadScriptOnce('universe.js?v=ce5668f');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
