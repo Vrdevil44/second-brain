@@ -252,25 +252,7 @@
     return m;
   }
 
-  // Static canvas starfield, shown through the transparent WebGL canvas.
-  // Zero WebGL cost; data: URL is allowed by the portal CSP (img-src data:).
-  // Deliberately faint: ~250 tiny 1px stars at 0.05–0.25 alpha, no sparkle
-  // crosses — atmosphere, not decoration.
-  let starURL = null;
-  function starfieldURL() {
-    if (starURL) return starURL;
-    const c = document.createElement('canvas');
-    c.width = 1024; c.height = 1024;
-    const g = c.getContext('2d');
-    for (let i = 0; i < 250; i++) {
-      const x = Math.random() * 1024, y = Math.random() * 1024;
-      const a = 0.05 + Math.random() * 0.20;
-      g.fillStyle = 'rgba(174,194,224,' + a.toFixed(2) + ')';
-      g.fillRect(x, y, 1, 1);
-    }
-    starURL = c.toDataURL('image/png');
-    return starURL;
-  }
+  // (starfield removed 2026-10-18 — background is pure void per his call)
 
   // f = focus factor (1 = normal, DIM = outside the focused neighborhood).
   function nodeColor(n, f) {
@@ -1174,15 +1156,12 @@
     S.onResize = onResize;
     window.addEventListener('resize', S.onResize);
 
-    // Deep-space backdrop with a whisper of stars (his call 2026-10-17: "thoda sa
-    // space jaise lage, like stars"). Static canvas, zero WebGL cost, data: URL
-    // allowed by the CSP. Extremely subtle — the brain is the hero, space is air.
+    // Pure void background (his call 2026-10-18): NOTHING in the background —
+    // no stars, no noise, no movement. Just empty space. The brain is the hero.
     try {
       S.stage.style.backgroundColor = BG;
-      S.stage.style.backgroundImage = 'url("' + starfieldURL() + '")';
-      S.stage.style.backgroundSize = 'cover';
-      S.stage.style.backgroundPosition = 'center';
-    } catch (e) { /* starfield is decorative — never break init */ }
+      S.stage.style.backgroundImage = 'none';
+    } catch (e) { /* background is decorative — never break init */ }
 
     // Gentle auto-rotation until the visitor first grabs the scene.
     try {
