@@ -1275,10 +1275,9 @@
   //   INTERIOR (the mind itself): each beat = a pulse emanating from the core
   //     node; echo-touched nodes glow color-coded — contradiction ember red,
   //     new link green, fresh info cool blue, demand pulsing amber.
-  //   EXTERIOR (the universe): arrivals from outside — new facts, new demands —
-  //     streak in from beyond the mesh edge as celestial events (a falling star
-  //     for knowledge, an electric-blue thundercrack for demands), then resolve
-  //     into the mesh. Calm interior, cosmos knocking at the edge.
+  //   EXTERIOR: quiet now (his call 2026-10-19 — the falling-star comet streaks
+  //     are removed). New arrivals land straight as a node flash + glow, then
+  //     resolve into the mesh.
   // Idle (no new beat): the core breathes. Never a dead screen.
   // Silent by design: no audio anywhere — the core's voice lives in the text
   // ticker only.
@@ -1434,8 +1433,9 @@
     }
   }
 
-  // One beat: EXTERIOR first (arrivals streak in, staggered), then the
-  // INTERIOR response (core pulse + echo glows). No arrivals = interior only.
+  // One beat: arrivals land instantly as node flashes (his call 2026-10-19 —
+  // the comet-streak flight from beyond the mesh edge is removed), then the
+  // INTERIOR response (core pulse + echo glows).
   // Beat entries merge into the Updates feed (his call 2026-10-13): no separate
   // CORE panel — the api bridge hands the beat to the portal, which appends
   // the entries + a closing beat summary as feed items.
@@ -1591,41 +1591,12 @@
     const scene = liveScene();
     const target = arrivalTarget(a);
     if (!scene || !target) return;
+    // his call 2026-10-19: no more asteroid streaks. The comet flight from
+    // beyond the mesh edge is gone — arrivals land instantly as a node
+    // flash + glow. The core pulse ripple stays untouched.
     const isDemand = a && a.type === 'demand';
     const color = isDemand ? STREAK_DEMAND : STREAK_KNOWLEDGE;
-    const dur = isDemand ? 1100 : 1800;
-    const R = edgeRadius() * 1.4 + 120;
-    const dir = hashDir('from:' + ((a && (a.id || a.headline)) || 'x'));
-    const ox = dir.x * R, oy = dir.y * R, oz = dir.z * R;
-    const head = liveMesh(color, 1);
-    const trail = liveMesh(color, 0.5);
-    if (!head || !trail) return;
-    head.scale.setScalar(9);
-    scene.add(head); scene.add(trail);
-    const t0 = performance.now();
-    const dx = target.x - ox, dy = target.y - oy, dz = target.z - oz;
-    const len = Math.hypot(dx, dy, dz) || 1;
-    const ux = dx / len, uy = dy / len, uz = dz / len;
-    const fx = {
-      update(now) {
-        const t = Math.min(1, (now - t0) / dur);
-        const e = t * t; // ease-in: the streak accelerates inward
-        const hx = ox + dx * e, hy = oy + dy * e, hz = oz + dz * e;
-        head.position.set(hx, hy, hz);
-        trail.position.set(hx - ux * 30, hy - uy * 30, hz - uz * 30);
-        trail.scale.set(3.5, 3.5, 34);
-        trail.lookAt(hx + ux, hy + uy, hz + uz);
-        if (t < 1) return true;
-        landArrival(a, target, scene, head, color);
-        return false;
-      },
-      dispose(sc) {
-        const s2 = sc || scene;
-        s2.remove(head); s2.remove(trail);
-        head.material.dispose(); trail.material.dispose();
-      },
-    };
-    S.live.fx.push(fx);
+    landArrival(a, target, scene, null, color);
   }
 
   function landArrival(a, target, scene, head, color) {
@@ -1645,7 +1616,7 @@
         dispose(sc) { (sc || scene).remove(flash); flash.material.dispose(); },
       });
     }
-    try { scene.remove(head); head.material.dispose(); } catch (e) { /* already gone */ }
+    if (head) try { scene.remove(head); head.material.dispose(); } catch (e) { /* already gone */ }
     if (target.nodeId && S.live) {
       const kind = a && a.type === 'demand' ? 'demand' : 'fresh';
       S.live.glow.set(target.nodeId, { kind, until: Date.now() + (kind === 'demand' ? 150000 : 60000) });
@@ -1942,7 +1913,7 @@
     clearSelection: () => closePanel(),
     // DYNAMIC UI v1: the sync button shows the harvest happening. syncSweep
     // fires when the sync starts (a sweep leaves the core); syncDone fires
-    // when it lands — new arrivals streak in, the ticker tells the truth.
+    // when it lands — new arrivals flash onto their nodes, the ticker tells the truth.
     syncSweep() {
       if (!S || !S.live || !S.live.on) return false;
       sweepRing();
