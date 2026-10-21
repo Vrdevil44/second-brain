@@ -1369,6 +1369,32 @@
   // This keeps the HUD dial live within ~a minute; the st.sync merge in
   // live-state.json remains as the fallback. A force sync from the portal
   // button owns the dial while it runs (manual override wins).
+  // Sync dial v2 tolerance (additive): unknown step/state values render label-only (words + percent, never an
+  // error); `step` is read only when it is a known enum value; avg_bps is read from estimate.avg_bps or a
+  // top-level avg_bps. v1 files (no step) render exactly as before.
+  const SYNC_STEPS = ['peek', 'stage', 'verify', 'merge', 'publish', 'idle', 'failed'];
+  function syncDialFace(sy) {
+    const step = SYNC_STEPS.indexOf(sy.step) >= 0 ? sy.step : null;
+    const bps = sy.estimate && typeof sy.estimate.avg_bps === 'number' ? sy.estimate.avg_bps : (typeof sy.avg_bps === 'number' ? sy.avg_bps : null);
+    return {
+      step,
+      bps,
+      busy: sy.state === 'delivering' || sy.state === 'peek' || sy.state === 'busy',
+      failed: sy.state === 'failed',
+    };
+  }
+  function applySyncDial(el, sy, p) {
+    const f = syncDialFace(sy);
+    el.style.setProperty('--p', p + '%');
+    el.title = sy.words || 'sync';
+    el.setAttribute('aria-label', 'sync ' + p + '% — ' + (f.step ? f.step + ': ' : '') + (sy.words || ''));
+    el.classList.toggle('busy', f.busy);
+    el.classList.toggle('failed', f.failed);
+    if (f.step) el.dataset.step = f.step; else delete el.dataset.step;
+    if (f.bps !== null) el.dataset.bps = String(f.bps); else delete el.dataset.bps;
+    el.classList.add('on');
+  }
+
   async function pollSyncDial() {
     if (!S || !S.live || !S.live.on) return;
     try {
@@ -1379,12 +1405,7 @@
       if (S.hudSyncManualUntil && Date.now() < S.hudSyncManualUntil) return;
       if (!S.hud || !S.hud._sync) return;
       const p = Math.max(0, Math.min(100, sy.dial.percent));
-      const el = S.hud._sync;
-      el.style.setProperty('--p', p + '%');
-      el.title = sy.words || 'sync';
-      el.setAttribute('aria-label', 'sync ' + p + '% — ' + (sy.words || ''));
-      el.classList.toggle('busy', sy.state === 'delivering' || sy.state === 'peek');
-      el.classList.add('on');
+      applySyncDial(S.hud._sync, sy, p);
     } catch (e) { /* keep last dial state */ }
   }
 
@@ -1544,11 +1565,7 @@
       // Force sync owns the dial right now — hands off.
     } else if (sy && sy.dial && typeof sy.dial.percent === 'number') {
       const p = Math.max(0, Math.min(100, sy.dial.percent));
-      hud._sync.style.setProperty('--p', p + '%');
-      hud._sync.title = sy.words || 'sync';
-      hud._sync.setAttribute('aria-label', 'sync ' + p + '% — ' + (sy.words || ''));
-      hud._sync.classList.toggle('busy', sy.state === 'delivering' || sy.state === 'peek');
-      hud._sync.classList.add('on');
+      applySyncDial(hud._sync, sy, p);
     } else {
       hud._sync.classList.remove('on');
     }

@@ -1177,6 +1177,7 @@ body.view-3d .node-panel { display: none; }
   display: none; }
 .hud-sync.on { display: inline-block; }
 .hud-sync.busy { background: conic-gradient(var(--target) var(--p), rgba(255,255,255,.14) 0); }
+.hud-sync.failed { background: conic-gradient(#e5484d var(--p), rgba(255,255,255,.14) 0); }
 .hud-body { padding: 0 12px 11px; }
 .hud.collapsed .hud-body { display: none; }
 .hud-focus { margin: 2px 0 6px; padding: 0; list-style: none; }

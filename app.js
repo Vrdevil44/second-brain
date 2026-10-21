@@ -645,8 +645,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c7b95c3');
-        await loadScriptOnce('universe.js?v=c7b95c3');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0ee0353');
+        await loadScriptOnce('universe.js?v=0ee0353');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1508,7 +1508,7 @@
       // 1. Dispatch the workflow directly.
       const disp = await api('/repos/Vrdevil44/dream-brain/actions/workflows/sync.yml/dispatches', {
         method: 'POST',
-        body: JSON.stringify({ ref: 'master' }),
+        body: JSON.stringify({ ref: 'master', inputs: { force: 'true' } }), // sync dial v2: the portal button bypasses the peek gate
       });
       if (!disp.ok) throw new Error('GitHub API ' + disp.status);
 
