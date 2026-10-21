@@ -71,6 +71,7 @@
   const FALLBACK_LINK = '#6e7187';
   const BG = '#07080d';
   const DBLCLICK_MS = 280;
+  const DIM_HOVER = 0.10; // dim factor while a hover (not a pin) anchors the focus
   const DIM = 0.15; // opacity factor for nodes/links outside the focus neighborhood
 
   let S = null; // live state; null when not initialised
@@ -463,8 +464,8 @@
   }
 
   // Opacity factor for a node: 1 when in focus (or no focus), DIM otherwise.
-  function focusOpacity(id) {
-    return !S || !S.focusSet || S.focusSet.has(id) ? 1 : DIM;
+  function focusOpacity(id, dim = DIM) {
+    return !S || !S.focusSet || S.focusSet.has(id) ? 1 : dim;
   }
 
   // Focus-aware link particles: dimmed links show no particles (their
@@ -478,11 +479,12 @@
   function updateFocus() {
     if (!S || !S.graph) return;
     S.focusSet = computeFocusSet();
+    const dim = S.hovered ? DIM_HOVER : DIM;
     // Re-setting an accessor makes the lib re-digest node/link materials.
     S.graph
-      .nodeColor((n) => nodeColor(n, focusOpacity(n.id)))
+      .nodeColor((n) => nodeColor(n, focusOpacity(n.id, dim)))
       .linkColor((l) => {
-        const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : DIM;
+        const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : dim;
         let c = f === 1 ? l.color : hexToRgba(l.color, f);
         // Domain breath: links inside the most active domain oscillate ±0.03 —
         // almost imperceptible, and only when there is real recent activity.
@@ -924,7 +926,8 @@
 
   function onKeyDown(e) {
     if (!S || e.key !== 'Escape') return;
-    if (e.target === S.search) return; // search box handles its own Escape
+    const t = e.target;
+    if (t === S.search || (t && (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable))) return; // form fields handle their own Escape
     closePanel();
   }
 

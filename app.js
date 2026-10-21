@@ -645,8 +645,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=540447c');
-        await loadScriptOnce('universe.js?v=540447c');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=1e9ac33');
+        await loadScriptOnce('universe.js?v=1e9ac33');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1038,7 +1038,7 @@
 
     ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * tx, dpr * ty);
 
-    const focus = selected || hovered;
+    const focus = hovered || selected;
     const focusSet = new Set();
     if (focus) {
       focusSet.add(focus.id);
@@ -1096,7 +1096,8 @@
       ctx.fill();
 
       if (n === selected) {
-        ctx.strokeStyle = 'rgba(110,231,255,0.9)';
+        // Hover wins over the pin: keep the pinned ring, but subtle when outside the hover ego set.
+        ctx.strokeStyle = focusSet.has(n.id) ? 'rgba(110,231,255,0.9)' : 'rgba(110,231,255,0.35)';
         ctx.lineWidth = 2 / k;
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.r + 5 / k, 0, Math.PI * 2);
@@ -2235,7 +2236,7 @@
     if (e.key === 'Escape') {
       if (!$('#settings-modal').hidden) return closeSettings();
       if (!$('#dump-panel').hidden) { if (!dump.uploading) closeDump(); return; }
-      if (selected) return selectNode(null);
+      if (selected && !/INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') && !(e.target && e.target.isContentEditable)) return selectNode(null);
       return;
     }
     const tag = (e.target && e.target.tagName) || '';
