@@ -509,7 +509,7 @@
       // Rest state: halo off. Only the selected node and fresh nodes earn a glow.
       const show = (S.selected === n.id) || isFresh(n.id);
       if (!show) { setHaloOpacity(n._halo, 0); continue; }
-      const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id);
+      const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id, dim);
       const boost = (S.selected === n.id) ? 1.6 : 1;
       const fresh = isFresh(n.id) ? 1.9 : 1;
       setHaloOpacity(n._halo, Math.min(0.5, HALO_OPACITY * a * boost * fresh));
@@ -613,6 +613,7 @@
     S.panelNode = null;
     S.panel.hidden = true;
     S.tip.hidden = true;
+    armResume();
     // Return the orbit target to the middle of the network ONLY when zoomed out
     // (overview). When zoomed in exploring a node, leave the target where the
     // user put it — exploration-first, no sticky snap-back (his call 2026-10-17).
@@ -924,7 +925,58 @@
     S.graph.width(d.w).height(d.h);
   }
 
+  // Track the input in hand (mouse/pen/touch). Default (nothing seen yet) allows hover.
+  function onModality(e) {
+    if (!S || !e.pointerType) return;
+    const prev = S.modality;
+    S.modality = e.pointerType;
+    if (prev === 'touch' && S.modality !== 'touch' && (S.hovered || S.hoverLink)) {
+      S.hovered = null; // drop stale touch-era hover state
+      S.hoverLink = null;
+      S.tip.hidden = true;
+      S.stage.style.cursor = '';
+      updateFocus();
+    }
+  }
+
+  // ---- Idle auto-rotate resume (design doc A10) ----
+  const ROTATE_SPEED = 0.55;
+  const IDLE_RESUME_MS = 3500;
+  const ROTATE_RAMP_MS = 1000;
+
+  function stopRotation() {
+    if (!S) return;
+    if (S.idleTimer) { clearTimeout(S.idleTimer); S.idleTimer = null; }
+    if (S.rampRaf) { cancelAnimationFrame(S.rampRaf); S.rampRaf = null; }
+    if (S.ctl) S.ctl.autoRotate = false;
+  }
+
+  // (Re)start the quiet-period countdown. Rotation only returns when nothing is
+  // hovered, nothing is selected/focused and the detail panel is closed; hover end
+  // and closePanel() re-arm the timer.
+  function armResume() {
+    if (!S || !S.ctl) return;
+    if (S.idleTimer) clearTimeout(S.idleTimer);
+    S.idleTimer = setTimeout(() => {
+      if (!S) return;
+      S.idleTimer = null;
+      if (S.pointerHeld || S.hovered || S.hoverLink || S.selected || S.panelNode || !S.panel.hidden) return;
+      const ctl = S.ctl;
+      const t0 = performance.now();
+      ctl.autoRotateSpeed = 0;
+      ctl.autoRotate = true;
+      const step = (now) => {
+        if (!S) return;
+        const k = Math.min(1, (now - t0) / ROTATE_RAMP_MS);
+        ctl.autoRotateSpeed = ROTATE_SPEED * k;
+        S.rampRaf = k < 1 ? requestAnimationFrame(step) : null;
+      };
+      S.rampRaf = requestAnimationFrame(step);
+    }, IDLE_RESUME_MS);
+  }
+
   function onKeyDown(e) {
+    if (S && S.ctl) { stopRotation(); armResume(); } // arrow-key orbit etc.
     if (!S || e.key !== 'Escape') return;
     const t = e.target;
     if (t === S.search || (t && (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable))) return; // form fields handle their own Escape
@@ -1073,11 +1125,13 @@
       .onBackgroundClick(onBackgroundClick)
       .onNodeHover((node) => {
         if (!S) return;
-        // No hover tooltips on touch — tap opens the detail panel instead (his call 2026-10-10).
-        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return;
+        // No hover tooltips while the input in hand is touch — tap opens the detail panel
+        // instead (his call 2026-10-10). Modality, not capability: a mouse on a touch laptop hovers.
+        if (S.modality === 'touch') return;
         const id = node ? node.id : null;
         if (S.hovered === id) return;
         S.hovered = id;
+        if (id) stopRotation(); else armResume();
         if (node) {
           S.tip.textContent = node.name;
           S.tip.hidden = false;
@@ -1089,9 +1143,10 @@
       })
       .onLinkHover((link) => {
         if (!S) return;
-        // No hover tooltips on touch (his call 2026-10-10).
-        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) return;
+        // No hover tooltips while the input in hand is touch (his call 2026-10-10).
+        if (S.modality === 'touch') return;
         S.hoverLink = link || null;
+        if (link) stopRotation(); else armResume();
         if (!S.hovered) { // node hover takes tip priority
           if (link) {
             S.tip.textContent = link.type;
@@ -1170,8 +1225,21 @@
     try {
       const ctl = S.graph.controls();
       ctl.autoRotate = true;
-      ctl.autoRotateSpeed = 0.55;
-      container.addEventListener('pointerdown', () => { ctl.autoRotate = false; }, { once: true });
+      ctl.autoRotateSpeed = ROTATE_SPEED;
+      S.ctl = ctl;
+      // Idle resume: any manual interaction stops rotation; it eases back in after
+      // IDLE_RESUME_MS of quiet (see armResume for the exceptions).
+      S.onInteractStart = () => { S.pointerHeld = true; stopRotation(); };
+      S.onInteractEnd = () => { S.pointerHeld = false; armResume(); };
+      S.onInteract = () => { stopRotation(); armResume(); };
+      if (typeof ctl.addEventListener === 'function') {
+        ctl.addEventListener('start', S.onInteractStart);
+        ctl.addEventListener('end', S.onInteractEnd);
+      }
+      container.addEventListener('pointerdown', S.onInteractStart);
+      window.addEventListener('pointerup', S.onInteractEnd);
+      window.addEventListener('pointercancel', S.onInteractEnd);
+      container.addEventListener('wheel', S.onInteract, { passive: true });
     } catch (e) { /* controls unavailable — non-fatal */ }
 
     // Glow halos install asynchronously: __threeObj is created in a debounced
@@ -1194,6 +1262,10 @@
     S.onKey = onKeyDown;
     document.addEventListener('keydown', S.onKey);
     container.addEventListener('pointermove', onPointerMove);
+    // Input modality (capture phase: set before the library's raycast hover callback fires).
+    S.onModality = onModality;
+    container.addEventListener('pointermove', S.onModality, true);
+    container.addEventListener('pointerdown', S.onModality, true);
     if (typeof ResizeObserver === 'function') {
       S.ro = new ResizeObserver(onResize);
       S.ro.observe(container);
@@ -1242,7 +1314,21 @@
     if (s.clickTimer) clearTimeout(s.clickTimer);
     window.removeEventListener('resize', s.onResize);
     document.removeEventListener('keydown', s.onKey);
-    if (s.container) s.container.removeEventListener('pointermove', onPointerMove);
+    if (s.container) {
+      s.container.removeEventListener('pointermove', onPointerMove);
+      s.container.removeEventListener('pointermove', s.onModality, true);
+      s.container.removeEventListener('pointerdown', s.onModality, true);
+      s.container.removeEventListener('pointerdown', s.onInteractStart);
+      s.container.removeEventListener('wheel', s.onInteract);
+    }
+    window.removeEventListener('pointerup', s.onInteractEnd);
+    window.removeEventListener('pointercancel', s.onInteractEnd);
+    if (s.ctl && typeof s.ctl.removeEventListener === 'function') {
+      s.ctl.removeEventListener('start', s.onInteractStart);
+      s.ctl.removeEventListener('end', s.onInteractEnd);
+    }
+    if (s.idleTimer) clearTimeout(s.idleTimer);
+    if (s.rampRaf) cancelAnimationFrame(s.rampRaf);
     if (s.ro) s.ro.disconnect();
     try {
       if (s.graph) {
@@ -1799,9 +1885,10 @@
     const nowMs = Date.now();
     // The breath deepens as the core forms — a real signal, not decoration.
     const depth = [0.7, 1.0, 1.3, 1.6][formationIndex()] || 1.0;
+    const dim = S.hovered ? DIM_HOVER : DIM; // hover dim must reach halos too
     for (const n of nodes) {
       if (!n._halo) continue;
-      const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id);
+      const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id, dim);
       // Rest state: halo off — no bubble. Glow only for live events, selection,
       // fresh nodes, and the breathing core.
       let o = 0;
