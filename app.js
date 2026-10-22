@@ -645,8 +645,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f3fa33b');
-        await loadScriptOnce('universe.js?v=f3fa33b');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=2f96797');
+        await loadScriptOnce('universe.js?v=2f96797');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -885,7 +885,6 @@
     sim.alpha = reducedMotion ? 0 : 0.25;
     fitView(false);
     startSim();
-    startLiveFeed();
   }
 
   function radiusFor(type, size) {
@@ -1020,26 +1019,17 @@
     rafId = 0;
     if (viewMode !== '2d') return;
     if (viewAnim) stepViewAnim(t);
-    const w0 = performance.now();
-    stepEdgeFx(w0);
-    const flowOn = flowActive() && graph2dBuilt; // UI-1.1: ambient flow keeps a continuous loop while shown
-    if (edgeFx.size) needsDraw = true; // active edge events animate; idle redraws stay on demand
-    if (flowOn) needsDraw = true;
     if (sim.running) {
       tick();
       if (sim.alpha < 0.004 && sim.alphaTarget === 0) sim.running = false;
       needsDraw = true;
     }
-    if (needsDraw && !(flowOn && flowThrottled(w0))) { // degraded flow: draw at most ~30fps
+    if (needsDraw) {
       needsDraw = false;
       draw();
-      flow.lastDraw = w0;
-      if (flowOn) stepFlowGuard(performance.now() - w0);
     }
-    if (sim.running || viewAnim || edgeFx.size || flowOn) rafId = requestAnimationFrame(frame);
+    if (sim.running || viewAnim) rafId = requestAnimationFrame(frame);
   }
-
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && viewMode === '2d') requestRender(); }); // resume the flow loop
 
   function resize() {
     view.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -1057,336 +1047,6 @@
   const RGB = Object.fromEntries(Object.entries(TYPE_COLORS).map(([k, v]) => [k, hexToRgb(v)]));
   RGB.unknown = hexToRgb(UNKNOWN_COLOR);
   const rgba = (rgb, a) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
-
-  // ---- UI-1 event edges (2D parity with universe.js) -------------------------
-  // Same state machine and constants as the 3D renderer: idle trace ->
-  // rise + traveling dot -> arrival ring + full edge re-flash -> exponential
-  // decay. Events come from the same live-state activity[] / arrivals[] fields,
-  // read-only. Autonomous activity: shows on every input modality.
-  const TRACE_OPACITY = 0.07;
-  const SKELETON_OPACITY = 0.18;
-  const FLASH_OPACITY = 0.9;
-  const TRAVEL_LEVEL = 0.55;
-  const DECAY_MS = 2000;
-  const TRAVEL_MS = 1400;
-  const MAX_CONCURRENT = 12;
-  const SLOW_FRAME_MS = 24;
-  const FRAME_WINDOW = 60;
-  const EDGE_RGB = {
-    demand: [255, 181, 71], contradiction: [255, 107, 77], sync: [110, 231, 255], resolved: [61, 220, 151],
-  };
-  const edgeFx = new Map(); // 'from|to' -> { t0, kind, a, b, edge, life }
-  const edgeQuiet = { frameMs: [], last: 0, degrade: false, thin: 0 };
-  const liveFeed = { lastKey: null, timer: 0 };
-
-  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-
-  function edgeFxLevel(age) {
-    if (age < 0) return 0;
-    if (age < TRAVEL_MS) return FLASH_OPACITY * TRAVEL_LEVEL * easeOutCubic(Math.min(1, age / 250));
-    const since = age - TRAVEL_MS;
-    if (since < 120) return FLASH_OPACITY * (TRAVEL_LEVEL + (1 - TRAVEL_LEVEL) * easeOutCubic(since / 120));
-    return FLASH_OPACITY * Math.exp(-(since - 120) / (DECAY_MS / 4));
-  }
-
-  // Idle alpha for a string: core spokes stay a faint skeleton, the rest a trace.
-  function edgeBaseAlpha(a, b) {
-    return (a.id === 'core' || b.id === 'core') ? SKELETON_OPACITY : TRACE_OPACITY;
-  }
-
-  // Point on the drawn string (same quadratic curve as the stroke) at progress t.
-  function edgeDotPos(a, b, bend, t) {
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const cx = (a.x + b.x) / 2 - dy * 0.1 * bend, cy = (a.y + b.y) / 2 + dx * 0.1 * bend;
-    const u = 1 - t;
-    return { x: u * u * a.x + 2 * u * t * cx + t * t * b.x, y: u * u * a.y + 2 * u * t * cy + t * t * b.y };
-  }
-
-  function fireEdgeEvent(fromId, toId, kind, now) {
-    if (fromId == null || toId == null || document.hidden || reducedMotion) return false;
-    const a = graph.byId.get(String(fromId)), b = graph.byId.get(String(toId));
-    if (!a || !b || a === b) return false; // not in the visible graph: no fake state
-    const priority = kind === 'demand' || kind === 'contradiction';
-    if (edgeQuiet.degrade && !priority && (edgeQuiet.thin++ % 2)) return false;
-    const key = a.id + '|' + b.id;
-    edgeFx.delete(key);
-    while (edgeFx.size >= MAX_CONCURRENT) edgeFx.delete(edgeFx.keys().next().value); // oldest first
-    const edge = graph.edges.find((e) => (e.source === a && e.target === b) || (e.source === b && e.target === a)) || null;
-    edgeFx.set(key, { t0: now == null ? performance.now() : now, kind, a, b, edge, life: TRAVEL_MS + DECAY_MS });
-    requestRender();
-    return true;
-  }
-
-  function stepEdgeFx(now) {
-    for (const [key, e] of edgeFx) if (now - e.t0 > e.life) edgeFx.delete(key);
-    if (edgeQuiet.last) {
-      edgeQuiet.frameMs.push(now - edgeQuiet.last);
-      if (edgeQuiet.frameMs.length >= FRAME_WINDOW) {
-        const avg = edgeQuiet.frameMs.reduce((x, y) => x + y, 0) / edgeQuiet.frameMs.length;
-        edgeQuiet.degrade = avg > SLOW_FRAME_MS;
-        edgeQuiet.frameMs.length = 0;
-      }
-    }
-    edgeQuiet.last = edgeFx.size ? now : 0; // idle gaps are not slow frames
-  }
-
-  // Activity -> edge events (mirrors universe.js activityEvent; beat/think: none).
-  function edgeActivity(a, now) {
-    if (!a) return;
-    const core = graph.byId.has('core') ? 'core' : null;
-    const ids = (a.fids || []).map(String).filter((id) => graph.byId.has(id));
-    if (a.kind === 'demand_opened' || a.kind === 'contradiction') {
-      if (ids.length >= 2) fireEdgeEvent(ids[0], ids[1], a.kind === 'contradiction' ? 'contradiction' : 'demand', now);
-    } else if ((a.kind === 'sync' || a.kind === 'merge') && core) {
-      ids.forEach((id, i) => { if (id !== core) setTimeout(() => { try { fireEdgeEvent(core, id, 'sync'); } catch (e) { /* never break the frame */ } }, i * 150); });
-    } else if (a.kind === 'demand_resolved' && core && ids.length && ids[0] !== core) {
-      fireEdgeEvent(core, ids[0], 'resolved', now);
-    }
-  }
-
-  function feedEdgeEvents(st) {
-    if (!st) return;
-    const acts = Array.isArray(st.activity) ? st.activity : [];
-    let start = 0;
-    if (liveFeed.lastKey) {
-      const ki = acts.findIndex((a) => a && (a.t + '|' + a.kind) === liveFeed.lastKey);
-      if (ki >= 0) start = ki + 1;
-    }
-    for (let i = start; i < acts.length; i++) {
-      try { edgeActivity(acts[i]); } catch (e) { /* never break the frame */ }
-    }
-    if (acts.length) liveFeed.lastKey = acts[acts.length - 1].t + '|' + acts[acts.length - 1].kind;
-    const arrivals = Array.isArray(st.arrivals) ? st.arrivals.filter(Boolean).slice(0, 8) : [];
-    if (graph.byId.has('core')) {
-      for (const ar of arrivals) {
-        const id = ar && (ar.id || ar.nodeId || ar.fid);
-        if (id != null && String(id) !== 'core') { try { fireEdgeEvent('core', id, 'sync'); } catch (e) { /* ignore */ } }
-      }
-    }
-  }
-
-  // The 2D view polls the same live-state the 3D universe does, only while shown.
-  function startLiveFeed() {
-    if (liveFeed.timer) return;
-    const poll = async () => {
-      if (viewMode !== '2d' || !graph2dBuilt || document.hidden) return;
-      try { feedEdgeEvents(await loadLiveStateLive()); } catch (e) { /* keep last state */ }
-    };
-    liveFeed.timer = setInterval(poll, 15000);
-    setTimeout(poll, 600); // after buildGraph returns and graph2dBuilt is set
-  }
-
-  // ---- UI-1.1 continuous flow + endpoint flicker (2D parity with universe.js) --
-  // Same constants, same seeded per-edge speed and the same pure helpers as the 3D
-  // renderer (kept in lockstep; test/portal-flow-flicker.test.mjs checks both copies).
-  // 2D has no photon objects, so the packet position is analytic: t = frac(elapsed /
-  // cycleMs + phase), with cycleMs derived from the 3D speed (progress per 60Hz frame).
-  const FLICKER_FRACTION = 0.18;
-  const FLICKER_MIN_LEN = 3;
-  const FLICKER_MAX_LEN = 14;
-  const FLICKER_PEAK = 0.6;
-  const FLICKER_RISE_MS = 60;
-  const FLICKER_LIFE_MS = 450;
-  const FLICKER_P = 0.35;
-  const MAX_FLICKER = 8;
-  const FLICKER_COOLDOWN_MS = 1500;
-  const FLICKER_SPAWN_CAP = 2;
-  const FLICKER_SCAN = 64;
-  const FLICKER_SCAN_DEGRADED = 16;
-  const FLICKER_WARMUP_MS = 2000;
-  const FLICKER_SPAWN_FRESH = 0.06;
-  const FLICKER_PENDING_MS = 15000;
-  const CYCLE_ARRIVE = 0.97;
-  const FLICKER_STOP_WINDOWS = 3;
-  const FLICKER_LOG_FRAMES = 600;
-  const FLOW_SLOW_WORK_MS = 12;   // avg per-frame work (draw + scheduler) that counts as a slow window
-  const FLOW_DEGRADED_FRAME_MS = 33; // 30fps cap while degraded
-
-  // Seeded 0..1 hash (FNV-1a), identical to universe.js so both views agree per edge.
-  function hash01(str) {
-    let h = 2166136261;
-    const s = String(str);
-    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return ((h >>> 0) % 100000) / 100000;
-  }
-  function edgeKey(e) {
-    return String(e.source.id) + '>' + String(e.target.id);
-  }
-  // Dimmed edges (an endpoint outside the focus set) carry no packet.
-  function particleCountFor(e, focusSet) {
-    if (!focusSet) return 1;
-    return (focusSet.has(e.source.id) && focusSet.has(e.target.id)) ? 1 : 0;
-  }
-  function ambientParticleSpeed(e) {
-    return 0.0018 + 0.0052 * hash01('ps' + edgeKey(e));
-  }
-  function flowCycleMs(speed) {
-    return (1 / speed) / 60 * 1000;
-  }
-  function flowT(elapsedMs, cycleMs, phase) {
-    const x = elapsedMs / cycleMs + phase;
-    return x - Math.floor(x);
-  }
-  function detectCycleEdge(prevProgress, curProgress) {
-    if (prevProgress == null || curProgress == null) return null;
-    if (prevProgress > 0.5 && curProgress < prevProgress) return 'spawn';
-    if (prevProgress < CYCLE_ARRIVE && curProgress >= CYCLE_ARRIVE) return 'arrive';
-    return null;
-  }
-  // t-range of the end-anchored bright segment: fraction of the edge, clamped to
-  // minLen..maxLen in world units (same clamp as the 3D segment).
-  function flickerSpan(len, end, fraction, minLen, maxLen) {
-    if (!(len > 0)) return { t0: 0, t1: 0, end };
-    const f = Math.min(len, Math.max(minLen, Math.min(maxLen, len * fraction))) / len;
-    return end === 'target' ? { t0: 1 - f, t1: 1, end } : { t0: 0, t1: f, end: 'source' };
-  }
-  function pickFlickerCandidates(links, cursor, budget) {
-    const n = links ? links.length : 0;
-    if (!n || budget <= 0) return { picked: [], cursor: 0 };
-    const count = Math.min(budget, n), start = (cursor | 0) % n, picked = [];
-    for (let i = 0; i < count; i++) picked.push(links[(start + i) % n]);
-    return { picked, cursor: (start + count) % n };
-  }
-  function admitFlicker(state, key, now, paired) {
-    if (state.spawned >= state.spawnCap) return { ok: false, reason: 'frame-cap' };
-    if (state.active >= state.cap) return { ok: false, reason: 'pool' };
-    if (state.realCount + state.active + 1 > state.maxConcurrent) return { ok: false, reason: 'real-priority' };
-    const last = state.lastFired.get(key);
-    if (!paired && last != null && now - last < state.cooldownMs) return { ok: false, reason: 'cooldown' };
-    state.active++;
-    state.spawned++;
-    state.lastFired.set(key, now);
-    return { ok: true, reason: 'admitted' };
-  }
-  function flickersToDrop(realCount, active, maxConcurrent) {
-    return Math.max(0, realCount + active - maxConcurrent);
-  }
-  function flickerLevel(age) {
-    if (age <= 0 || age >= FLICKER_LIFE_MS) return 0;
-    if (age < FLICKER_RISE_MS) return FLICKER_PEAK * (1 - Math.pow(1 - age / FLICKER_RISE_MS, 3));
-    return FLICKER_PEAK * Math.exp(-(age - FLICKER_RISE_MS) / ((FLICKER_LIFE_MS - FLICKER_RISE_MS) / 5));
-  }
-  function flickerTuning(degradedWindows) {
-    if (degradedWindows >= FLICKER_STOP_WINDOWS) return { p: 0, maxFlicker: 0, scan: 0, stopped: true };
-    if (degradedWindows >= 1) return { p: FLICKER_P / 2, maxFlicker: MAX_FLICKER / 2, scan: FLICKER_SCAN_DEGRADED, stopped: false };
-    return { p: FLICKER_P, maxFlicker: MAX_FLICKER, scan: FLICKER_SCAN, stopped: false };
-  }
-  function flickerDraw(key, cycle, p) {
-    return hash01('fl' + key + ':' + cycle) < p;
-  }
-
-  // Scheduler state; doubles as the admitFlicker state object.
-  const flow = {
-    t0: performance.now(), graph: null, track: new Map(), pending: new Map(), live: [], rings: [],
-    active: 0, cap: MAX_FLICKER, realCount: 0, maxConcurrent: MAX_CONCURRENT, spawned: 0,
-    spawnCap: FLICKER_SPAWN_CAP, cooldownMs: FLICKER_COOLDOWN_MS, lastFired: new Map(),
-    cursor: 0, frame: 0, warmUntil: 0, degradedWindows: 0, workMs: [], lastDraw: 0, lastStep: 0,
-    costMs: 0, costN: 0,
-  };
-  // Own guard, separate from edgeQuiet (which measures event frames only).
-  const flowActive = () => !document.hidden && !reducedMotion;
-  const flowThrottled = (now) => flow.degradedWindows > 0 && now - flow.lastDraw < FLOW_DEGRADED_FRAME_MS;
-
-  function edgeFxActive(e) {
-    return edgeFx.size > 0 && (edgeFx.has(e.source.id + '|' + e.target.id) || edgeFx.has(e.target.id + '|' + e.source.id));
-  }
-
-  function resetFlow(now) {
-    flow.graph = graph.edges;
-    flow.track = new Map();
-    flow.pending.clear();
-    flow.cursor = 0;
-    flow.warmUntil = now + FLICKER_WARMUP_MS;
-  }
-
-  function flowState(e) {
-    let st = flow.track.get(e);
-    if (!st) {
-      st = { cycleMs: flowCycleMs(ambientParticleSpeed(e)), phase: hash01('pp' + edgeKey(e)), prev: null, armed: false, wasArmed: false, cycle: 0, frame: -1, t: 0, edge: null };
-      flow.track.set(e, st);
-    }
-    return st;
-  }
-  function sampleEdge(e, now) {
-    const st = flowState(e);
-    if (st.frame === flow.frame) return st;
-    st.frame = flow.frame;
-    st.t = flowT(now - flow.t0, st.cycleMs, st.phase);
-    st.edge = detectCycleEdge(st.prev, st.t);
-    st.wasArmed = st.armed;
-    if (st.prev != null && st.t >= st.prev) st.armed = true; // one observed non-wrap sample
-    st.prev = st.t;
-    return st;
-  }
-
-  function releaseFlicker(rec) {
-    if (rec.released) return;
-    rec.released = true;
-    flow.active = Math.max(0, flow.active - 1);
-    const i = flow.live.indexOf(rec);
-    if (i >= 0) flow.live.splice(i, 1);
-  }
-  function emitFlicker(e, end, now, paired) {
-    if (!admitFlicker(flow, edgeKey(e), now, paired).ok) return false;
-    flow.live.push({ edge: e, end, t0: now, released: false });
-    if (end === 'target') flow.rings.push({ node: e.target, t0: now });
-    return true;
-  }
-
-  // One pass per drawn frame: arrivals for pending packets, then a bounded scan for spawns.
-  function stepFlow(now, focusSet) {
-    if (flow.graph !== graph.edges) resetFlow(now); // graph (re)built: fresh tracking + warm-up
-    if (flow.lastStep && now - flow.lastStep > 1000) resetFlow(now); // tab was away: no burst on resume
-    flow.lastStep = now;
-    for (let i = flow.live.length - 1; i >= 0; i--) if (now - flow.live[i].t0 >= FLICKER_LIFE_MS) releaseFlicker(flow.live[i]);
-    for (let i = flow.rings.length - 1; i >= 0; i--) if (now - flow.rings[i].t0 >= DECAY_MS) flow.rings.splice(i, 1);
-    const tune = flickerTuning(flow.degradedWindows);
-    if (tune.stopped) return;
-    const t0 = performance.now();
-    flow.frame++;
-    flow.spawned = 0;
-    flow.cap = tune.maxFlicker;
-    flow.realCount = edgeFx.size;
-    const drop = Math.max(flickersToDrop(flow.realCount, flow.active, flow.maxConcurrent), flow.active - flow.cap);
-    for (let i = 0; i < drop && flow.live.length; i++) releaseFlicker(flow.live[0]);
-    const warm = now < flow.warmUntil;
-    for (const [e, rec] of [...flow.pending]) {
-      if (now - rec.t > FLICKER_PENDING_MS) { flow.pending.delete(e); continue; }
-      const st = sampleEdge(e, now);
-      if (st.edge === 'arrive') { flow.pending.delete(e); emitFlicker(e, 'target', now, true); }
-      else if (st.edge === 'spawn') flow.pending.delete(e);
-    }
-    const pick = pickFlickerCandidates(graph.edges, flow.cursor, tune.scan);
-    flow.cursor = pick.cursor;
-    for (const e of pick.picked) {
-      if (particleCountFor(e, focusSet) === 0) { flow.track.delete(e); continue; } // dimmed: no flicker
-      if (flow.pending.has(e)) continue;
-      const st = sampleEdge(e, now);
-      if (st.edge !== 'spawn') continue;
-      st.cycle++;
-      if (warm || !st.wasArmed || st.t > FLICKER_SPAWN_FRESH) continue;
-      if (edgeFxActive(e)) continue; // the real event flash already covers it
-      if (!flickerDraw(edgeKey(e), st.cycle, tune.p)) continue;
-      if (emitFlicker(e, 'source', now, false)) flow.pending.set(e, { t: now });
-    }
-    flow.costMs += performance.now() - t0;
-    if (++flow.costN >= FLICKER_LOG_FRAMES) {
-      console.debug('[UI-1.1] 2D flicker scheduler ' + (flow.costMs / flow.costN).toFixed(3) + 'ms/frame over ' + flow.costN
-        + ' frames (active ' + flow.active + ', pending ' + flow.pending.size + ', scan ' + tune.scan + ')');
-      flow.costMs = 0;
-      flow.costN = 0;
-    }
-  }
-
-  // Quiet guard for the flow loop: frame WORK time (draw + scheduler). Interval time
-  // can't be used here, the 30fps cap would latch the degrade on.
-  function stepFlowGuard(workMs) {
-    flow.workMs.push(workMs);
-    if (flow.workMs.length < FRAME_WINDOW) return;
-    const avg = flow.workMs.reduce((x, y) => x + y, 0) / flow.workMs.length;
-    flow.degradedWindows = avg > FLOW_SLOW_WORK_MS ? flow.degradedWindows + 1 : 0;
-    flow.workMs.length = 0;
-  }
 
   function draw() {
     const { dpr, k, tx, ty } = view;
@@ -1416,80 +1076,16 @@
       const cy = (a.y + b.y) / 2 + dx * bend;
 
       const ca = RGB[a.type], cb = RGB[b.type];
-      const idle = edgeBaseAlpha(a, b);
-      const baseAlpha = dim ? Math.min(0.05, idle) : inFocus ? 0.85 : idle;
+      const baseAlpha = dim ? 0.05 : inFocus ? 0.85 : 0.14 + 0.36 * e.strength;
       const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
       grad.addColorStop(0, rgba(ca, baseAlpha));
       grad.addColorStop(1, rgba(cb, baseAlpha));
       ctx.strokeStyle = grad;
-      ctx.lineWidth = 0.5 * (inFocus ? 1.4 : 1) / Math.sqrt(Math.max(k, 0.3)); // hairline at rest
+      ctx.lineWidth = (0.6 + 2.2 * e.strength) * (inFocus ? 1.4 : 1) / Math.sqrt(Math.max(k, 0.3));
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.quadraticCurveTo(cx, cy, b.x, b.y);
       ctx.stroke();
-    }
-
-    // Event edges: active set only. A flashing string is never dimmed.
-    const nowT = performance.now();
-    const ringAt = new Map();
-    for (const f of edgeFx.values()) {
-      const age = nowT - f.t0;
-      const o = edgeFxLevel(age);
-      const rgb = EDGE_RGB[f.kind] || EDGE_RGB.sync;
-      const wScale = 1 / Math.sqrt(Math.max(k, 0.3));
-      if (f.edge && o > 0.005) {
-        const a = f.edge.source, b = f.edge.target;
-        ctx.strokeStyle = rgba(rgb, o);
-        ctx.lineWidth = (0.5 + 1.1 * (o / FLASH_OPACITY)) * wScale; // hairline -> +1 at the peak
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.quadraticCurveTo((a.x + b.x) / 2 - (b.y - a.y) * 0.1 * f.edge.bend, (a.y + b.y) / 2 + (b.x - a.x) * 0.1 * f.edge.bend, b.x, b.y);
-        ctx.stroke();
-      }
-      if (age < TRAVEL_MS) { // traveling packet
-        const bend = f.edge ? (f.edge.source === f.a ? f.edge.bend : -f.edge.bend) : 0;
-        const p = edgeDotPos(f.a, f.b, bend, age / TRAVEL_MS);
-        ctx.fillStyle = rgba(rgb, 0.95);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 2.2 * wScale, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ringAt.set(f.b, { age: age - TRAVEL_MS, rgb });
-      }
-    }
-
-    // UI-1.1 flow: ambient packets + paired endpoint flickers ride the strings (nodes draw over them).
-    if (flowActive()) {
-      try { stepFlow(nowT, focus ? focusSet : null); } catch (err) { /* flow is garnish: never break the frame */ }
-      const wS = 1 / Math.sqrt(Math.max(k, 0.3)), elapsed = nowT - flow.t0, flowFocus = focus ? focusSet : null;
-      for (const e of graph.edges) {
-        const a = e.source, b = e.target;
-        if (window._hiddenTypes && (window._hiddenTypes.has(a.type) || window._hiddenTypes.has(b.type))) continue;
-        if (particleCountFor(e, flowFocus) === 0 || edgeFxActive(e)) continue;
-        const st = flowState(e);
-        const p = edgeDotPos(a, b, e.bend, flowT(elapsed, st.cycleMs, st.phase));
-        ctx.fillStyle = rgba(RGB[a.type], 0.9);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 1.6 * wS, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      for (const rec of flow.live) {
-        const o = flickerLevel(nowT - rec.t0);
-        if (o < 0.005) continue;
-        const e = rec.edge, a = e.source, b = e.target;
-        const sp = flickerSpan(Math.hypot(b.x - a.x, b.y - a.y), rec.end, FLICKER_FRACTION, FLICKER_MIN_LEN, FLICKER_MAX_LEN);
-        ctx.strokeStyle = rgba(RGB[rec.end === 'target' ? b.type : a.type].map((c) => Math.min(255, c + 110)), o);
-        ctx.lineWidth = (0.5 + 0.8 * (o / FLICKER_PEAK)) * wS;
-        ctx.beginPath();
-        for (let i = 0; i <= 5; i++) {
-          const q = edgeDotPos(a, b, e.bend, sp.t0 + (sp.t1 - sp.t0) * i / 5);
-          if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y);
-        }
-        ctx.stroke();
-      }
-      for (const r of flow.rings) { // arrival: the existing UI-1 node ring, softer
-        if (!ringAt.has(r.node)) ringAt.set(r.node, { age: nowT - r.t0, rgb: RGB[r.node.type], k: 0.5 });
-      }
     }
 
     // Nodes: glow halo + core
@@ -1517,16 +1113,6 @@
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fill();
-
-      const arr = ringAt.get(n);
-      if (arr && arr.age < DECAY_MS) { // arrival: target node ring flash
-        const t = easeOutCubic(arr.age / DECAY_MS);
-        ctx.strokeStyle = rgba(arr.rgb, 0.8 * (arr.k || 1) * (1 - t));
-        ctx.lineWidth = 1.5 / k;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + (4 + 14 * t) / k, 0, Math.PI * 2);
-        ctx.stroke();
-      }
 
       if (n === selected) {
         // Hover wins over the pin: keep the pinned ring, but subtle when outside the hover ego set.
