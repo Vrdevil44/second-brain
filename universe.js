@@ -74,6 +74,24 @@
   const DIM_HOVER = 0.10; // dim factor while a hover (not a pin) anchors the focus
   const DIM = 0.15; // opacity factor for nodes/links outside the focus neighborhood
 
+  // ---- UI-1 event edges: one const block ------------------------------------
+  // Idle links are a faint trace; real events make an edge rise, carry a packet,
+  // flash on arrival and decay. TRACE_OPACITY 0 = invisible at rest (D1).
+  const TRACE_OPACITY = 0.07;     // idle link alpha (rendered value: linkOpacity is 1)
+  const SKELETON_OPACITY = 0.18;  // links touching the core stay faintly readable
+  const FLASH_OPACITY = 0.9;      // peak of an event flash
+  const TRAVEL_LEVEL = 0.55;      // fraction of the peak held while the packet travels
+  const DECAY_MS = 2000;          // exponential afterglow after arrival
+  const TRAVEL_MS = 1400;         // packet travel; the arrival timer uses the same value
+  const MAX_CONCURRENT = 12;      // edge events alive at once (oldest dropped)
+  const PARTICLE_SPEED = 1 / (TRAVEL_MS / (1000 / 60)); // lib advances progress per frame
+  const SLOW_FRAME_MS = 24;       // avg frame time over FRAME_WINDOW that halves emission
+  const FRAME_WINDOW = 60;
+  const EDGE_COLORS = {
+    demand: '#ffb547', contradiction: '#ff6b4d', sync: '#6ee7ff', resolved: '#3ddc97',
+  };
+  const EVENT_GLOW = '#cfe4ff';   // arrival halo flash colour (glow kind 'event')
+
   let S = null; // live state; null when not initialised
 
   // ---- Tiny DOM helpers (textContent only: labels are untrusted text) ---------
@@ -468,12 +486,11 @@
     return !S || !S.focusSet || S.focusSet.has(id) ? 1 : dim;
   }
 
-  // Focus-aware link particles: dimmed links show no particles (their
-  // materials take the link colour with alpha dropped, so they'd otherwise
-  // render full-bright on a dimmed link).
-  function particleCount(l) {
-    if (!S || !S.focusSet) return 1;
-    return (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : 0;
+  // Idle alpha for a link: core-touching spokes keep a readable skeleton, all
+  // others are a faint trace. Event flashes ride a separate overlay (fireEdgeEvent).
+  function linkBaseAlpha(l) {
+    return (S && S.data && (idOf(l.source) === S.data.coreId || idOf(l.target) === S.data.coreId))
+      ? SKELETON_OPACITY : TRACE_OPACITY;
   }
 
   function updateFocus() {
@@ -485,7 +502,7 @@
       .nodeColor((n) => nodeColor(n, focusOpacity(n.id, dim)))
       .linkColor((l) => {
         const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : dim;
-        let c = f === 1 ? l.color : hexToRgba(l.color, f);
+        let c = hexToRgba(l.color, linkBaseAlpha(l) * f);
         // Domain breath: links inside the most active domain oscillate ±0.03 —
         // almost imperceptible, and only when there is real recent activity.
         const bd = S.live && S.live.breathDomain;
@@ -498,7 +515,7 @@
         }
         return c;
       })
-      .linkDirectionalParticles((l) => particleCount(l));
+      .linkDirectionalParticles(() => 0); // UI-1: constant field off; event edges only
     // Halo dimming rides alongside the core's colour-alpha dimming.
     // The per-frame painter owns the halos (breathing core,
     // echo glows); node/link colour accessors above still run.
@@ -1078,46 +1095,13 @@
       .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
-      .linkColor((l) => {
-        // His call 2026-10-17: core->hub stays visible (0.38);
-        // end->domain (fact->hub) slightly fainter (0.25);
-        // end-to-end relations untouched.
-        if (l && (l.type || '').toUpperCase() === 'DOMAIN') {
-          const s = l.source, tg = l.target;
-          const sId = s && (s.id || s), tId = tg && (tg.id || tg);
-          if (sId === 'core' || tId === 'core') return 'rgba(234, 246, 255, 0.38)';
-          return 'rgba(234, 246, 255, 0.25)';
-        }
-        return l.color || '#9aa0b4';
-      })
-      .linkOpacity(0.55)
-      .linkWidth((l) => {
-        // His call 2026-10-17: core -> domain hubs slightly thicker (highways);
-        // domain -> end nodes and end <-> end stay thin (streets), as before.
-        // DOMAIN links are faint flow channels, not bright spokes.
-        const t = l && l.type;
-        if (t === 'DOMAIN') {
-          const s = l.source, tg = l.target;
-          const sId = s && (s.id || s), tId = tg && (tg.id || tg);
-          // Core <-> domain hub: slightly thicker. Domain hub <-> fact: thin.
-          if (sId === 'core' || tId === 'core') return 1.2;
-        }
-        return 0.6;
-      })
-      .linkDirectionalParticles((l) => {
-        // Flow particles only on core <-> domain highways.
-        if (l && l.type === 'DOMAIN') {
-          const s = l.source, tg = l.target;
-          const sId = s && (s.id || s), tId = tg && (tg.id || tg);
-          if (sId === 'core' || tId === 'core') return 2;
-        }
-        return particleCount(l);
-      })
+      .linkColor((l) => hexToRgba(l.color || FALLBACK_LINK, linkBaseAlpha(l)))
+      .linkOpacity(1) // alpha is folded into linkColor (TRACE/SKELETON), no global scalar
+      .linkWidth(0.5) // idle hairline; event flashes are an overlay, not a width re-digest
+      .linkDirectionalParticles(() => 0) // UI-1: constant field off; event edges only
       .linkDirectionalParticleWidth(1.6)
-      // Packet desync (his call): was a constant 0.004 — every packet on every
-      // edge marched in lockstep like clockwork. Now a seeded ~4x speed range
-      // per edge: packets drift out of phase, like neural firing, not a metronome.
-      .linkDirectionalParticleSpeed((l) => 0.0018 + 0.0052 * hash01('ps' + linkKey(l)))
+      .linkDirectionalParticleColor((l) => l.color || FALLBACK_LINK)
+      .linkDirectionalParticleSpeed(PARTICLE_SPEED) // emitParticle packets cross in ~TRAVEL_MS
       .linkLabel(() => '') // we render our own tooltip
       .cooldownTime(15000)
       .enableNodeDrag(false) // P2-T3: node micro-drags swallowed taps (clickAfterDrag defaults false); orbit/pan unaffected, nothing uses onNodeDrag
@@ -1432,6 +1416,7 @@
     S.live = {
       on: true, lastBeat: -1, state: null, formation: null, t0: performance.now(), seq: 0,
       glow: new Map(), fx: [], rings: [], timer: 0, raf: 0,
+      edgeFx: new Map(), edgeTimer: 0, frameMs: [], lastFrameT: 0, degrade: false, thin: 0,
       lastActivityKey: null, lastAmbient: 0, lastBreath: 0, breathDomain: null, hold: false,
     };
     // Ambient life pauses while their hands are on the scene (his rule).
@@ -1446,6 +1431,7 @@
     };
     document.addEventListener('pointerdown', S._hudOutside);
     S.live.timer = setInterval(pollLive, LIVE_POLL_MS);
+    S.live.edgeTimer = setInterval(sweepEdgeFx, 1000); // janitor: expired edge events leave the map
     S.live.syncTimer = setInterval(pollSyncDial, 60000);
     S.live.raf = requestAnimationFrame(liveTick);
     updateFocus();
@@ -1503,6 +1489,9 @@
     const L = S.live;
     S.live = null;
     clearInterval(L.timer);
+    clearInterval(L.edgeTimer);
+    for (const e of L.edgeFx.values()) clearTimeout(e.timer);
+    L.edgeFx.clear();
     if (L.syncTimer) clearInterval(L.syncTimer);
     cancelAnimationFrame(L.raf);
     const scene = liveScene();
@@ -1703,6 +1692,10 @@
     const isDemand = a && a.type === 'demand';
     const color = isDemand ? STREAK_DEMAND : STREAK_KNOWLEDGE;
     landArrival(a, target, scene, null, color);
+    // Real arrival with a node in the graph: its edge from the core flashes too.
+    if (target.nodeId && S.data && target.nodeId !== S.data.coreId) {
+      try { fireEdgeEvent(S.data.coreId, target.nodeId, 'sync'); } catch (e) { /* never break the beat */ }
+    }
   }
 
   function landArrival(a, target, scene, head, color) {
@@ -1798,6 +1791,103 @@
     });
   }
 
+  // ---- UI-1 event edges ---------------------------------------------------------
+  // idle -> RISE (packet leaves) -> ARRIVAL (target halo + full re-flash) ->
+  // exponential decay -> idle. The flash is a transient line-mesh overlay in the
+  // per-frame fx list, so no linkColor/linkWidth accessor is re-digested per
+  // event; the idle trace underneath stays whatever focus/dimming says, and a
+  // flashing edge is never dimmed (real activity outranks the dim).
+  function findLink(idA, idB) {
+    const a = String(idA), b = String(idB);
+    for (const l of S.graph.graphData().links || []) {
+      const s = String(idOf(l.source)), t = String(idOf(l.target));
+      if ((s === a && t === b) || (s === b && t === a)) return l;
+    }
+    return null;
+  }
+
+  // Overlay opacity for an edge event `age` ms after it fired.
+  function edgeFxLevel(age) {
+    if (age < 0) return 0;
+    if (age < TRAVEL_MS) return FLASH_OPACITY * TRAVEL_LEVEL * easeOutCubic(Math.min(1, age / 250));
+    const since = age - TRAVEL_MS;
+    if (since < 120) { // arrival: soft jump from the travel level to the full flash
+      const k = easeOutCubic(since / 120);
+      return FLASH_OPACITY * (TRAVEL_LEVEL + (1 - TRAVEL_LEVEL) * k);
+    }
+    return FLASH_OPACITY * Math.exp(-(since - 120) / (DECAY_MS / 4));
+  }
+
+  function dropEdgeFx(key) {
+    const e = S && S.live && S.live.edgeFx.get(key);
+    if (!e) return;
+    clearTimeout(e.timer);
+    e.dead = true; // overlay update() sees this and retires itself
+    S.live.edgeFx.delete(key);
+  }
+
+  function sweepEdgeFx() {
+    if (!S || !S.live) return;
+    const now = performance.now();
+    for (const [key, e] of [...S.live.edgeFx]) if (now - e.t0 > e.life + 250) dropEdgeFx(key); // slack: the arrival timer fires first
+  }
+
+  // Arrival: the target node's halo flashes through the glow map (never
+  // shortens a longer-lived demand/contradiction glow), then focus repaints.
+  function edgeArrival(toId) {
+    if (!S || !S.live || !S.live.on) return;
+    const until = Date.now() + 1200;
+    const g = S.live.glow.get(String(toId));
+    if (!g || g.until < until) S.live.glow.set(String(toId), { kind: 'event', until });
+    updateFocus();
+  }
+
+  // Fire one REAL edge event. Returns true when something was emitted.
+  // kind: demand | contradiction | sync | resolved. Never moves the camera.
+  function fireEdgeEvent(fromId, toId, kind) {
+    const L = S && S.live;
+    if (!L || !L.on || fromId == null || toId == null) return false;
+    if (document.hidden || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) return false;
+    if (!nodeById(fromId) || !nodeById(toId)) return false; // not in the visible graph: no fake state
+    const priority = kind === 'demand' || kind === 'contradiction';
+    if (L.degrade && !priority && (L.thin++ % 2)) return false; // slow frames: halve emission
+    const key = String(fromId) + '|' + String(toId);
+    dropEdgeFx(key);
+    while (L.edgeFx.size >= MAX_CONCURRENT) dropEdgeFx(L.edgeFx.keys().next().value); // oldest first
+    const color = EDGE_COLORS[kind] || EDGE_COLORS.sync;
+    const link = findLink(fromId, toId);
+    const entry = { t0: performance.now(), phase: 'travel', kind, dead: false, life: TRAVEL_MS, timer: 0 };
+    L.edgeFx.set(key, entry);
+    entry.timer = setTimeout(() => { entry.phase = 'decay'; edgeArrival(toId); }, TRAVEL_MS);
+    if (!link) { // no direct relation: honest mesh pulse (keeps the demand sweep working)
+      pulseBetween(fromId, toId, color, 0.5, TRAVEL_MS);
+      return true;
+    }
+    entry.life = TRAVEL_MS + DECAY_MS;
+    try { S.graph.emitParticle(link); } catch (e) { /* packet is garnish; the flash still runs */ }
+    const scene = liveScene();
+    const mesh = liveMesh(color, 0);
+    if (!scene || !mesh) return true;
+    scene.add(mesh);
+    L.fx.push({
+      update(now) {
+        if (entry.dead) return false;
+        const a = nodeById(fromId), b = nodeById(toId);
+        const o = edgeFxLevel(now - entry.t0);
+        if (!a || !b || a.x == null || b.x == null || o < 0.005) { mesh.material.opacity = 0; return !entry.dead && now - entry.t0 < entry.life; }
+        const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+        mesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+        if (typeof mesh.lookAt === 'function') mesh.lookAt(b.x, b.y, b.z);
+        const w = 0.25 + 0.55 * (o / FLASH_OPACITY); // hairline at rest, +1 width at the peak
+        mesh.scale.set(w, w, Math.max(1, Math.hypot(dx, dy, dz) / 2));
+        mesh.material.opacity = o;
+        return now - entry.t0 < entry.life;
+      },
+      dispose(sc) { (sc || scene).remove(mesh); mesh.material.dispose(); },
+    });
+    return true;
+  }
+
   // ---- formation: the core's visible stage -----------------------------------
   // igniting 0 rings → forming 1 → awake 2 → deepening 3. Thin, faint,
   // restrained — the mind condensing, not decoration.
@@ -1860,7 +1950,9 @@
         liveIds.forEach((id, i) => setTimeout(() => {
           if (S && S.live && S.live.on) { S.live.glow.set(String(id), { kind, until }); updateFocus(); }
         }, i * 400)); // lights in touch order — a visible sweep
-        if (liveIds.length >= 2) pulseBetween(liveIds[0], liveIds[1], '#ffb547');
+        // The REAL relation between the first two named nodes lights up; with no
+        // direct link, fireEdgeEvent falls back to the mesh pulse.
+        if (liveIds.length >= 2) fireEdgeEvent(liveIds[0], liveIds[1], kind);
         break;
       }
       case 'merge':
@@ -1870,11 +1962,18 @@
         liveIds.forEach((id, i) => setTimeout(() => {
           if (S && S.live && S.live.on) { S.live.glow.set(String(id), { kind: 'fresh', until: mUntil }); updateFocus(); }
         }, i * 150));
+        // Per-fid edge event core -> fid on the same 150ms rhythm.
+        liveIds.forEach((id, i) => setTimeout(() => {
+          try { if (S && S.live && S.live.on && id !== S.data.coreId) fireEdgeEvent(S.data.coreId, id, 'sync'); } catch (e) { /* never break the frame */ }
+        }, i * 150));
         sweepRing();
         break;
       }
-      // 'beat': the beat already pulses via onBeat — no extra motion.
-      // 'demand_resolved': resolution is the absence of demands — nothing to add.
+      case 'demand_resolved':
+        // Resolution deserves a visible settle: one soft flash core -> first fid.
+        if (liveIds.length && liveIds[0] !== S.data.coreId) fireEdgeEvent(S.data.coreId, liveIds[0], 'resolved');
+        break;
+      // 'beat': the beat already pulses via onBeat — empty fids, no edge motion, ever.
     }
   }
 
@@ -1910,7 +2009,8 @@
       }
       if (n._liveKind !== kind) {
         n._liveKind = kind;
-        setHaloColor(n._halo, kind && LIVE_COLORS[kind] ? LIVE_COLORS[kind] : haloColor(n));
+        const kc = kind === 'event' ? EVENT_GLOW : LIVE_COLORS[kind];
+        setHaloColor(n._halo, kind && kc ? kc : haloColor(n));
       }
       setHaloOpacity(n._halo, Math.min(0.6, o));
     }
@@ -1964,6 +2064,18 @@
   function liveTick() {
     if (!S || !S.live || !S.live.on) return;
     const now = performance.now();
+    const L = S.live;
+    if (L.lastFrameT) { // quiet guard: degrade effects, never motion smoothness
+      L.frameMs.push(now - L.lastFrameT);
+      if (L.frameMs.length >= FRAME_WINDOW) {
+        const avg = L.frameMs.reduce((x, y) => x + y, 0) / L.frameMs.length;
+        const slow = avg > SLOW_FRAME_MS;
+        if (slow !== L.degrade) console.info('[UI-1] quiet guard ' + (slow ? 'on' : 'off') + ' (avg frame ' + avg.toFixed(1) + 'ms)');
+        L.degrade = slow;
+        L.frameMs.length = 0;
+      }
+    }
+    L.lastFrameT = now;
     const scene = liveScene();
     const fx = S.live.fx;
     for (let i = fx.length - 1; i >= 0; i--) {

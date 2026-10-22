@@ -645,8 +645,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0a38027');
-        await loadScriptOnce('universe.js?v=0a38027');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=30617b6');
+        await loadScriptOnce('universe.js?v=30617b6');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -866,6 +866,7 @@
     sim.alpha = reducedMotion ? 0 : 0.25;
     fitView(false);
     startSim();
+    startLiveFeed();
   }
 
   function radiusFor(type, size) {
@@ -1000,6 +1001,8 @@
     rafId = 0;
     if (viewMode !== '2d') return;
     if (viewAnim) stepViewAnim(t);
+    stepEdgeFx(performance.now());
+    if (edgeFx.size) needsDraw = true; // active edge events animate; idle redraws stay on demand
     if (sim.running) {
       tick();
       if (sim.alpha < 0.004 && sim.alphaTarget === 0) sim.running = false;
@@ -1009,7 +1012,7 @@
       needsDraw = false;
       draw();
     }
-    if (sim.running || viewAnim) rafId = requestAnimationFrame(frame);
+    if (sim.running || viewAnim || edgeFx.size) rafId = requestAnimationFrame(frame);
   }
 
   function resize() {
@@ -1028,6 +1031,124 @@
   const RGB = Object.fromEntries(Object.entries(TYPE_COLORS).map(([k, v]) => [k, hexToRgb(v)]));
   RGB.unknown = hexToRgb(UNKNOWN_COLOR);
   const rgba = (rgb, a) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
+
+  // ---- UI-1 event edges (2D parity with universe.js) -------------------------
+  // Same state machine and constants as the 3D renderer: idle trace ->
+  // rise + traveling dot -> arrival ring + full edge re-flash -> exponential
+  // decay. Events come from the same live-state activity[] / arrivals[] fields,
+  // read-only. Autonomous activity: shows on every input modality.
+  const TRACE_OPACITY = 0.07;
+  const SKELETON_OPACITY = 0.18;
+  const FLASH_OPACITY = 0.9;
+  const TRAVEL_LEVEL = 0.55;
+  const DECAY_MS = 2000;
+  const TRAVEL_MS = 1400;
+  const MAX_CONCURRENT = 12;
+  const SLOW_FRAME_MS = 24;
+  const FRAME_WINDOW = 60;
+  const EDGE_RGB = {
+    demand: [255, 181, 71], contradiction: [255, 107, 77], sync: [110, 231, 255], resolved: [61, 220, 151],
+  };
+  const edgeFx = new Map(); // 'from|to' -> { t0, kind, a, b, edge, life }
+  const edgeQuiet = { frameMs: [], last: 0, degrade: false, thin: 0 };
+  const liveFeed = { lastKey: null, timer: 0 };
+
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+  function edgeFxLevel(age) {
+    if (age < 0) return 0;
+    if (age < TRAVEL_MS) return FLASH_OPACITY * TRAVEL_LEVEL * easeOutCubic(Math.min(1, age / 250));
+    const since = age - TRAVEL_MS;
+    if (since < 120) return FLASH_OPACITY * (TRAVEL_LEVEL + (1 - TRAVEL_LEVEL) * easeOutCubic(since / 120));
+    return FLASH_OPACITY * Math.exp(-(since - 120) / (DECAY_MS / 4));
+  }
+
+  // Idle alpha for a string: core spokes stay a faint skeleton, the rest a trace.
+  function edgeBaseAlpha(a, b) {
+    return (a.id === 'core' || b.id === 'core') ? SKELETON_OPACITY : TRACE_OPACITY;
+  }
+
+  // Point on the drawn string (same quadratic curve as the stroke) at progress t.
+  function edgeDotPos(a, b, bend, t) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const cx = (a.x + b.x) / 2 - dy * 0.1 * bend, cy = (a.y + b.y) / 2 + dx * 0.1 * bend;
+    const u = 1 - t;
+    return { x: u * u * a.x + 2 * u * t * cx + t * t * b.x, y: u * u * a.y + 2 * u * t * cy + t * t * b.y };
+  }
+
+  function fireEdgeEvent(fromId, toId, kind, now) {
+    if (fromId == null || toId == null || document.hidden || reducedMotion) return false;
+    const a = graph.byId.get(String(fromId)), b = graph.byId.get(String(toId));
+    if (!a || !b || a === b) return false; // not in the visible graph: no fake state
+    const priority = kind === 'demand' || kind === 'contradiction';
+    if (edgeQuiet.degrade && !priority && (edgeQuiet.thin++ % 2)) return false;
+    const key = a.id + '|' + b.id;
+    edgeFx.delete(key);
+    while (edgeFx.size >= MAX_CONCURRENT) edgeFx.delete(edgeFx.keys().next().value); // oldest first
+    const edge = graph.edges.find((e) => (e.source === a && e.target === b) || (e.source === b && e.target === a)) || null;
+    edgeFx.set(key, { t0: now == null ? performance.now() : now, kind, a, b, edge, life: TRAVEL_MS + DECAY_MS });
+    requestRender();
+    return true;
+  }
+
+  function stepEdgeFx(now) {
+    for (const [key, e] of edgeFx) if (now - e.t0 > e.life) edgeFx.delete(key);
+    if (edgeQuiet.last) {
+      edgeQuiet.frameMs.push(now - edgeQuiet.last);
+      if (edgeQuiet.frameMs.length >= FRAME_WINDOW) {
+        const avg = edgeQuiet.frameMs.reduce((x, y) => x + y, 0) / edgeQuiet.frameMs.length;
+        edgeQuiet.degrade = avg > SLOW_FRAME_MS;
+        edgeQuiet.frameMs.length = 0;
+      }
+    }
+    edgeQuiet.last = edgeFx.size ? now : 0; // idle gaps are not slow frames
+  }
+
+  // Activity -> edge events (mirrors universe.js activityEvent; beat/think: none).
+  function edgeActivity(a, now) {
+    if (!a) return;
+    const core = graph.byId.has('core') ? 'core' : null;
+    const ids = (a.fids || []).map(String).filter((id) => graph.byId.has(id));
+    if (a.kind === 'demand_opened' || a.kind === 'contradiction') {
+      if (ids.length >= 2) fireEdgeEvent(ids[0], ids[1], a.kind === 'contradiction' ? 'contradiction' : 'demand', now);
+    } else if ((a.kind === 'sync' || a.kind === 'merge') && core) {
+      ids.forEach((id, i) => { if (id !== core) setTimeout(() => { try { fireEdgeEvent(core, id, 'sync'); } catch (e) { /* never break the frame */ } }, i * 150); });
+    } else if (a.kind === 'demand_resolved' && core && ids.length && ids[0] !== core) {
+      fireEdgeEvent(core, ids[0], 'resolved', now);
+    }
+  }
+
+  function feedEdgeEvents(st) {
+    if (!st) return;
+    const acts = Array.isArray(st.activity) ? st.activity : [];
+    let start = 0;
+    if (liveFeed.lastKey) {
+      const ki = acts.findIndex((a) => a && (a.t + '|' + a.kind) === liveFeed.lastKey);
+      if (ki >= 0) start = ki + 1;
+    }
+    for (let i = start; i < acts.length; i++) {
+      try { edgeActivity(acts[i]); } catch (e) { /* never break the frame */ }
+    }
+    if (acts.length) liveFeed.lastKey = acts[acts.length - 1].t + '|' + acts[acts.length - 1].kind;
+    const arrivals = Array.isArray(st.arrivals) ? st.arrivals.filter(Boolean).slice(0, 8) : [];
+    if (graph.byId.has('core')) {
+      for (const ar of arrivals) {
+        const id = ar && (ar.id || ar.nodeId || ar.fid);
+        if (id != null && String(id) !== 'core') { try { fireEdgeEvent('core', id, 'sync'); } catch (e) { /* ignore */ } }
+      }
+    }
+  }
+
+  // The 2D view polls the same live-state the 3D universe does, only while shown.
+  function startLiveFeed() {
+    if (liveFeed.timer) return;
+    const poll = async () => {
+      if (viewMode !== '2d' || !graph2dBuilt || document.hidden) return;
+      try { feedEdgeEvents(await loadLiveStateLive()); } catch (e) { /* keep last state */ }
+    };
+    liveFeed.timer = setInterval(poll, 15000);
+    setTimeout(poll, 600); // after buildGraph returns and graph2dBuilt is set
+  }
 
   function draw() {
     const { dpr, k, tx, ty } = view;
@@ -1057,16 +1178,46 @@
       const cy = (a.y + b.y) / 2 + dx * bend;
 
       const ca = RGB[a.type], cb = RGB[b.type];
-      const baseAlpha = dim ? 0.05 : inFocus ? 0.85 : 0.14 + 0.36 * e.strength;
+      const idle = edgeBaseAlpha(a, b);
+      const baseAlpha = dim ? Math.min(0.05, idle) : inFocus ? 0.85 : idle;
       const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
       grad.addColorStop(0, rgba(ca, baseAlpha));
       grad.addColorStop(1, rgba(cb, baseAlpha));
       ctx.strokeStyle = grad;
-      ctx.lineWidth = (0.6 + 2.2 * e.strength) * (inFocus ? 1.4 : 1) / Math.sqrt(Math.max(k, 0.3));
+      ctx.lineWidth = 0.5 * (inFocus ? 1.4 : 1) / Math.sqrt(Math.max(k, 0.3)); // hairline at rest
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.quadraticCurveTo(cx, cy, b.x, b.y);
       ctx.stroke();
+    }
+
+    // Event edges: active set only. A flashing string is never dimmed.
+    const nowT = performance.now();
+    const ringAt = new Map();
+    for (const f of edgeFx.values()) {
+      const age = nowT - f.t0;
+      const o = edgeFxLevel(age);
+      const rgb = EDGE_RGB[f.kind] || EDGE_RGB.sync;
+      const wScale = 1 / Math.sqrt(Math.max(k, 0.3));
+      if (f.edge && o > 0.005) {
+        const a = f.edge.source, b = f.edge.target;
+        ctx.strokeStyle = rgba(rgb, o);
+        ctx.lineWidth = (0.5 + 1.1 * (o / FLASH_OPACITY)) * wScale; // hairline -> +1 at the peak
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.quadraticCurveTo((a.x + b.x) / 2 - (b.y - a.y) * 0.1 * f.edge.bend, (a.y + b.y) / 2 + (b.x - a.x) * 0.1 * f.edge.bend, b.x, b.y);
+        ctx.stroke();
+      }
+      if (age < TRAVEL_MS) { // traveling packet
+        const bend = f.edge ? (f.edge.source === f.a ? f.edge.bend : -f.edge.bend) : 0;
+        const p = edgeDotPos(f.a, f.b, bend, age / TRAVEL_MS);
+        ctx.fillStyle = rgba(rgb, 0.95);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.2 * wScale, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ringAt.set(f.b, { age: age - TRAVEL_MS, rgb });
+      }
     }
 
     // Nodes: glow halo + core
@@ -1094,6 +1245,16 @@
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fill();
+
+      const arr = ringAt.get(n);
+      if (arr && arr.age < DECAY_MS) { // arrival: target node ring flash
+        const t = easeOutCubic(arr.age / DECAY_MS);
+        ctx.strokeStyle = rgba(arr.rgb, 0.8 * (1 - t));
+        ctx.lineWidth = 1.5 / k;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r + (4 + 14 * t) / k, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       if (n === selected) {
         // Hover wins over the pin: keep the pinned ring, but subtle when outside the hover ego set.
