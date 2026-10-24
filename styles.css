@@ -1374,3 +1374,91 @@ body.view-3d .node-panel { display: none; }
   .askbar-caption .askbar-dot { animation: none; opacity: 1; }
 }
 /* ==== S4:end ==== */
+
+/* ==== S5:begin ==== */
+/* Growth slider: fixed above the brain bar, both surfaces. No transitions on the
+   thumb or the labels; the wrapper only fades in (opacity). Every hover style has
+   a matching focus-visible style. */
+.s5-slider {
+  position: fixed;
+  left: 50%;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 24px));
+  z-index: 8;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 14px 10px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  touch-action: manipulation; /* the canvas gestures live outside this box */
+  opacity: 1;
+  transition: opacity 160ms ease-out;
+}
+.s5-slider[hidden] { display: none; }
+.s5-row-label { margin: 0; color: var(--text); font-size: 13px; line-height: 1.3; }
+.s5-counts { margin: 0; color: var(--text-2); font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
+.s5-range {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 44px; /* tap target */
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none; /* a drag on the thumb never pans or scrolls */
+}
+.s5-range:disabled { opacity: 0.45; cursor: not-allowed; }
+.s5-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
+.s5-range::-moz-range-track { height: 4px; border-radius: 2px; background: var(--border-strong); }
+.s5-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -10px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-solid);
+  background: var(--accent-glow);
+}
+.s5-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-solid);
+  background: var(--accent-glow);
+}
+.s5-range:focus-visible,
+.s5-replay:focus-visible {
+  outline: 2px solid var(--accent-glow);
+  outline-offset: 2px;
+}
+.s5-replay {
+  appearance: none;
+  align-self: flex-start;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 8px 14px;
+}
+.s5-replay:hover,
+.s5-replay:focus-visible { border-color: var(--accent-glow); }
+.s5-replay:disabled { opacity: 0.5; cursor: not-allowed; }
+.s5-replay-label { margin: 0; color: var(--text-2); font-size: 12px; line-height: 1.4; }
+.s5-replay-label[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .s5-slider { transition: none; }
+}
+/* ==== S5:end ==== */

@@ -2562,4 +2562,113 @@
   }
   window.BrainUniverse.lightCitationNodes = lightCitationNodes;
   // ==== S4:end ====
+
+  // ==== S5:begin ====
+  // S5 growth slider + sleep replay, 3D surface only. Additive hooks: nothing
+  // above this block was edited. Hide/show goes through the library's own
+  // visibility accessors plus a refresh; the layout data is never re-set, so
+  // the simulation is not reheated. State lives on S, so a re-init starts clean.
+  const S5_SLEEP_DIM = 0.22; // colour-alpha factor for the whole brain while a replay shows
+  const s5uHidden = (id) => !!(S && S.s5vis && !S.s5vis.has(String(id)));
+
+  function s5uEmphasis() {
+    if (!S || !S.graph || !S.s5dim) return;
+    const baseNode = S.graph.nodeColor();
+    const baseLink = S.graph.linkColor();
+    if (typeof baseNode !== 'function' || typeof baseLink !== 'function') return;
+    const lit = (id) => !!(S.s5glowIds && S.s5glowIds.has(String(id)));
+    S.graph
+      .nodeColor((n) => (lit(n.id) ? baseNode(n) : scaleAlpha(baseNode(n), S5_SLEEP_DIM)))
+      .linkColor((l) => scaleAlpha(baseLink(l), S5_SLEEP_DIM));
+  }
+  // Re-applied after every focus pass, so dim survives hover/select/live events.
+  if (typeof updateFocus === 'function') {
+    const s5uBaseFocus = updateFocus;
+    updateFocus = function () { s5uBaseFocus(); try { s5uEmphasis(); } catch (e) { /* never break the frame */ } };
+  }
+  // A live arrival never flashes at a node the slider is hiding.
+  if (typeof arrivalTarget === 'function') {
+    const s5uBaseTarget = arrivalTarget;
+    arrivalTarget = function (a) {
+      const t = s5uBaseTarget(a);
+      return (t && t.nodeId && s5uHidden(t.nodeId)) ? null : t;
+    };
+  }
+
+  function setVisibleNodeIds(ids, edges) {
+    if (!S || !S.graph) return false;
+    const list = (ids instanceof Set || Array.isArray(ids)) ? [...ids] : null;
+    const vis = list ? new Set(list.map(String)) : null;
+    const keys = vis && Array.isArray(edges)
+      ? new Set(edges.map((e) => (Array.isArray(e) ? e.join('>') : String(e)))) : null;
+    S.s5vis = vis;
+    S.graph
+      .nodeVisibility(vis ? (n) => vis.has(String(n.id)) : () => true)
+      .linkVisibility(vis ? (l) => {
+        const s = String(idOf(l.source)), t = String(idOf(l.target));
+        return vis.has(s) && vis.has(t) && (!keys || keys.has(s + '>' + t + '>' + l.type));
+      } : () => true);
+    // Hidden nodes cannot stay selected or hovered.
+    if (vis && S.selected && !vis.has(String(S.selected))) closePanel();
+    if (vis && S.hovered && !vis.has(String(S.hovered))) { S.hovered = null; if (S.tip) S.tip.hidden = true; }
+    S.graph.refresh();
+    updateFocus();
+    return true;
+  }
+
+  function setSleepDim(on) {
+    if (!S || !S.graph) return false;
+    S.s5dim = !!on;
+    updateFocus();
+    return true;
+  }
+
+  // After-glow rides the existing live glow map (halo painter) and keeps the
+  // lit nodes at full colour while the rest dims. Entries are S5-flagged and
+  // the glow they displaced is remembered, so clearGlow gives back exactly
+  // the prior emphasis and never wipes a real live or brain-bar glow.
+  function glowNodes(ids) {
+    if (!S || !S.graph || !Array.isArray(ids)) return false;
+    S.s5glowIds = S.s5glowIds || new Set();
+    S.s5prevGlow = S.s5prevGlow || new Map();
+    for (const raw of ids) {
+      const id = String(raw);
+      if (s5uHidden(id) || !nodeById(id)) continue;
+      S.s5glowIds.add(id);
+      if (S.live && S.live.glow) {
+        if (!S.s5prevGlow.has(id)) S.s5prevGlow.set(id, S.live.glow.get(id) || null);
+        S.live.glow.set(id, { kind: 'fresh', until: Number.MAX_SAFE_INTEGER, s5: true });
+      }
+    }
+    updateFocus();
+    return true;
+  }
+
+  function clearGlow() {
+    if (!S || !S.graph) return false;
+    if (S.live && S.live.glow && S.s5prevGlow) {
+      for (const [id, prev] of S.s5prevGlow) {
+        const cur = S.live.glow.get(id);
+        if (!cur || !cur.s5) continue;
+        if (prev) S.live.glow.set(id, prev); else S.live.glow.delete(id);
+      }
+    }
+    if (S.s5glowIds) S.s5glowIds.clear();
+    if (S.s5prevGlow) S.s5prevGlow.clear();
+    updateFocus();
+    return true;
+  }
+
+  if (typeof window !== 'undefined' && window.BrainUniverse) {
+    Object.assign(window.BrainUniverse, {
+      setVisibleNodeIds,
+      setSleepDim,
+      glowNodes,
+      clearGlow,
+      isSleepDim: () => !!(S && S.s5dim),
+      isFiltered: () => !!(S && S.s5vis),
+      isReady: () => !!(S && S.graph),
+    });
+  }
+  // ==== S5:end ====
 })();

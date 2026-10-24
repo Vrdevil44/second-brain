@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=266660f');
-        await loadScriptOnce('universe.js?v=266660f');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=4c9fa24');
+        await loadScriptOnce('universe.js?v=4c9fa24');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3533,6 +3533,357 @@
     setInterval(askBar.refresh, 1000);
   })();
   // ==== S4:end ====
+
+  // ==== S5:begin ====
+  // S5 growth slider + sleep replay. One owner (sliderSleep). The slider walks
+  // the recorded history rows: membership over time on today's layout, never a
+  // historical layout. Row counts come from the row itself. The sleep face is a
+  // labelled replay of a verified row, never a live indicator. History carries
+  // ids only; nothing here reads a label off a row.
+  var sliderSleep = {};
+  const REPLAY_VERIFIED_BEATS = [765];
+  const S5_UNAVAILABLE_WORDS = 'History unavailable';
+  const S5_NO_RECORD_WORDS = 'No verified consolidation record for this row.';
+  const S5_HISTORY_URL = 'graph-history.jsonl';
+  const S5_ID_RE = /^(F-\d+|C-\d+|core|domain-[a-z0-9-]+)$/;
+
+  // Slider thumb value -> row index. Always a row, never a beat number.
+  sliderSleep.inputToRow = function (value, n) {
+    const count = Math.floor(Number(n));
+    if (!(count >= 1)) throw new RangeError('no rows');
+    const v = Math.round(Number(value));
+    if (!Number.isFinite(v)) throw new RangeError('bad slider value');
+    return Math.min(count - 1, Math.max(0, v));
+  };
+
+  // Pure and DOM-free. Nodes: born minus died, cumulative to this row. Edges:
+  // cumulative born triples whose endpoints are both visible, intersected with
+  // the current graph's edge triples when the caller supplies them (died edges
+  // are not recorded, so the born set alone is an upper bound).
+  sliderSleep.planVisible = function (rows, rowIndex, graph) {
+    const vis = new Set();
+    const seen = new Set();
+    const cum = [];
+    for (let i = 0; i <= rowIndex; i++) {
+      const r = rows[i];
+      for (const id of r.born_nodes) vis.add(id);
+      for (const id of r.died_nodes) vis.delete(id);
+      for (const e of r.born_edges) {
+        const k = e[0] + '>' + e[1] + '>' + e[2];
+        if (!seen.has(k)) { seen.add(k); cum.push(e); }
+      }
+    }
+    const keys = graph && graph.edgeKeys;
+    const visibleEdges = cum.filter((e) => vis.has(e[0]) && vis.has(e[1])
+      && (!keys || keys.has(e[0] + '>' + e[1] + '>' + e[2])));
+    const row = rows[rowIndex];
+    return { visibleNodes: [...vis], visibleEdges, counts: row.counts, bornThisRow: row.born_nodes };
+  };
+
+  // One stated timezone for every date shown.
+  sliderSleep.formatDate = function (at) {
+    const d = new Date(at);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Vancouver', year: 'numeric', month: 'short', day: 'numeric',
+    }).format(d);
+  };
+
+  sliderSleep.formatParts = function (row, idx, total, drawn, prevBeat) {
+    const tag = idx === 0 ? 'genesis' : (idx === total - 1 ? 'now' : '');
+    const date = sliderSleep.formatDate(row.at);
+    let head = 'Beat ' + row.beat;
+    if (tag) head += ' · ' + tag;
+    if (date) head += ' · ' + date + ' PT';
+    if (idx > 0 && Number.isFinite(prevBeat)) head += ' · +' + (row.beat - prevBeat) + ' beats since previous row';
+    const d = drawn || { nodes: row.counts.nodes, edges: row.counts.edges };
+    let counts = 'recorded ' + row.counts.nodes + ' nodes · ' + d.nodes + ' drawn'
+      + ' · recorded ' + row.counts.edges + ' edges · ' + d.edges + ' drawn';
+    if (d.nodes < row.counts.nodes || d.edges < row.counts.edges) counts += ' (removed items cannot be drawn)';
+    return { head, counts };
+  };
+
+  sliderSleep.formatLabel = function (row, idx, total, drawn, prevBeat) {
+    const p = sliderSleep.formatParts(row, idx, total, drawn, prevBeat);
+    return p.head + ' — ' + p.counts;
+  };
+
+  sliderSleep.canReplay = function (rows, idx) {
+    const r = rows && rows[idx];
+    return !!(r && !r.genesis && r.born_nodes.length > 0 && REPLAY_VERIFIED_BEATS.indexOf(r.beat) !== -1);
+  };
+
+  sliderSleep.replayLabel = function (row) {
+    return 'Replay — consolidation recorded at beat ' + row.beat + ' (' + sliderSleep.formatDate(row.at)
+      + '): these ' + row.born_nodes.length + ' nodes were born in it.';
+  };
+
+  // Replay state. The glow-in is one simultaneous call, so no timers exist;
+  // the only deferred work is the frame-coalesced slider apply, cancelled on exit.
+  sliderSleep.replay = { on: false, row: -1, priorDim: false };
+
+  sliderSleep.applyRow = function (index, rows, uni, graph) {
+    const plan = sliderSleep.planVisible(rows, index, graph);
+    uni.setVisibleNodeIds(plan.visibleNodes, plan.visibleEdges);
+    return plan;
+  };
+
+  sliderSleep.exitReplay = function (index, rows, uni, graph) {
+    const rp = sliderSleep.replay;
+    if (!rp.on) return false;
+    rp.on = false;
+    rp.row = -1;
+    uni.clearGlow(); // gives back the emphasis the replay displaced
+    uni.setSleepDim(rp.priorDim);
+    if (rows && rows[index]) sliderSleep.applyRow(index, rows, uni, graph);
+    return true;
+  };
+
+  sliderSleep.setRow = function (index, rows, uni, graph) {
+    if (sliderSleep.replay.on) sliderSleep.exitReplay(index, null, uni, graph); // the row below re-applies visibility
+    return sliderSleep.applyRow(index, rows, uni, graph);
+  };
+
+  sliderSleep.startReplay = function (index, rows, uni, graph) {
+    const rp = sliderSleep.replay;
+    if (!sliderSleep.canReplay(rows, index)) return false;
+    if (rp.on) {
+      if (rp.row === index) return true; // double press: nothing new to snapshot
+      sliderSleep.exitReplay(index, rows, uni, graph);
+    }
+    rp.priorDim = typeof uni.isSleepDim === 'function' ? !!uni.isSleepDim() : false;
+    rp.on = true;
+    rp.row = index;
+    uni.setSleepDim(true);
+    uni.glowNodes(rows[index].born_nodes);
+    return true;
+  };
+
+  // Parse + validate the history text. Null on anything malformed.
+  sliderSleep.parseHistory = function (text) {
+    if (typeof text !== 'string') return null;
+    const rows = [];
+    let prev = -Infinity;
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue;
+      let r;
+      try { r = JSON.parse(line); } catch (e) { return null; }
+      if (!r || typeof r !== 'object' || !Number.isFinite(r.beat) || r.beat <= prev) return null;
+      if (!Array.isArray(r.born_nodes) || !Array.isArray(r.died_nodes) || !Array.isArray(r.born_edges)) return null;
+      if (!r.counts || !Number.isFinite(r.counts.nodes) || !Number.isFinite(r.counts.edges)) return null;
+      if (typeof r.at !== 'string') return null;
+      if (r.born_nodes.concat(r.died_nodes).some((id) => typeof id !== 'string' || !S5_ID_RE.test(id))) return null;
+      if (r.born_edges.some((e) => !Array.isArray(e) || e.length < 3 || !S5_ID_RE.test(e[0]) || !S5_ID_RE.test(e[1]))) return null;
+      prev = r.beat;
+      rows.push(r);
+    }
+    if (!rows.length || rows[0].genesis !== true) return null;
+    return rows;
+  };
+
+  // Runtime check: every row reconstructs to its recorded node count, and the
+  // last row is exactly today's graph. Graph data can run ahead of history.
+  sliderSleep.checkRows = function (rows, graphIds) {
+    const vis = new Set();
+    for (const r of rows) {
+      for (const id of r.born_nodes) vis.add(id);
+      for (const id of r.died_nodes) vis.delete(id);
+      if (vis.size !== r.counts.nodes) return false;
+    }
+    if (vis.size !== graphIds.size) return false;
+    for (const id of vis) if (!graphIds.has(id)) return false;
+    return true;
+  };
+
+  sliderSleep.graphFacts = function (data) {
+    const idOfRef = (x) => String((x && typeof x === 'object') ? x.id : x);
+    const nodes = (data && Array.isArray(data.nodes)) ? data.nodes : [];
+    const edges = (data && Array.isArray(data.edges)) ? data.edges : [];
+    return {
+      ids: new Set(nodes.map((n) => String(n.id))),
+      edgeKeys: new Set(edges.map((e) => idOfRef(e.source) + '>' + idOfRef(e.target) + '>' + e.type)),
+    };
+  };
+
+  // ---- DOM controller (browser only; the pure parts above run anywhere) ----
+  sliderSleep.dom = function (id) { return document.getElementById(id); };
+  sliderSleep.reduced = function () {
+    return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  };
+  sliderSleep.uni = function () { return window.BrainUniverse || null; };
+
+  sliderSleep.drawnCounts = function (index) {
+    const plan = sliderSleep.planVisible(sliderSleep.rows, index, sliderSleep.graph);
+    let nodes = 0;
+    for (const id of plan.visibleNodes) if (sliderSleep.graph.ids.has(id)) nodes++;
+    return { nodes, edges: plan.visibleEdges.length };
+  };
+
+  sliderSleep.render = function () {
+    const slider = sliderSleep.dom('s5-slider');
+    const rowEl = sliderSleep.dom('s5-row-label');
+    const countsEl = sliderSleep.dom('s5-counts');
+    const btn = sliderSleep.dom('s5-replay');
+    const note = sliderSleep.dom('s5-replay-label');
+    const rows = sliderSleep.rows;
+    if (!rows) {
+      slider.disabled = true;
+      btn.disabled = true;
+      btn.textContent = 'Replay sleep';
+      rowEl.textContent = sliderSleep.status === 'loading' ? 'Beat history' : S5_UNAVAILABLE_WORDS;
+      countsEl.textContent = '';
+      slider.removeAttribute('aria-valuetext');
+      note.hidden = true;
+      return;
+    }
+    const idx = sliderSleep.index;
+    const parts = sliderSleep.formatParts(rows[idx], idx, rows.length, sliderSleep.drawnCounts(idx),
+      idx > 0 ? rows[idx - 1].beat : NaN);
+    rowEl.textContent = parts.head;
+    countsEl.textContent = parts.counts;
+    slider.setAttribute('aria-valuetext', parts.head + ' — ' + parts.counts);
+    const rp = sliderSleep.replay;
+    const ok = sliderSleep.canReplay(rows, idx);
+    btn.disabled = !ok && !rp.on;
+    btn.textContent = rp.on ? 'Stop replay' : 'Replay sleep';
+    note.hidden = false;
+    if (rp.on) note.textContent = sliderSleep.replayLabel(rows[idx]);
+    else if (!ok) note.textContent = S5_NO_RECORD_WORDS;
+    else note.hidden = true;
+  };
+
+  sliderSleep.exit = function () {
+    if (!sliderSleep.rows || !sliderSleep.replay.on) return;
+    const uni = sliderSleep.uni();
+    if (uni) sliderSleep.exitReplay(sliderSleep.index, sliderSleep.rows, uni, sliderSleep.graph);
+    else sliderSleep.replay.on = false;
+    sliderSleep.render();
+  };
+
+  sliderSleep.go = function (index) {
+    const uni = sliderSleep.uni();
+    if (!uni || !sliderSleep.rows) return;
+    sliderSleep.index = index;
+    sliderSleep.setRow(index, sliderSleep.rows, uni, sliderSleep.graph);
+    sliderSleep.render();
+  };
+
+  sliderSleep.onInput = function () {
+    const rows = sliderSleep.rows;
+    if (!rows) return;
+    const idx = sliderSleep.inputToRow(sliderSleep.dom('s5-slider').value, rows.length);
+    if (idx === sliderSleep.index && !sliderSleep.replay.on) return;
+    if (sliderSleep.replay.on) {
+      const uni = sliderSleep.uni();
+      if (uni) sliderSleep.exitReplay(idx, null, uni, sliderSleep.graph); // moving the slider ends the replay
+      else sliderSleep.replay.on = false;
+    }
+    sliderSleep.pending = idx;
+    sliderSleep.index = idx;
+    sliderSleep.render(); // label follows the hand at once; the universe follows once per frame
+    if (sliderSleep.reduced() || typeof requestAnimationFrame !== 'function') { sliderSleep.flush(); return; }
+    if (!sliderSleep.raf) sliderSleep.raf = requestAnimationFrame(sliderSleep.flush);
+  };
+
+  sliderSleep.flush = function () {
+    sliderSleep.raf = 0;
+    if (sliderSleep.pending == null) return;
+    const idx = sliderSleep.pending;
+    sliderSleep.pending = null;
+    sliderSleep.go(idx);
+  };
+
+  sliderSleep.cancelFrame = function () {
+    if (sliderSleep.raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(sliderSleep.raf);
+    sliderSleep.raf = 0;
+    sliderSleep.pending = null;
+  };
+
+  // One plain same-origin GET of the history file. Absent (public site) or bad
+  // history leaves the slider disabled; no other request is made here.
+  sliderSleep.load = async function (session) {
+    sliderSleep.rows = null;
+    sliderSleep.status = 'loading';
+    sliderSleep.render();
+    let rows = null;
+    try {
+      const res = await fetch(S5_HISTORY_URL, { cache: 'no-store', credentials: 'same-origin' });
+      if (res.ok) rows = sliderSleep.parseHistory(await res.text());
+    } catch (e) { rows = null; }
+    if (sliderSleep.session !== session) return; // locked or reloaded meanwhile
+    const facts = sliderSleep.graphFacts(session);
+    if (rows && !sliderSleep.checkRows(rows, facts.ids)) rows = null;
+    sliderSleep.graph = facts;
+    sliderSleep.rows = rows;
+    sliderSleep.status = rows ? 'ready' : 'unavailable';
+    sliderSleep.index = rows ? rows.length - 1 : 0;
+    const slider = sliderSleep.dom('s5-slider');
+    if (rows) {
+      slider.min = '0';
+      slider.max = String(rows.length - 1);
+      slider.step = '1';
+      slider.value = String(rows.length - 1);
+      slider.disabled = false;
+    }
+    sliderSleep.render();
+  };
+
+  sliderSleep.tick = function () {
+    const wrap = sliderSleep.dom('s5-slider-wrap');
+    if (!wrap) return;
+    const uni = sliderSleep.uni();
+    const ready = !!(graphData && viewMode === '3d' && uni && uni.isReady && uni.isReady());
+    wrap.hidden = !ready;
+    if (!ready) {
+      sliderSleep.cancelFrame();
+      if (!graphData) { sliderSleep.session = null; sliderSleep.rows = null; sliderSleep.replay.on = false; }
+      return;
+    }
+    if (sliderSleep.session !== graphData) {
+      sliderSleep.session = graphData;
+      sliderSleep.replay.on = false;
+      sliderSleep.load(graphData);
+      return;
+    }
+    if (!sliderSleep.rows) return;
+    // The 3D view was rebuilt (view toggle): put the chosen row back.
+    const last = sliderSleep.rows.length - 1;
+    if (sliderSleep.index < last && !uni.isFiltered()) {
+      const wasReplay = sliderSleep.replay.on;
+      sliderSleep.replay.on = false;
+      sliderSleep.applyRow(sliderSleep.index, sliderSleep.rows, uni, sliderSleep.graph);
+      if (wasReplay) sliderSleep.startReplay(sliderSleep.index, sliderSleep.rows, uni, sliderSleep.graph);
+      sliderSleep.render();
+    }
+  };
+
+  sliderSleep.boot = function () {
+    const slider = sliderSleep.dom('s5-slider');
+    const btn = sliderSleep.dom('s5-replay');
+    if (!slider || !btn) return;
+    sliderSleep.rows = null;
+    sliderSleep.status = 'loading';
+    sliderSleep.index = 0;
+    slider.addEventListener('input', sliderSleep.onInput);
+    btn.addEventListener('click', () => {
+      const uni = sliderSleep.uni();
+      if (!uni || !sliderSleep.rows) return;
+      if (sliderSleep.replay.on) { sliderSleep.exit(); return; }
+      sliderSleep.startReplay(sliderSleep.index, sliderSleep.rows, uni, sliderSleep.graph);
+      sliderSleep.render();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && sliderSleep.replay.on) { sliderSleep.cancelFrame(); sliderSleep.exit(); }
+    });
+    window.addEventListener('pagehide', () => { sliderSleep.cancelFrame(); sliderSleep.exit(); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') { sliderSleep.cancelFrame(); sliderSleep.exit(); }
+    });
+    sliderSleep.render();
+    setInterval(sliderSleep.tick, 1000);
+  };
+  if (typeof document !== 'undefined') sliderSleep.boot();
+  // ==== S5:end ====
 
   // ===========================================================================
   // Boot
