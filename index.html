@@ -17,7 +17,7 @@
   <meta name="theme-color" content="#07080d">
   <title>Second Brain</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307080d'/%3E%3Ccircle cx='10' cy='12' r='4' fill='%238b7cff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%2338d6c4'/%3E%3Ccircle cx='17' cy='22' r='3.5' fill='%23ffb547'/%3E%3Cpath d='M10 12L22 11M10 12L17 22M22 11L17 22' stroke='%23ffffff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=ff84d69">
+  <link rel="stylesheet" href="styles.css?v=a919348">
 </head>
 <body>
   <!-- Password gate: the published graph.json is AES-256-GCM encrypted.
@@ -55,10 +55,10 @@
     </div>
   </div>
 
-  <canvas id="graph" aria-label="Knowledge graph. Drag to pan, scroll or pinch to zoom, click a node for details." role="img"></canvas>
+  <canvas id="graph" tabindex="0" aria-label="Knowledge graph. Drag to pan, scroll or pinch to zoom, click a node for details. Keyboard: arrows or W A S D to fly, Tab to walk nodes, ? for all shortcuts." role="img"></canvas>
 
   <!-- 3D universe container (hidden until unlock; scripts are injected post-unlock) -->
-  <div id="universe" class="universe" hidden></div>
+  <div id="universe" class="universe" tabindex="0" aria-label="3D brain space. Keyboard: arrows or W A S D to fly, Tab to walk nodes, ? for all shortcuts." hidden></div>
 
   <!-- Top bar -->
   <header class="topbar">
@@ -236,6 +236,19 @@
     </div>
   </section>
 
+  <!-- S3: key-map overlay (rendered from the ONE key-map const — no second list) -->
+  <div class="scrim" id="keymap-scrim" hidden></div>
+  <section class="panel keymap-panel" id="keymap-overlay" aria-labelledby="keymap-title" role="dialog" aria-modal="true" hidden>
+    <div class="panel-head">
+      <h2 id="keymap-title">Keyboard shortcuts</h2>
+      <button class="btn btn-icon btn-ghost" id="close-keymap" type="button" aria-label="Close key map">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div id="keymap-list"></div>
+    <p class="muted small">Same keys in 2D and 3D. Press <kbd>?</kbd> anywhere to open this panel, <kbd>Esc</kbd> to close it.</p>
+  </section>
+
   <!-- Settings modal -->
   <div class="modal-backdrop" id="settings-modal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
@@ -272,6 +285,27 @@
         <button class="btn btn-primary" type="button" id="token-save">Save</button>
       </div>
 
+      <!-- S3: Brain controls — plain words, no jargon -->
+      <div id="brain-controls-section">
+        <h3 class="section-title">Brain controls</h3>
+        <p class="muted small">The brain's own switches, in plain words. They talk to the live brain over this device's tailnet connection.</p>
+
+        <div class="field-label" id="window-label">Outward window</div>
+        <div class="bc-row">
+          <button class="btn" type="button" id="window-switch" aria-pressed="false" aria-describedby="window-note">needs live connection</button>
+        </div>
+        <p class="muted small" id="window-note"></p>
+        <div class="field-error" id="window-error" role="alert"></div>
+
+        <div class="field-label">Waiting at the gate</div>
+        <p class="muted small">What is waiting at the brain's membrane, in plain words.</p>
+        <ul class="note-list small" id="gate-queue-list"><li class="muted">Open settings to load.</li></ul>
+
+        <div class="field-label">Needs you</div>
+        <p class="muted small">Open demands from the brain, in plain words.</p>
+        <ul class="note-list small" id="needs-you-list"><li class="muted">Open settings to load.</li></ul>
+      </div>
+
       <!-- Mobile: view and sync controls (hidden from topbar on mobile) -->
       <div class="mobile-settings-extras" id="mobile-settings-extras" hidden>
         <h3 style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin:16px 0 8px;">View & Sync</h3>
@@ -300,8 +334,8 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=ff84d69" defer></script>
-  <script src="app.js?v=ff84d69" defer></script>
-  <script src="vitals.js?v=ff84d69" defer></script>
+  <script src="config.js?v=a919348" defer></script>
+  <script src="app.js?v=a919348" defer></script>
+  <script src="vitals.js?v=a919348" defer></script>
 </body>
 </html>

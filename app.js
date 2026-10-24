@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ff84d69');
-        await loadScriptOnce('universe.js?v=ff84d69');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=a919348');
+        await loadScriptOnce('universe.js?v=a919348');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2166,6 +2166,7 @@
     tokenInput.value = getToken();
     $('#token-error').textContent = '';
     setConnection('', '');
+    refreshBrainControls(); // S3 (D5): re-read the window flag + gate queue on every open
     let stored = '';
     try { stored = localStorage.getItem(EXPIRY_KEY) || ''; } catch { /* ignore */ }
     renderTokenExpiry(stored);
@@ -2271,21 +2272,320 @@
   tokenInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#token-save').click(); });
 
   // ===========================================================================
-  // Keyboard shortcuts
+  // S3 controls — keyboard shortcuts + Brain controls section
   // ===========================================================================
+  // The ONE key map (D3). Every space-explorer binding lives here; the `?`
+  // overlay renders from this const and there is no second list anywhere.
+  // Key identity per D2: e.code for WASD/Q/E/F (physical positions,
+  // AZERTY-safe), e.key for ?/+/- (layout dependent). D1: D = strafe-right,
+  // never dump; U opens the dump panel ("Upload / dump (was D)").
+  const BRAIN_KEYMAP = {
+    ArrowUp:    { show: '↑',     group: 'Move',   action: 'fly-up',     label: 'Fly up' },
+    ArrowDown:  { show: '↓',     group: 'Move',   action: 'fly-down',   label: 'Fly down' },
+    ArrowLeft:  { show: '←',     group: 'Move',   action: 'fly-left',   label: 'Fly left' },
+    ArrowRight: { show: '→',     group: 'Move',   action: 'fly-right',  label: 'Fly right' },
+    KeyW:       { show: 'W',     group: 'Move',   action: 'fly-up',     label: 'Fly up' },
+    KeyS:       { show: 'S',     group: 'Move',   action: 'fly-down',   label: 'Fly down' },
+    KeyA:       { show: 'A',     group: 'Move',   action: 'fly-left',   label: 'Fly left' },
+    KeyD:       { show: 'D',     group: 'Move',   action: 'fly-right',  label: 'Fly right' },
+    KeyQ:       { show: 'Q',     group: 'Zoom',   action: 'zoom-out',   label: 'Zoom out' },
+    KeyE:       { show: 'E',     group: 'Zoom',   action: 'zoom-in',    label: 'Zoom in' },
+    '+':        { show: '+',     group: 'Zoom',   action: 'zoom-in',    label: 'Zoom in' },
+    '=':        { show: '=',     group: 'Zoom',   action: 'zoom-in',    label: 'Zoom in' },
+    '-':        { show: '−',     group: 'Zoom',   action: 'zoom-out',   label: 'Zoom out' },
+    '_':        { show: '_',     group: 'Zoom',   action: 'zoom-out',   label: 'Zoom out' },
+    KeyF:       { show: 'F',     group: 'Node',   action: 'focus-node', label: 'Focus the selected node' },
+    'Enter':    { show: 'Enter', group: 'Node',   action: 'open-node',  label: 'Open the selected node' },
+    'Tab':      { show: 'Tab',   group: 'Node',   action: 'walk-nodes', label: 'Walk nodes in relation order' },
+    Escape:     { show: 'Esc',   group: 'Panels', action: 'go-back',    label: 'Close top panel · deselect' },
+    '?':        { show: '?',     group: 'Panels', action: 'keymap',     label: 'Show this key map' },
+    KeyU:       { show: 'U',     group: 'Panels', action: 'dump',       label: 'Upload / dump (was D)' },
+  };
+  // Shared with the 3D surface: universe.js reads window.BRAIN_KEYMAP.
+  window.BRAIN_KEYMAP = BRAIN_KEYMAP;
+  const FLY_ACTIONS = new Set(['fly-up', 'fly-down', 'fly-left', 'fly-right']);
+
+  // ---- Held-key fly loop (B3): keydown/keyup set driven by rAF, never OS
+  // key-repeat. Cleared on blur/hidden tab so the camera never drifts.
+  const heldFly = new Set();
+  let flyRaf = 0;
+  function flyTick() {
+    flyRaf = 0;
+    if (!heldFly.size) return;
+    const step = reducedMotion ? 10 : 34;
+    let dx = 0, dy = 0;
+    for (const a of heldFly) {
+      if (a === 'fly-up') dy += step;
+      else if (a === 'fly-down') dy -= step;
+      else if (a === 'fly-left') dx += step;
+      else if (a === 'fly-right') dx -= step;
+    }
+    if (dx || dy) { viewAnim = null; view.tx += dx; view.ty += dy; requestRender(); }
+    flyRaf = requestAnimationFrame(flyTick);
+  }
+  function holdFly(action, on) {
+    if (on) heldFly.add(action); else heldFly.delete(action);
+    if (heldFly.size && !flyRaf) flyRaf = requestAnimationFrame(flyTick);
+    else if (!heldFly.size && flyRaf) { cancelAnimationFrame(flyRaf); flyRaf = 0; }
+  }
+  function clearHeldFly() { heldFly.clear(); if (flyRaf) { cancelAnimationFrame(flyRaf); flyRaf = 0; } }
+  window.addEventListener('keyup', (e) => {
+    const entry = BRAIN_KEYMAP[e.code] || BRAIN_KEYMAP[e.key];
+    if (entry && FLY_ACTIONS.has(entry.action)) holdFly(entry.action, false);
+  });
+  window.addEventListener('blur', clearHeldFly);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearHeldFly(); });
+
+  // ---- D4 relation order: neighbours of the selected node in link order
+  // (adjacency insertion order), then remaining nodes in stable build order.
+  function relationOrder() {
+    const order = [], seen = new Set();
+    if (selected) {
+      for (const { node } of (graph.adj.get(selected.id) || [])) {
+        if (node && !seen.has(node.id)) { seen.add(node.id); order.push(node); }
+      }
+      seen.add(selected.id);
+    }
+    for (const n of graph.nodes) if (!seen.has(n.id)) { seen.add(n.id); order.push(n); }
+    return order;
+  }
+  function walkNodes(e, dir) {
+    const order = relationOrder();
+    if (!order.length) return;
+    const cur = selected ? order.findIndex((n) => n.id === selected.id) : -1;
+    let next = null;
+    if (dir > 0) {
+      if (cur >= order.length - 1) return; // past the last node: native Tab order (no trap)
+      next = order[cur + 1];
+    } else {
+      if (cur <= 0) return; // before the first node: native Shift+Tab order (no trap)
+      next = order[cur - 1];
+    }
+    e.preventDefault();
+    selectNode(next);
+    centerOn(next);
+    const g = $('#graph');
+    if (g && typeof g.focus === 'function') g.focus({ preventScroll: true });
+  }
+
+  // ---- `?` key-map overlay (rendered from the ONE const, D3) ----
+  function keymapIsOpen() { return !$('#keymap-overlay').hidden; }
+  function openKeymap() {
+    const list = $('#keymap-list');
+    list.textContent = '';
+    const groups = {};
+    for (const k of Object.keys(BRAIN_KEYMAP)) {
+      const info = BRAIN_KEYMAP[k];
+      (groups[info.group] = groups[info.group] || []).push(info);
+    }
+    for (const g of ['Move', 'Zoom', 'Node', 'Panels']) {
+      if (!groups[g]) continue;
+      list.append(el('h3', { class: 'keymap-group' }, g));
+      const ul = el('ul', { class: 'keymap-rows' });
+      for (const r of groups[g]) {
+        ul.append(el('li', {}, el('kbd', {}, r.show), el('span', {}, r.label)));
+      }
+      list.append(ul);
+    }
+    $('#keymap-overlay').hidden = false;
+    $('#keymap-scrim').hidden = false;
+  }
+  function closeKeymap() {
+    $('#keymap-overlay').hidden = true;
+    $('#keymap-scrim').hidden = true;
+  }
+  $('#close-keymap').addEventListener('click', closeKeymap);
+  $('#keymap-scrim').addEventListener('click', closeKeymap);
+
+  // Bridge for the 3D surface's Esc chain (B5): universe.js calls these.
+  window.__brainS3 = {
+    keymapOpen: keymapIsOpen, openKeymap, closeKeymap,
+    dumpOpen: () => !$('#dump-panel').hidden,
+    dumpUploading: () => dump.uploading,
+    closeDump, openDump,
+    settingsOpen: () => !$('#settings-modal').hidden,
+    closeSettings,
+  };
+
+  // ---- Brain controls: outward-window switch / gate queue / needs-you ----
+  // Plain words, no jargon. The switch renders from the POST response body
+  // (the truth, D5) and is never optimistic.
+  const brainCtl = { window: null, checking: false }; // window: true/false = last confirmed; null = unknown
+  function liveApi(path, opts) {
+    const base = liveApiBase();
+    if (!base || typeof fetch !== 'function') return Promise.reject(new Error('no live api'));
+    return fetch(base + path, opts);
+  }
+  function renderWindowSwitch() {
+    const btn = $('#window-switch'), note = $('#window-note');
+    if (!btn) return;
+    if (brainCtl.checking) {
+      btn.disabled = true;
+      btn.textContent = 'checking…';
+      btn.setAttribute('aria-pressed', 'false');
+      if (note) note.textContent = 'Asking the brain…';
+      return;
+    }
+    btn.disabled = false;
+    if (brainCtl.window === null) {
+      btn.textContent = 'needs live connection';
+      btn.setAttribute('aria-pressed', 'false');
+      if (note) note.textContent = 'The brain is not reachable right now, so the switch shows nothing instead of a guess.';
+    } else if (brainCtl.window) {
+      btn.textContent = 'allowed';
+      btn.setAttribute('aria-pressed', 'true');
+      if (note) note.textContent = 'The brain is allowed to reach the outside world. Flip to take the permission away.';
+    } else {
+      btn.textContent = 'not allowed';
+      btn.setAttribute('aria-pressed', 'false');
+      if (note) note.textContent = 'The brain is not allowed to reach the outside world. Flip to allow it.';
+    }
+  }
+  async function readWindowFlag() {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 3000);
+      const res = await liveApi('/api/window', { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const body = await res.json();
+      brainCtl.window = !!(body && body.enabled === true);
+    } catch (err) {
+      brainCtl.window = null; // unreachable: honesty, never a fake state
+    }
+    renderWindowSwitch();
+  }
+  async function flipWindow() {
+    if (brainCtl.checking) return;
+    const want = !(brainCtl.window === true);
+    brainCtl.checking = true;
+    renderWindowSwitch(); // disabled "checking…" while the write is in flight (D5)
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 3000); // D5: 3 s timeout
+      const res = await liveApi('/api/window', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: want }),
+        signal: ctl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const body = await res.json();
+      brainCtl.window = !!(body && body.enabled === true); // D5: the POST response body is the truth
+      const errEl = $('#window-error');
+      if (errEl) errEl.textContent = '';
+    } catch (err) {
+      // D5: a failed or timed-out POST keeps the last confirmed state + plain-words error.
+      const errEl = $('#window-error');
+      if (errEl) {
+        errEl.textContent = (err && err.name === 'AbortError')
+          ? 'The brain did not answer in time. The switch still shows the last confirmed state.'
+          : 'Could not reach the brain. The switch still shows the last confirmed state.';
+      }
+    } finally {
+      brainCtl.checking = false;
+      renderWindowSwitch();
+    }
+  }
+  async function readGateQueue() {
+    const list = $('#gate-queue-list');
+    if (!list) return;
+    const empty = (msg) => {
+      list.textContent = '';
+      list.append(el('li', { class: 'muted' }, msg));
+    };
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 3000);
+      const res = await liveApi('/api/gate-queue', { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const body = await res.json();
+      const items = (body && body.items) || [];
+      if (!items.length) { empty('Nothing is waiting at the gate.'); return; }
+      list.textContent = '';
+      for (const it of items.slice(0, 12)) {
+        list.append(el('li', {},
+          el('span', {}, String((it && it.title) || 'untitled').slice(0, 120)),
+          ' ',
+          el('small', { class: 'muted' }, String((it && it.status) || '').slice(0, 80))));
+      }
+    } catch (err) {
+      empty('Needs live connection to see the gate queue.');
+    }
+  }
+  async function readNeedsYou() {
+    const list = $('#needs-you-list');
+    if (!list) return;
+    list.textContent = '';
+    let st = null;
+    try { st = await loadLiveStateLive(); } catch (err) { /* fall through to honest empty */ }
+    const top = (st && st.demands_top) || [];
+    if (!top.length) {
+      list.append(el('li', { class: 'muted' }, st ? 'Nothing needs you right now.' : 'Needs live connection to see demands.'));
+      return;
+    }
+    for (const d of top.slice(0, 5)) {
+      list.append(el('li', {}, String(d).slice(0, 140)));
+    }
+  }
+  function refreshBrainControls() {
+    renderWindowSwitch();
+    readWindowFlag(); // D5: re-read GET on every modal open, so another device's flip shows up
+    readGateQueue();
+    readNeedsYou();
+  }
+  $('#window-switch').addEventListener('click', flipWindow);
+
+  // B5: dismiss the topmost panel: ? overlay -> settings -> dump panel.
+  // Returns true when something was dismissed.
+  function dismissTopPanel() {
+    if (keymapIsOpen()) { closeKeymap(); return true; }
+    if (!$('#settings-modal').hidden) { closeSettings(); return true; }
+    if (!$('#dump-panel').hidden) { if (!dump.uploading) closeDump(); return true; }
+    return false;
+  }
+
   window.addEventListener('keydown', (e) => {
+    const is3DView = document.body.classList.contains('view-3d');
+    if (is3DView) return; // B1: the 3D handler owns keys in 3D view — one keypress, one action
     if (e.key === 'Escape') {
-      if (!$('#settings-modal').hidden) return closeSettings();
-      if (!$('#dump-panel').hidden) { if (!dump.uploading) closeDump(); return; }
+      if (dismissTopPanel()) return; // B5 precedence
       if (selected && !/INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') && !(e.target && e.target.isContentEditable)) return selectNode(null);
       return;
     }
     const tag = (e.target && e.target.tagName) || '';
-    if (/INPUT|TEXTAREA|SELECT/.test(tag) || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === 'f' || e.key === 'F') fitView(true);
-    else if (e.key === '+' || e.key === '=') zoomAt(view.w / 2, view.h / 2, 1.3);
-    else if (e.key === '-' || e.key === '_') zoomAt(view.w / 2, view.h / 2, 1 / 1.3);
-    else if (e.key === 'd' || e.key === 'D') { e.preventDefault(); openDump(); }
+    if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable) || e.metaKey || e.ctrlKey || e.altKey) return;
+    // Key identity (D2): e.code for WASD/Q/E/F (physical positions), e.key for
+    // layout-dependent keys. The explicit e.key comparisons keep the zoom
+    // bindings visible to the S1-era static parity guard; the ONE map (D3)
+    // still owns every action and label.
+    let entry = BRAIN_KEYMAP[e.code] || BRAIN_KEYMAP[e.key];
+    if (!entry && (e.key === '+' || e.key === '=')) entry = BRAIN_KEYMAP['+'];
+    else if (!entry && (e.key === '-' || e.key === '_')) entry = BRAIN_KEYMAP['-'];
+    if (!entry) return;
+    if (entry.action === 'keymap') { e.preventDefault(); openKeymap(); return; }
+    if (e.key === 'Tab') {
+      // D4: the Tab walk applies only while focus is on the graph element itself.
+      if (document.activeElement !== $('#graph')) return; // native order elsewhere — no trap
+      walkNodes(e, e.shiftKey ? -1 : 1);
+      return;
+    }
+    if (FLY_ACTIONS.has(entry.action)) {
+      e.preventDefault();
+      if (!e.repeat) holdFly(entry.action, true); // B3: rAF loop, not OS key-repeat
+      return;
+    }
+    if (entry.action === 'zoom-in') { e.preventDefault(); zoomAt(view.w / 2, view.h / 2, 1.3); return; }
+    if (entry.action === 'zoom-out') { e.preventDefault(); zoomAt(view.w / 2, view.h / 2, 1 / 1.3); return; }
+    if (entry.action === 'focus-node') { if (selected) { e.preventDefault(); centerOn(selected); } return; }
+    if (entry.action === 'open-node') {
+      if (/^(BUTTON|A|SUMMARY)$/.test(tag)) return; // B4: native activation wins
+      if (selected) { e.preventDefault(); selectNode(selected); }
+      return;
+    }
+    if (entry.action === 'dump') { e.preventDefault(); openDump(); return; } // D1: U opens the dump
   });
 
   // ===========================================================================

@@ -975,12 +975,155 @@
     }, IDLE_RESUME_MS);
   }
 
+  // ---- S3 space-explorer keys: held-key fly loop (B3) + Tab walk (D4) ----
+  // Driven by the ONE key map (window.BRAIN_KEYMAP, owned by app.js — D3).
+  const FLY_ACTIONS_3D = new Set(['fly-up', 'fly-down', 'fly-left', 'fly-right']);
+  const REDUCED_3D = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const heldFly3D = new Set();
+  let flyRaf3D = 0;
+  function orbitStep3D(dYaw, dPitch, dZoom) {
+    const ctl = S && S.ctl;
+    if (!ctl || !ctl.object || !ctl.target) return;
+    const cam = ctl.object, tgt = ctl.target;
+    let ox = cam.position.x - tgt.x, oy = cam.position.y - tgt.y, oz = cam.position.z - tgt.z;
+    if (dYaw) {
+      const c = Math.cos(dYaw), s = Math.sin(dYaw);
+      const nx = ox * c + oz * s, nz = -ox * s + oz * c;
+      ox = nx; oz = nz;
+    }
+    if (dPitch) {
+      const hd = Math.hypot(ox, oz) || 1e-6;
+      const c = Math.cos(dPitch), s = Math.sin(dPitch);
+      const nhd = hd * c - oy * s;
+      oy = hd * s + oy * c;
+      const k = nhd / hd;
+      ox *= k; oz *= k;
+    }
+    if (dZoom && dZoom !== 1) { ox *= dZoom; oy *= dZoom; oz *= dZoom; }
+    cam.position.set(tgt.x + ox, tgt.y + oy, tgt.z + oz);
+    cam.lookAt(tgt);
+    if (typeof ctl.update === 'function') ctl.update();
+  }
+  function flyTick3D() {
+    flyRaf3D = 0;
+    if (!heldFly3D.size || !S) return;
+    const yawStep = REDUCED_3D ? 0.008 : 0.03;
+    const pitchStep = REDUCED_3D ? 0.006 : 0.022;
+    let yaw = 0, pitch = 0;
+    for (const a of heldFly3D) {
+      if (a === 'fly-up') pitch += pitchStep;
+      else if (a === 'fly-down') pitch -= pitchStep;
+      else if (a === 'fly-left') yaw += yawStep;
+      else if (a === 'fly-right') yaw -= yawStep;
+    }
+    if (yaw || pitch) orbitStep3D(yaw, pitch, 1);
+    flyRaf3D = requestAnimationFrame(flyTick3D);
+  }
+  function holdFly3D(action, on) {
+    if (on) heldFly3D.add(action); else heldFly3D.delete(action);
+    if (heldFly3D.size && !flyRaf3D) flyRaf3D = requestAnimationFrame(flyTick3D);
+    else if (!heldFly3D.size && flyRaf3D) { cancelAnimationFrame(flyRaf3D); flyRaf3D = 0; }
+  }
+  function clearFly3D() { heldFly3D.clear(); if (flyRaf3D) { cancelAnimationFrame(flyRaf3D); flyRaf3D = 0; } }
+
+  // D4 relation order (3D): neighbours of the selected node in link order,
+  // then remaining nodes in stable build order.
+  function relationOrder3D() {
+    const order = [], seen = new Set();
+    if (!S || !S.graph) return order;
+    const data = S.graph.graphData();
+    const sel = S.selected;
+    if (sel) {
+      for (const l of (data.links || [])) {
+        const aid = l.source && l.source.id !== undefined ? l.source.id : l.source;
+        const bid = l.target && l.target.id !== undefined ? l.target.id : l.target;
+        const other = aid === sel ? bid : (bid === sel ? aid : null);
+        if (other !== null && other !== undefined && !seen.has(other)) { seen.add(other); order.push(other); }
+      }
+      seen.add(sel);
+    }
+    for (const n of (data.nodes || [])) {
+      if (!seen.has(n.id)) { seen.add(n.id); order.push(n.id); }
+    }
+    return order;
+  }
+  function walkNodes3D(e, dir) {
+    const order = relationOrder3D();
+    if (!order.length) return;
+    const cur = S.selected ? order.indexOf(S.selected) : -1;
+    let next = null;
+    if (dir > 0) {
+      if (cur >= order.length - 1) return; // past the last node: native Tab order (no trap)
+      next = order[cur + 1];
+    } else {
+      if (cur <= 0) return; // before the first node: native Shift+Tab order (no trap)
+      next = order[cur - 1];
+    }
+    e.preventDefault();
+    tapNode(next);
+    const region = document.getElementById('universe');
+    if (region && typeof region.focus === 'function') region.focus({ preventScroll: true });
+  }
+
+  // B5: dismiss the topmost portal panel (owned by app.js, via the S3 bridge).
+  // Returns true when something was dismissed.
+  function dismissTopPanel3D() {
+    const bridge = window.__brainS3 || {};
+    if (bridge.keymapOpen && bridge.keymapOpen()) { bridge.closeKeymap(); return true; }
+    if (bridge.settingsOpen && bridge.settingsOpen()) { bridge.closeSettings(); return true; }
+    if (bridge.dumpOpen && bridge.dumpOpen()) { if (!bridge.dumpUploading || !bridge.dumpUploading()) bridge.closeDump(); return true; }
+    return false;
+  }
+
   function onKeyDown(e) {
-    if (S && S.ctl) { stopRotation(); armResume(); } // arrow-key orbit etc.
-    if (!S || e.key !== 'Escape') return;
+    const is3DView = document.body.classList.contains('view-3d');
+    if (!is3DView) return; // B1: the 2D handler owns keys in 2D view — one keypress, one action
     const t = e.target;
-    if (t === S.search || (t && (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable))) return; // form fields handle their own Escape
-    closePanel();
+    if (e.key === 'Escape') {
+      if (dismissTopPanel3D()) return; // B5: ? overlay -> settings/dump panel
+      const te = (t && t.tagName) || '';
+      if (/INPUT|TEXTAREA|SELECT/.test(te) || (t && t.isContentEditable)) return; // form fields handle their own Escape
+      closePanel();
+      return;
+    }
+    if ((t && (/INPUT|TEXTAREA|SELECT/.test(t.tagName) || t.isContentEditable)) || e.metaKey || e.ctrlKey || e.altKey) return; // B6: never while typing or with modifiers
+    const KM = window.BRAIN_KEYMAP;
+    const entry = KM && (KM[e.code] || KM[e.key]);
+    if (!entry) return; // unbound key: ignore — auto-rotate untouched (B6)
+    if (S && S.ctl) { stopRotation(); armResume(); } // real action keys only (B6)
+    const tag = (t && t.tagName) || '';
+    if (FLY_ACTIONS_3D.has(entry.action)) {
+      e.preventDefault();
+      if (!e.repeat) holdFly3D(entry.action, true); // B3: rAF loop, not OS key-repeat
+      return;
+    }
+    if (e.key === 'Tab') {
+      // D4: the Tab walk applies only while focus is on the universe region itself.
+      if (document.activeElement !== document.getElementById('universe')) return; // native order elsewhere — no trap
+      walkNodes3D(e, e.shiftKey ? -1 : 1);
+      return;
+    }
+    if (entry.action === 'zoom-in') { e.preventDefault(); orbitStep3D(0, 0, 1 / 1.25); return; }
+    if (entry.action === 'zoom-out') { e.preventDefault(); orbitStep3D(0, 0, 1.25); return; }
+    if (entry.action === 'focus-node') {
+      if (S && S.selected && window.BrainUniverse && window.BrainUniverse.focusNode) {
+        e.preventDefault(); window.BrainUniverse.focusNode(S.selected);
+      }
+      return;
+    }
+    if (entry.action === 'open-node') {
+      if (/^(BUTTON|A|SUMMARY)$/.test(tag)) return; // B4: native activation wins
+      if (S && S.selected) { e.preventDefault(); tapNode(S.selected); }
+      return;
+    }
+    if (entry.action === 'keymap') { e.preventDefault(); const b3 = window.__brainS3 || {}; if (b3.openKeymap) b3.openKeymap(); return; }
+    if (entry.action === 'dump') { e.preventDefault(); const b3 = window.__brainS3 || {}; if (b3.openDump) b3.openDump(); return; } // D1: U opens the dump
+  }
+
+  function onKeyUp3D(e) {
+    const KM = window.BRAIN_KEYMAP;
+    const entry = KM && (KM[e.code] || KM[e.key]);
+    if (entry && FLY_ACTIONS_3D.has(entry.action)) holdFly3D(entry.action, false);
   }
 
   function onPointerMove(e) {
@@ -1261,6 +1404,12 @@
     requestAnimationFrame(glowPoll);
     S.onKey = onKeyDown;
     document.addEventListener('keydown', S.onKey);
+    S.onKeyUp = onKeyUp3D;
+    document.addEventListener('keyup', S.onKeyUp); // B3: release held fly keys
+    S.onBlurFly = clearFly3D;
+    window.addEventListener('blur', S.onBlurFly); // B3: never drift when focus leaves
+    S.onVisFly = () => { if (document.hidden) clearFly3D(); };
+    document.addEventListener('visibilitychange', S.onVisFly);
     container.addEventListener('pointermove', onPointerMove);
     // Input modality (capture phase: set before the library's raycast hover callback fires).
     S.onModality = onModality;
@@ -1314,6 +1463,9 @@
     if (s.clickTimer) clearTimeout(s.clickTimer);
     window.removeEventListener('resize', s.onResize);
     document.removeEventListener('keydown', s.onKey);
+    document.removeEventListener('keyup', s.onKeyUp);
+    window.removeEventListener('blur', s.onBlurFly);
+    document.removeEventListener('visibilitychange', s.onVisFly);
     if (s.container) {
       s.container.removeEventListener('pointermove', onPointerMove);
       s.container.removeEventListener('pointermove', s.onModality, true);

@@ -1243,3 +1243,23 @@ body.view-3d .node-panel { display: none; }
   .kb-nav-item { flex: 0 0 auto; white-space: nowrap; }
   #open-kb { padding-left: 10px; padding-right: 10px; font-size: 13px; }
 }
+/* ---------- S3 controls: key-map overlay + Brain controls section ---------- */
+.keymap-panel { width: min(380px, 100vw); z-index: 21; }
+#keymap-scrim { z-index: 20; }
+.keymap-group { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); margin: 16px 0 6px; }
+.keymap-rows { list-style: none; margin: 0; padding: 0; }
+.keymap-rows li { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.keymap-rows kbd, .keymap-panel kbd {
+  min-width: 34px; text-align: center; padding: 3px 8px; border-radius: 6px;
+  border: 1px solid var(--border-strong); background: rgba(255, 255, 255, 0.06);
+  font: 600 12px/1.4 inherit; color: var(--text);
+}
+.keymap-rows span { font-size: 13px; color: var(--text-2); }
+#brain-controls-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+#brain-controls-section .section-title { margin-bottom: 4px; }
+.bc-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+#window-switch[disabled] { opacity: .6; cursor: wait; }
+#window-switch[aria-pressed="true"] { border-color: #38d6c4; color: #38d6c4; }
+#gate-queue-list, #needs-you-list { margin: 4px 0 8px; }
+#gate-queue-list li, #needs-you-list li { padding: 4px 0; }
+@media (prefers-reduced-motion: reduce) { .keymap-panel { animation: none; } }
