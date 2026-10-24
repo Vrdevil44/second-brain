@@ -472,6 +472,7 @@
   // materials take the link colour with alpha dropped, so they'd otherwise
   // render full-bright on a dimmed link).
   function particleCount(l) {
+    if (fxSession.drawing.size && fxSession.drawing.has(linkKey(l))) return 1;
     if (!S || !S.focusSet) return 1;
     return (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : 0;
   }
@@ -1420,10 +1421,12 @@
       S.ro.observe(container);
     }
 
+    const fxNewEdges = formationSnapshot(graphData);
     applyData();
     // One view, always alive (his call 2026-10-13): the ambient systems start
     // with the scene. No mode to enter.
     startLiving();
+    edgeDrawFx(fxNewEdges);
   }
 
   // ---- Boot sequence (his vision 2026-10-17) ----
@@ -1702,6 +1705,8 @@
       S.live.formation = st.formation || null;
       renderHUD(st);
       renderActivity(st);
+      membraneFx(st);
+      birthFx(st);
       if (st.beat !== S.live.lastBeat) { S.live.lastBeat = st.beat; onBeat(st); }
     }
   }
@@ -1892,6 +1897,219 @@
       updateFocus();
     }
   }
+
+  // ==== S2:begin ====
+  // S2 formation motion, 3D surface only. Every motion below is bound to a real
+  // feed field named in formation-trace-s2.md; classes marked NONE there have
+  // no code here. Node scale and link width are the only things animated, all
+  // through three.js objects (no DOM layout writes). Steps run on the shared
+  // live frame loop (requestAnimationFrame), never on timers.
+  const FX_BIRTH_MS = 240;
+  const FX_BIRTH_EASE = 'cubic-bezier(0.2,0,0,1)';
+  const FX_RING_ALPHA = 0.5;
+  const FX_DRAW_MS = 900;
+  const FX_GHOST_ALPHA = 0.35;
+  const FX_PULSE_S = 5.5;
+
+  // The one shared concurrency counter (limit 24 live animating objects).
+  // A birth with its ring is one slot. Over the limit an event folds: the exact
+  // final state is applied at once, never dropped.
+  const formationBudget = { limit: 24, active: 0, folded: 0, loggedFolded: 0, lastLogAt: 0 };
+
+  // Session memory for the appear-once rule. prevNodes / prevEdges are the
+  // previous graph payload observed in this session.
+  const fxSession = {
+    payloads: 0, prevNodes: null, prevEdges: null, newNodes: new Set(),
+    announced: new Set(), born: new Set(), drawn: new Set(), drawing: new Map(),
+  };
+
+  // Reduced motion is read live at every call, never cached.
+  function fxReduced() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  function budgetTake() {
+    if (formationBudget.active < formationBudget.limit) { formationBudget.active++; return true; }
+    formationBudget.folded++;
+    return false;
+  }
+  function budgetFree(n) {
+    formationBudget.active = Math.max(0, formationBudget.active - (n || 1));
+  }
+  // Aggregate fold line, at most once a second.
+  function budgetLog(now) {
+    const b = formationBudget;
+    if (b.folded === b.loggedFolded || now - b.lastLogAt < 1000) return;
+    console.log('[formation] folded ' + (b.folded - b.loggedFolded) + ' event(s) to final state (budget ' + b.limit + ', total folded ' + b.folded + ')');
+    b.loggedFolded = b.folded;
+    b.lastLogAt = now;
+  }
+
+  // CSS-style cubic-bezier curve, solved by bisection on x.
+  function fxBezier(spec) {
+    const q = /cubic-bezier\(([^)]+)\)/.exec(spec)[1].split(',').map(Number);
+    const x1 = q[0], y1 = q[1], x2 = q[2], y2 = q[3];
+    const at = (a, b, t) => 3 * a * (1 - t) * (1 - t) * t + 3 * b * (1 - t) * t * t + t * t * t;
+    return (x) => {
+      if (x <= 0) return 0;
+      if (x >= 1) return 1;
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        if (at(x1, x2, mid) < x) lo = mid; else hi = mid;
+      }
+      return at(y1, y2, (lo + hi) / 2);
+    };
+  }
+  const fxBirthEase = fxBezier(FX_BIRTH_EASE);
+
+  // Diff this graph payload against the previous one observed in this session.
+  // Payload 1 (initial load) settles silently; only payload N >= 2 can yield
+  // new ids or edges. Revisiting the same data yields an empty diff.
+  function formationSnapshot(data) {
+    const nodes = new Set(), edges = new Set();
+    for (const n of (data && data.nodes) || []) if (n && n.id != null) nodes.add(String(n.id));
+    for (const e of (data && data.edges) || []) if (e) edges.add(String(e.source) + '>' + String(e.target));
+    fxSession.payloads += 1;
+    fxSession.newNodes = new Set();
+    const newEdges = [];
+    if (fxSession.payloads >= 2 && fxSession.prevNodes) {
+      for (const id of nodes) if (!fxSession.prevNodes.has(id)) fxSession.newNodes.add(id);
+      for (const k of edges) if (!fxSession.prevEdges.has(k)) newEdges.push(k);
+    }
+    fxSession.prevNodes = nodes;
+    fxSession.prevEdges = edges;
+    return newEdges;
+  }
+
+  // node.birth: runs from the live-state apply in pollLive. A node births once,
+  // and only if its id was announced in st.arrivals AND is new in the diff
+  // against the previous payload. Scale only; the arrival flash and glow stay
+  // owned by landArrival. This module owns the single birth ring.
+  function birthFx(st) {
+    const L = S && S.live;
+    if (!L || !st) return;
+    for (const a of (Array.isArray(st.arrivals) ? st.arrivals : [])) {
+      if (a && a.id != null && fxSession.announced.size < 256) fxSession.announced.add(String(a.id));
+    }
+    if (!(fxSession.payloads >= 2)) return;
+    const scene = liveScene();
+    for (const id of fxSession.newNodes) {
+      if (!fxSession.announced.has(id) || fxSession.born.has(id)) continue;
+      const n = nodeById(id);
+      const obj = n && n.__threeObj;
+      if (!n || !obj || !S.visible.has(id)) continue; // not on screen yet: try next poll
+      fxSession.born.add(id);
+      if (fxReduced() || !scene) continue; // instant settle: the node is already at scale 1
+      if (!budgetTake()) continue; // fold: exact final state is scale 1, already applied
+      const ring = liveMesh(STREAK_KNOWLEDGE, FX_RING_ALPHA);
+      if (ring) scene.add(ring);
+      obj.scale.setScalar(0.0001);
+      const t0 = performance.now();
+      let freed = false;
+      L.fx.push({
+        update(now) {
+          const raw = fxReduced() ? 1 : Math.min(1, (now - t0) / FX_BIRTH_MS);
+          obj.scale.setScalar(raw >= 1 ? 1 : Math.max(0.0001, fxBirthEase(raw)));
+          if (ring) {
+            ring.position.set(n.x || 0, n.y || 0, n.z || 0);
+            ring.scale.setScalar(6 + 28 * raw);
+            ring.material.opacity = FX_RING_ALPHA * (1 - raw);
+          }
+          return raw < 1;
+        },
+        dispose(sc) {
+          obj.scale.setScalar(1);
+          if (ring) { (sc || scene).remove(ring); ring.material.dispose(); }
+          if (!freed) { freed = true; budgetFree(1); }
+        },
+      });
+    }
+  }
+
+  // node.ghost is NONE in the trace: there is no per-item queue. This is the
+  // aggregate membrane indicator only: one beacon at the rim, sized by the
+  // st.inbox count, pulsing around alpha 0.35 (static 0.35 under reduced motion).
+  function membraneFx(st) {
+    const L = S && S.live;
+    if (!L || !st) return;
+    const inbox = Math.max(0, Number(st.inbox) || 0);
+    if (L.membrane) { L.membrane.inbox = inbox; return; }
+    const scene = liveScene();
+    const mesh = liveMesh(STREAK_KNOWLEDGE, FX_GHOST_ALPHA);
+    if (!scene || !mesh) return; // glow template not ready yet: try next poll
+    const R = edgeRadius() * 1.08, d = hashDir('membrane');
+    mesh.position.set(d.x * R, d.y * R, d.z * R);
+    mesh.visible = false;
+    scene.add(mesh);
+    const m = L.membrane = { inbox };
+    L.fx.push({
+      update(now) {
+        budgetLog(now);
+        mesh.visible = m.inbox > 0;
+        const pulse = fxReduced() ? 1 : 0.8 + 0.2 * Math.sin((2 * Math.PI * now) / (FX_PULSE_S * 1000));
+        mesh.material.opacity = FX_GHOST_ALPHA * pulse;
+        mesh.scale.setScalar(5 + 9 * Math.min(1, m.inbox / 40));
+        return true;
+      },
+      dispose(sc) { (sc || scene).remove(mesh); mesh.material.dispose(); },
+    });
+  }
+
+  // edge.draw: runs from init once a graph payload (N >= 2) is applied. Each
+  // new edge key draws in once, width thin to full over 900 ms, ease-out.
+  function edgeDrawFx(keys) {
+    const L = S && S.live;
+    if (!L || !S.graph || !keys || !keys.length) return;
+    const graph = S.graph;
+    const run = [];
+    for (const k of keys) {
+      if (fxSession.drawn.has(k)) continue;
+      fxSession.drawn.add(k);
+      if (fxReduced() || !budgetTake()) continue; // settle or fold: edge is already full width
+      run.push(k);
+    }
+    if (!run.length) return;
+    const base = graph.linkWidth();
+    for (const k of run) fxSession.drawing.set(k, 0);
+    const widthOf = (l) => {
+      const w = typeof base === 'function' ? base(l) : base;
+      const p = fxSession.drawing.get(linkKey(l));
+      return p == null ? w : w * (0.25 + 0.75 * p);
+    };
+    graph.linkWidth(widthOf);
+    updateFocus(); // one leading flow particle on each drawing edge (see particleCount)
+    const t0 = performance.now();
+    let freed = false;
+    L.fx.push({
+      update(now) {
+        const raw = fxReduced() ? 1 : Math.min(1, (now - t0) / FX_DRAW_MS);
+        const p = easeOutCubic(raw);
+        for (const k of run) fxSession.drawing.set(k, p);
+        graph.linkWidth((l) => widthOf(l));
+        return raw < 1;
+      },
+      dispose() {
+        for (const k of run) fxSession.drawing.delete(k);
+        try { graph.linkWidth(base); } catch (e) { /* scene already torn down */ }
+        if (!freed) { freed = true; budgetFree(run.length); }
+        if (S && S.graph === graph) updateFocus();
+      },
+    });
+  }
+
+  // Read-only view of the ambient packet flow (seed, particle count, speed).
+  // Hover never touches any of it; the guard compares two reads.
+  function ambientFlowSnapshot() {
+    const out = { seed: 'ps', particles: 0, speed: 0 };
+    if (!S || !S.graph) return out;
+    for (const l of S.graph.graphData().links || []) {
+      out.particles += particleCount(l);
+      out.speed += 0.0018 + 0.0052 * hash01('ps' + linkKey(l));
+    }
+    return out;
+  }
+  // ==== S2:end ====
 
   // ---- Motion craft (his bar 2026-10-17: designed, not programmed) ----
   // Linear tweens read as mechanical; eased curves read as alive.
@@ -2166,6 +2384,7 @@
       return out;
     },
     hold: (on) => { if (S && S.live) S.live.held = !!on; },
+    ambientFlow: () => ambientFlowSnapshot(), // read-only: seed / particle count / speed
     inject(st) {
       if (!S || !S.live || !S.live.on || !st) return false;
       S.live.seq++; // invalidate any in-flight poll so it can't clobber this
