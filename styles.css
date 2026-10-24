@@ -1462,3 +1462,37 @@ body.view-3d .node-panel { display: none; }
   .s5-slider { transition: none; }
 }
 /* ==== S5:end ==== */
+
+/* ==== S6:begin ==== */
+/* Voice loop: a Speak button in the panel head and one hint line. Native
+   button, no animation, no new font, no new asset. */
+.askbar-speak {
+  margin-left: auto;
+  appearance: none;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 8px 14px;
+  min-width: 44px;
+  min-height: 44px;
+  white-space: normal;
+  text-align: center;
+}
+.askbar-speak:hover,
+.askbar-speak:focus-visible { border-color: var(--accent-glow); }
+.askbar-speak:focus-visible {
+  outline: 2px solid var(--accent-glow);
+  outline-offset: 2px;
+}
+.askbar-speak:disabled { opacity: 0.5; cursor: not-allowed; font-size: 12px; }
+.askbar-hint {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* ==== S6:end ==== */

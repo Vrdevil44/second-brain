@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=4c9fa24');
-        await loadScriptOnce('universe.js?v=4c9fa24');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=6885b7a');
+        await loadScriptOnce('universe.js?v=6885b7a');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3884,6 +3884,149 @@
   };
   if (typeof document !== 'undefined') sliderSleep.boot();
   // ==== S5:end ====
+
+  // ==== S6:begin ====
+  // S6 voice loop, minimal. One owner (voiceLoop). Ears are the phone keyboard's
+  // own mic key into the native input; there is no dictation code here. The mouth
+  // is the device's own speech synth, started only by a tap on the Speak button,
+  // reading only the rendered answer text as it is at tap time. Default voice,
+  // rate and pitch. Primary rules: the click-time no-op and the stop-only watch.
+  // The S4 wrappers further down are secondary (button sync and extra stops).
+  var voiceLoop = voiceLoop || {};
+  if (!voiceLoop.booted) {
+    voiceLoop.booted = true;
+    voiceLoop.state = 'idle';
+    voiceLoop.current = null;
+    voiceLoop.spoken = '';
+    voiceLoop.watchHandle = null;
+    const VOICE_UNAVAILABLE_WORDS = 'Speaking unavailable on this device';
+    const voiceEl = (id) => document.getElementById(id);
+
+    // Pure and DOM-free: speak starts or restarts, every other event ends speech.
+    voiceLoop.nextState = function (state, event) {
+      return event === 'speak' ? 'speaking' : 'idle';
+    };
+
+    voiceLoop.synthFor = function (synth) {
+      if (synth !== undefined) return synth;
+      return (typeof speechSynthesis !== 'undefined') ? speechSynthesis : null;
+    };
+    voiceLoop.available = function (synth) {
+      return !!voiceLoop.synthFor(synth) && typeof SpeechSynthesisUtterance !== 'undefined';
+    };
+
+    // The text a tap may speak, read now from the rendered element; null = no-op.
+    voiceLoop.readable = function () {
+      const bar = voiceEl('askbar');
+      const panel = voiceEl('askbar-panel');
+      const input = voiceEl('askbar-input');
+      const answer = voiceEl('askbar-answer');
+      if (!panel || !answer || panel.hidden || (bar && bar.hidden) || (input && input.disabled)) return null;
+      const text = answer.textContent;
+      return (typeof text === 'string' && text.trim()) ? text : null;
+    };
+
+    voiceLoop.syncButton = function () {
+      const btn = voiceEl('askbar-speak');
+      if (!btn) return;
+      if (!voiceLoop.available()) {
+        btn.disabled = true;
+        btn.textContent = VOICE_UNAVAILABLE_WORDS;
+        return;
+      }
+      const speaking = voiceLoop.state === 'speaking';
+      btn.textContent = speaking ? 'Stop' : 'Speak';
+      btn.disabled = speaking ? false : voiceLoop.readable() === null;
+    };
+
+    // Stop-only watch: runs only while speaking, and can only call voiceLoop.stop.
+    voiceLoop.startWatch = function () {
+      if (voiceLoop.watchHandle !== null) return;
+      voiceLoop.watchHandle = setInterval(() => {
+        if (voiceLoop.state !== 'speaking') return;
+        const bar = voiceEl('askbar');
+        const panel = voiceEl('askbar-panel');
+        const input = voiceEl('askbar-input');
+        const answer = voiceEl('askbar-answer');
+        if (!panel || !answer || panel.hidden || (bar && bar.hidden) || (input && input.disabled)
+          || answer.textContent !== voiceLoop.spoken) voiceLoop.stop(undefined, 'hide');
+      }, 400);
+    };
+    voiceLoop.stopWatch = function () {
+      if (voiceLoop.watchHandle === null) return;
+      clearInterval(voiceLoop.watchHandle);
+      voiceLoop.watchHandle = null;
+    };
+
+    voiceLoop.setState = function (event) {
+      voiceLoop.state = voiceLoop.nextState(voiceLoop.state, event);
+      if (voiceLoop.state === 'speaking') voiceLoop.startWatch(); else voiceLoop.stopWatch();
+      voiceLoop.syncButton();
+    };
+
+    // The one speak() call site. Cancel first so utterances never queue.
+    voiceLoop.speak = function (text, synth) {
+      const s = voiceLoop.synthFor(synth);
+      if (!s || typeof SpeechSynthesisUtterance === 'undefined' || typeof text !== 'string' || !text.trim()) return false;
+      try { s.cancel(); } catch (e) { /* nothing to cancel */ }
+      const u = new SpeechSynthesisUtterance(text);
+      voiceLoop.current = u;
+      voiceLoop.spoken = text;
+      u.onend = () => { if (voiceLoop.current === u) { voiceLoop.current = null; voiceLoop.setState('end'); } };
+      u.onerror = () => { if (voiceLoop.current === u) { voiceLoop.current = null; voiceLoop.setState('error'); } };
+      voiceLoop.setState('speak');
+      try { s.speak(u); } catch (e) { voiceLoop.current = null; voiceLoop.setState('error'); return false; }
+      return true;
+    };
+
+    // Every stop trigger lands here: cancel, forget the utterance, go idle.
+    voiceLoop.stop = function (synth, event) {
+      const s = voiceLoop.synthFor(synth);
+      voiceLoop.current = null;
+      if (s) { try { s.cancel(); } catch (e) { /* already silent */ } }
+      voiceLoop.setState(event || 'stop');
+    };
+
+    // Secondary: wrap, never edit, an S4 function. Preserves this, arguments and
+    // return value; stops before the original; syncs after, even on a throw.
+    voiceLoop.wrap = function (target, name, event) {
+      const original = target[name];
+      if (typeof original !== 'function' || original.s6Wrapped) return false;
+      const wrapped = function () {
+        voiceLoop.stop(undefined, event);
+        try { return original.apply(this, arguments); } finally { voiceLoop.syncButton(); }
+      };
+      wrapped.s6Wrapped = true;
+      target[name] = wrapped;
+      return true;
+    };
+
+    const voiceTargets = ['submit', 'closePanel', 'renderAnswer', 'showWords'];
+    if (typeof askBar !== 'undefined' && askBar && voiceTargets.every((n) => typeof askBar[n] === 'function')) {
+      voiceLoop.wrap(askBar, 'submit', 'submit');
+      voiceLoop.wrap(askBar, 'closePanel', 'close');
+      voiceLoop.wrap(askBar, 'renderAnswer', 'render');
+      voiceLoop.wrap(askBar, 'showWords', 'render');
+    }
+
+    const voiceBtn = voiceEl('askbar-speak');
+    if (voiceBtn) {
+      voiceBtn.addEventListener('click', () => {
+        if (voiceLoop.state === 'speaking') { voiceLoop.stop(); return; }
+        if (!voiceLoop.available()) return;
+        const text = voiceLoop.readable();
+        if (text === null) return;
+        voiceLoop.speak(text);
+      });
+    }
+    window.addEventListener('pagehide', () => { voiceLoop.stop(undefined, 'hide'); });
+    window.addEventListener('pageshow', () => { voiceLoop.stop(undefined, 'pageshow'); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') voiceLoop.stop(undefined, 'hide');
+    });
+    voiceLoop.syncButton();
+  }
+  // ==== S6:end ====
 
   // ===========================================================================
   // Boot
