@@ -2526,4 +2526,40 @@
       if (S.graph.refresh) S.graph.refresh();
     },
   };
+
+  // ==== S4:begin ====
+  // S4 brain bar, 3D surface only: citation lighting through the existing
+  // live glow map (node objects, never a library fork). The caller passes
+  // the nodes the brain looked at (pulsed once) and the nodes it cited (kept
+  // lit). Only ids that resolve to a graph node are touched. Entries written
+  // here carry a bar flag so a clear never removes a real live event's glow.
+  const barGlow = new Set();
+  let barTimer = 0;
+  function clearBarGlow() {
+    clearTimeout(barTimer);
+    if (S && S.live) for (const id of barGlow) { const g = S.live.glow.get(id); if (g && g.bar) S.live.glow.delete(id); }
+    barGlow.clear();
+  }
+  function lightCitationNodes(fids, looked) {
+    if (!S || !S.live || !S.live.on || !S.graph) return false;
+    clearBarGlow();
+    const resolve = (xs) => (Array.isArray(xs) ? xs : []).map(String).filter((id) => !!nodeById(id));
+    const litIds = resolve(fids);
+    const pulseIds = resolve(looked);
+    const settle = () => {
+      if (!S || !S.live) return;
+      for (const id of barGlow) { const g = S.live.glow.get(id); if (g && g.bar) S.live.glow.delete(id); }
+      barGlow.clear();
+      for (const id of litIds) { S.live.glow.set(id, { kind: 'fresh', until: Number.MAX_SAFE_INTEGER, bar: true }); barGlow.add(id); }
+      updateFocus();
+    };
+    if (!pulseIds.length || fxReduced()) { settle(); return true; }
+    const until = Date.now() + 1400;
+    for (const id of pulseIds) { S.live.glow.set(id, { kind: 'demand', until, bar: true }); barGlow.add(id); }
+    updateFocus();
+    barTimer = setTimeout(settle, 1500);
+    return true;
+  }
+  window.BrainUniverse.lightCitationNodes = lightCitationNodes;
+  // ==== S4:end ====
 })();

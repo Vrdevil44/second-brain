@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=09c2333');
-        await loadScriptOnce('universe.js?v=09c2333');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=266660f');
+        await loadScriptOnce('universe.js?v=266660f');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3282,6 +3282,257 @@
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
   // ==== KB:end ====
+
+  // ==== S4:begin ====
+  // S4 brain bar. One owner (askBar), one bar, both surfaces. The brain answers
+  // whole, with citations; a thinking indicator shows while it works and the
+  // nodes it used light only after the answer arrives. Everything from the
+  // response is rendered with textContent / text nodes. The last answer lives
+  // in memory only.
+  const askBar = {};
+  askBar.lastAnswer = null;
+  askBar.busy = false;
+  const ASK_ASLEEP_WORDS = 'brain asleep — asking works on your home network';
+  const ASK_SLOW_WORDS = 'brain is slow, try again';
+  const ASK_FALLBACK_WORDS = 'the brain could not answer that — try again';
+  const ASK_TIMEOUT_MS = 125000;
+  const ASK_UNVERIFIED_WORDS = 'unverified against retrieval';
+  const ASK_THINKER_WORDS = "answered by the brain's small local model, from its own notes";
+  const ASK_REFUSAL_WORDS = {
+    empty_question: 'Ask me something first.',
+    rate_limited: 'One question per 10 seconds, please.',
+    busy: 'The brain is answering someone else right now. Try again in a moment.',
+    identity_mismatch: 'The brain could not confirm its own identity, so it is not answering.',
+    memory_stale_refuse: 'The brain\'s memory is too old to answer from safely.',
+    corpus_unavailable: 'The brain cannot reach its notes right now.',
+    seat_disabled: 'That kind of question is switched off here.',
+    seat_timeout: 'The brain took too long to answer. Try again.',
+    citation_invalid: 'The brain could not back its answer with its notes, so it is not showing one.',
+    history_corrupt: 'The brain\'s chat history is damaged. It has been flagged.',
+    thinker_unavailable: 'The brain\'s small local model is not available right now.',
+    forbidden: 'The brain does not take questions from this page.',
+    method_not_allowed: 'The brain could not take that request.',
+    bad_request: 'That question could not be sent. Try shorter words.',
+  };
+
+  // Pure and DOM-free: which nodes to pulse once, which to leave lit, and which
+  // citations stay text. A citation with no graph node is text only; a
+  // citation the retrieval never returned is unverified and is never lit.
+  askBar.planLighting = function (response, graphIds) {
+    const out = { pulse: [], lit: [], textOnly: [], unverified: [] };
+    if (!response || typeof response !== 'object' || response.refusal_reason || response.error) return out;
+    const inGraph = (id) => !!graphIds && (typeof graphIds.has === 'function' ? graphIds.has(id) : (Array.isArray(graphIds) && graphIds.indexOf(id) !== -1));
+    const hitRows = (response.retrieval_debug && Array.isArray(response.retrieval_debug.hits)) ? response.retrieval_debug.hits : [];
+    const hitIds = hitRows.map((h) => (h && typeof h.fid === 'string') ? h.fid : '').filter((id) => id);
+    const citeRows = Array.isArray(response.citations) ? response.citations : [];
+    const citeIds = citeRows.map((c) => (c && typeof c.fid === 'string') ? c.fid : '').filter((id) => id);
+    hitIds.forEach((id) => { if (inGraph(id) && out.pulse.indexOf(id) === -1) out.pulse.push(id); });
+    citeIds.forEach((id) => {
+      if (!inGraph(id)) { if (out.textOnly.indexOf(id) === -1) out.textOnly.push(id); return; }
+      if (hitIds.indexOf(id) === -1) { if (out.unverified.indexOf(id) === -1) out.unverified.push(id); return; }
+      if (out.lit.indexOf(id) === -1) out.lit.push(id);
+    });
+    return out;
+  };
+
+  askBar.refusalWords = function (body) {
+    const key = body && typeof body === 'object' ? String(body.refusal_reason || body.error || '') : '';
+    return Object.prototype.hasOwnProperty.call(ASK_REFUSAL_WORDS, key) ? ASK_REFUSAL_WORDS[key] : ASK_FALLBACK_WORDS;
+  };
+
+  askBar.warningWords = function (w) {
+    const raw = String(w);
+    const stale = /^memory_stale_(\d+)h$/.exec(raw);
+    if (stale) return 'The brain\'s memory is about ' + stale[1] + ' hours old.';
+    if (raw === 'chat_log_not_written') return 'This question was not saved to the chat history.';
+    return raw.replace(/_/g, ' ');
+  };
+
+  askBar.graphIds = function () {
+    const nodes = (graphData && Array.isArray(graphData.nodes)) ? graphData.nodes : [];
+    return new Set(nodes.map((n) => String(n.id)));
+  };
+
+  // Asleep = no live contact with the brain (the same signal vitals.js reads).
+  askBar.isAsleep = function () {
+    if (!liveApiBase()) return true;
+    let v = null;
+    try { v = window.__brainVitals && window.__brainVitals.read(); } catch (e) { v = null; }
+    const dimmed = document.querySelector('#universe.sleeping, #graph.sleeping');
+    return !v || !v.live || !!dimmed;
+  };
+
+  askBar.focusFid = function (fid) {
+    if (viewMode === '3d' && window.BrainUniverse && window.BrainUniverse.focusNode) return window.BrainUniverse.focusNode(fid);
+    const n = graph.byId.get(fid);
+    if (n) { selectNode(n); return true; }
+    return false;
+  };
+
+  askBar.setCaption = function (text, withDot) {
+    const cap = $('#askbar-caption');
+    cap.textContent = '';
+    if (withDot) { const d = document.createElement('span'); d.className = 'askbar-dot'; d.setAttribute('aria-hidden', 'true'); cap.appendChild(d); }
+    cap.appendChild(document.createTextNode(text));
+  };
+
+  askBar.openPanel = function () { $('#askbar-panel').hidden = false; };
+  askBar.closePanel = function () { $('#askbar-panel').hidden = true; };
+
+  // Panel for a refusal or failure: plain words, no answer text, no citations.
+  askBar.showWords = function (words) {
+    askBar.openPanel();
+    askBar.setCaption(words, false);
+    $('#askbar-answer').textContent = '';
+    $('#askbar-thinker').textContent = '';
+    $('#askbar-warnings').textContent = '';
+    $('#askbar-cites').textContent = '';
+  };
+
+  askBar.renderAnswer = function (body, plan) {
+    askBar.openPanel();
+    const hitRows = (body.retrieval_debug && Array.isArray(body.retrieval_debug.hits)) ? body.retrieval_debug.hits : [];
+    const hitSet = new Set(hitRows.map((h) => h && h.fid));
+    askBar.setCaption('looked at ' + hitRows.length + ' notes', false);
+    $('#askbar-answer').textContent = body.answer;
+    $('#askbar-thinker').textContent = ASK_THINKER_WORDS;
+    const warnList = $('#askbar-warnings');
+    warnList.textContent = '';
+    (Array.isArray(body.warnings) ? body.warnings : []).forEach((w) => {
+      const li = document.createElement('li');
+      li.appendChild(document.createTextNode(askBar.warningWords(w)));
+      warnList.appendChild(li);
+    });
+    const list = $('#askbar-cites');
+    list.textContent = '';
+    const cites = Array.isArray(body.citations) ? body.citations : [];
+    if (!cites.length && hitRows.length) {
+      const li = document.createElement('li');
+      li.className = 'askbar-cite-meta';
+      li.appendChild(document.createTextNode('the brain has nothing cited on that'));
+      list.appendChild(li);
+    }
+    cites.forEach((c) => {
+      const fid = String((c && c.fid) || '');
+      const li = document.createElement('li');
+      li.className = 'askbar-cite';
+      const meta = document.createElement('div');
+      meta.className = 'askbar-cite-meta';
+      if (plan.lit.indexOf(fid) !== -1) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'askbar-cite-btn';
+        b.appendChild(document.createTextNode(fid));
+        b.setAttribute('aria-label', 'Show ' + fid + ' in the graph');
+        b.addEventListener('click', () => { askBar.focusFid(fid); });
+        meta.appendChild(b);
+      } else {
+        meta.appendChild(document.createTextNode(fid));
+      }
+      if (c && c.confidence !== undefined && c.confidence !== null) meta.appendChild(document.createTextNode(' · confidence ' + String(c.confidence)));
+      li.appendChild(meta);
+      if (c && c.snippet) {
+        const sn = document.createElement('p');
+        sn.className = 'askbar-cite-snippet';
+        sn.appendChild(document.createTextNode(String(c.snippet)));
+        li.appendChild(sn);
+      }
+      if (!hitSet.has(fid)) {
+        const m = document.createElement('p');
+        m.className = 'askbar-cite-mark';
+        m.appendChild(document.createTextNode(ASK_UNVERIFIED_WORDS));
+        li.appendChild(m);
+      } else if (plan.textOnly.indexOf(fid) !== -1) {
+        const m = document.createElement('p');
+        m.className = 'askbar-cite-mark';
+        m.appendChild(document.createTextNode('no node for this one in the graph, shown as text'));
+        li.appendChild(m);
+      }
+      list.appendChild(li);
+    });
+  };
+
+  // The one place the bar asks. Asleep returns early with no request at all.
+  askBar.submit = async function () {
+    if (askBar.busy) return;
+    if (askBar.isAsleep()) { askBar.refresh(); return; }
+    const input = $('#askbar-input');
+    const question = String(input.value || '').trim();
+    if (!question) { askBar.showWords(ASK_REFUSAL_WORDS.empty_question); return; }
+    askBar.busy = true;
+    askBar.refresh();
+    askBar.openPanel();
+    askBar.setCaption('thinking…', true);
+    const ctl = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; try { ctl.abort(); } catch (e) { /* already done */ } }, ASK_TIMEOUT_MS);
+    let ok = false;
+    let body = null;
+    try {
+      const res = await fetch(liveApiBase() + '/api/portal-ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question }),
+        credentials: 'omit',
+        cache: 'no-store',
+        signal: ctl.signal,
+      });
+      ok = res.ok;
+      try { body = await res.json(); } catch (e) { body = null; }
+      clearTimeout(timer);
+    } catch (e) {
+      clearTimeout(timer);
+      // A network failure keeps whatever was last confirmed; nothing is invented.
+      if (timedOut) askBar.setCaption(ASK_SLOW_WORDS, false);
+      else askBar.setCaption(ASK_ASLEEP_WORDS, false);
+      askBar.busy = false;
+      askBar.refresh();
+      return;
+    }
+    askBar.busy = false;
+    askBar.refresh();
+    askBar.onResponse(ok, body);
+  };
+
+  // The only function that lights nodes. A refusal or failure plans nothing,
+  // so the same single call clears the lights and nothing is lit.
+  askBar.onResponse = function (ok, body) {
+    const answered = ok && body && typeof body === 'object' && !body.refusal_reason && !body.error
+      && typeof body.answer === 'string' && body.thinker === 'localmind';
+    const plan = askBar.planLighting(answered ? body : null, askBar.graphIds());
+    if (answered) {
+      askBar.lastAnswer = body;
+      askBar.renderAnswer(body, plan);
+    } else {
+      askBar.showWords(askBar.refusalWords(body));
+    }
+    if (window.BrainUniverse && window.BrainUniverse.lightCitationNodes) window.BrainUniverse.lightCitationNodes(plan.lit, plan.pulse);
+  };
+
+  askBar.refresh = function () {
+    const bar = $('#askbar');
+    if (!bar) return;
+    const v = (() => { try { return window.__brainVitals && window.__brainVitals.read(); } catch (e) { return null; } })();
+    bar.hidden = !(v && v.unlocked);
+    const asleep = askBar.isAsleep();
+    $('#askbar-asleep').hidden = !asleep;
+    $('#askbar-input').disabled = asleep || askBar.busy;
+    $('#askbar-go').disabled = asleep || askBar.busy;
+  };
+
+  (function initAskBar() {
+    const bar = $('#askbar');
+    if (!bar) return;
+    $('#askbar-go').addEventListener('click', () => { askBar.submit(); });
+    $('#askbar-close').addEventListener('click', () => { askBar.closePanel(); $('#askbar-input').focus(); });
+    bar.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('#askbar-panel').hidden) { e.preventDefault(); askBar.closePanel(); return; }
+      if (e.key === 'Enter' && e.target === $('#askbar-input') && !e.isComposing) { e.preventDefault(); askBar.submit(); }
+    });
+    askBar.refresh();
+    setInterval(askBar.refresh, 1000);
+  })();
+  // ==== S4:end ====
 
   // ===========================================================================
   // Boot
