@@ -645,8 +645,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7a7846b');
-        await loadScriptOnce('universe.js?v=7a7846b');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=516c53b');
+        await loadScriptOnce('universe.js?v=516c53b');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
