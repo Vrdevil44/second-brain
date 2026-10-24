@@ -645,8 +645,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=516c53b');
-        await loadScriptOnce('universe.js?v=516c53b');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=2c8c0a2');
+        await loadScriptOnce('universe.js?v=2c8c0a2');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -744,6 +744,24 @@
   let liveSseOpen = false;
   let liveSseRetryAt = 0;
   let liveStateFloor = null; // freshest live-state payload ever returned (monotonic)
+  let liveFetchOkAt = 0;     // last successful fetchLiveState() contact (ms epoch)
+
+  // Read-only vitals feed for portal/vitals.js. Counts and payload only; no node, key or label leaves.
+  window.__brainVitals = Object.freeze({
+    read: () => {
+      const sseAt = (liveSseState && liveSseState.at) || 0;
+      const contactAt = Math.max(sseAt, liveFetchOkAt);
+      const unlocked = !!graphData || !!(graph.nodes && graph.nodes.length);
+      const edges = graph2dBuilt ? graph.edges : (graphData && graphData.edges); // 3D never builds graph.edges
+      return {
+        st: fresherLiveState(liveStateFloor, liveSseState && liveSseState.st),
+        contactAt: contactAt,
+        live: contactAt > 0,
+        relations: (unlocked && Array.isArray(edges)) ? edges.length : null,
+        unlocked: unlocked,
+      };
+    },
+  });
 
   // Monotonic freshness: higher beat wins; equal beat -> later ts wins. Never
   // returns a payload older than `current`.
@@ -772,6 +790,7 @@
       clearTimeout(timer);
       if (!res.ok) return null;
       const body = await res.json();
+      if (body && typeof body.beat === 'number') liveFetchOkAt = Date.now();
       return (body && typeof body.beat === 'number') ? body : null;
     } catch (e) { return null; }
   }

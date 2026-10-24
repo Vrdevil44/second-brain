@@ -1213,3 +1213,7 @@ body.view-3d .node-panel { display: none; }
 /* ---- Cinematic finish REMOVED 2026-10-18 (his LAW: pure void background) ----
    Vignette + film grain deleted. Background must be jet black empty space:
    no gradients, no noise, no movement, no edge darkening. Only the brain. */
+
+/* ---------- Freshness guard: the brain dims when no live contact (vitals.js) ---------- */
+#universe.sleeping, #graph.sleeping { opacity: .35; transition: opacity 2s ease; }
+@media (prefers-reduced-motion: reduce) { #universe.sleeping, #graph.sleeping { transition: none; } }
