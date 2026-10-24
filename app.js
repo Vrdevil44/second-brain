@@ -82,11 +82,12 @@
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json, mfa.json and live-state.json, only GET.
+      // Same origin: only graph.json, mfa.json, live-state.json and knowledge-base.json, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
       const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
       const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
-      if (m === 'GET' && (isGraph || isMfa || isLive) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      const isKb = u.pathname.endsWith('/knowledge-base.json') || u.pathname === '/knowledge-base.json';
+      if (m === 'GET' && (isGraph || isMfa || isLive || isKb) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       throw new Error('Blocked by privacy rule: ' + m + ' ' + u.pathname);
     }
 
@@ -362,6 +363,7 @@
     try { await idbDelete(); } catch { /* nothing stored / IDB blocked */ }
     sessionExpiresAt = 0;
     sessionDataKey = null;
+    kbReset();
   }
 
   async function sha256Hex(text) {
@@ -645,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=4b82dc4');
-        await loadScriptOnce('universe.js?v=4b82dc4');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ff84d69');
+        await loadScriptOnce('universe.js?v=ff84d69');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -702,6 +704,7 @@
         startLockWatch();
       }
       graphData = data; // decrypted graph stays in memory only
+      $('#open-kb').hidden = false; // KB entry point: only after a full unlock
       await renderView();
       status.textContent = '';
       status.classList.remove('error');
@@ -2844,6 +2847,141 @@
     // Delay so the opening tap doesn't immediately close it.
     setTimeout(() => document.addEventListener('click', outsideCloser, true), 100);
   }
+
+  // ==== KB:begin ====
+  // Knowledge Base booklet view. Text only: sections render via textContent.
+  // Gate: the button is revealed after graphData = data in loadGraph; the
+  // published knowledge-base.json wears the graph's AES-GCM envelope and is
+  // decrypted here with sessionDataKey. Nothing is stored; wipeSession resets.
+  let kbSections = null;   // cached [{id,title,body}], in memory only
+  let kbLastId = null;     // last viewed section id, in memory only
+  let kbGen = 0;           // bumped on reset so late async results are dropped
+
+  function kbReset() {
+    kbGen++;
+    kbSections = null;
+    kbLastId = null;
+    const panel = $('#kb-panel');
+    if (panel) panel.hidden = true;
+    const body = $('#kb-body');
+    if (body) body.textContent = '';
+    const nav = $('#kb-nav');
+    if (nav) nav.textContent = '';
+    const btn = $('#open-kb');
+    if (btn) btn.hidden = true;
+  }
+
+  // Resolves to sections, null (stay silent: locked), or false (show unavailable).
+  async function kbLoadSections() {
+    const res = await guardedFetch('knowledge-base.json', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const body = await res.json();
+    let doc;
+    if (isEnvelope(body)) {
+      if (!sessionDataKey) return null;
+      doc = await decryptWithKey(body, sessionDataKey);
+    } else if (!sessionDataKey) {
+      doc = body; // true local preview: the graph itself loaded as a plain object
+    } else {
+      return false; // envelope graph but plain KB: fail closed
+    }
+    const list = doc && doc.sections;
+    if (!Array.isArray(list) || !list.length) return false;
+    const ok = list.every((x) => x && typeof x.id === 'string' && typeof x.title === 'string' && typeof x.body === 'string');
+    return ok ? list : false;
+  }
+
+  function kbShowSection(id) {
+    const sec = (kbSections || []).find((x) => x.id === id) || (kbSections || [])[0];
+    if (!sec) return;
+    kbLastId = sec.id;
+    for (const b of $('#kb-nav').children) {
+      const on = b.dataset.id === sec.id;
+      b.classList.toggle('active', on);
+      if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+    }
+    const body = $('#kb-body');
+    body.textContent = sec.body;
+    body.scrollTop = 0;
+  }
+
+  function kbRenderNav() {
+    const nav = $('#kb-nav');
+    nav.textContent = '';
+    for (const sec of kbSections) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'kb-nav-item';
+      b.dataset.id = sec.id;
+      b.textContent = sec.title;
+      b.addEventListener('click', () => kbShowSection(sec.id));
+      nav.append(b);
+    }
+  }
+
+  function kbUnavailable() {
+    $('#kb-nav').textContent = '';
+    $('#kb-body').textContent = 'Knowledge Base unavailable';
+  }
+
+  async function kbRefreshLive(gen) {
+    const line = $('#kb-live');
+    line.textContent = '';
+    let st = null;
+    try { st = await loadLiveStateLive(); } catch { st = null; }
+    if (gen !== kbGen) return;
+    const t = (st && st.ts) ? Date.parse(st.ts) : NaN;
+    line.textContent = Number.isFinite(t)
+      ? 'live · data ' + fmtFreshAge(Date.now() - t)
+      : 'live status unavailable';
+  }
+
+  async function openKb() {
+    if (!graphData) return; // locked: nothing to open
+    const gen = kbGen;
+    const panel = $('#kb-panel');
+    if (!kbSections) {
+      let list;
+      try { list = await kbLoadSections(); } catch { list = false; }
+      if (gen !== kbGen || !graphData) return;
+      if (list === null) return; // envelope without a session key: do nothing
+      if (list === false) {
+        panel.hidden = false;
+        kbUnavailable();
+        $('#kb-live').textContent = '';
+        $('#close-kb').focus();
+        return;
+      }
+      kbSections = list;
+    }
+    kbRenderNav();
+    kbShowSection(kbLastId);
+    panel.hidden = false;
+    $('#close-kb').focus();
+    kbRefreshLive(gen);
+  }
+
+  function closeKb() {
+    const panel = $('#kb-panel');
+    if (panel.hidden) return;
+    panel.hidden = true;
+    $('#open-kb').focus();
+  }
+
+  $('#open-kb').addEventListener('click', openKb);
+  $('#close-kb').addEventListener('click', closeKb);
+  document.addEventListener('keydown', (e) => {
+    const panel = $('#kb-panel');
+    if (panel.hidden) return;
+    if (e.key === 'Escape') { e.preventDefault(); closeKb(); return; }
+    if (e.key !== 'Tab') return;
+    const items = Array.from(panel.querySelectorAll('button')).filter((b) => !b.hidden);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  // ==== KB:end ====
 
   // ===========================================================================
   // Boot
