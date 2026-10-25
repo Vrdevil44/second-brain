@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f9b9f8b');
-        await loadScriptOnce('universe.js?v=f9b9f8b');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=675ac07');
+        await loadScriptOnce('universe.js?v=675ac07');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2196,6 +2196,9 @@
   }
   function refreshTokenDot() {
     $('#token-dot').classList.toggle('on', !!getToken());
+    const tokenDotText = getToken() ? 'GitHub token connected' : 'GitHub token not connected';
+    $('#token-dot').title = tokenDotText;
+    $('#token-dot').setAttribute('aria-label', tokenDotText);
     $('#open-settings').title = getToken() ? 'Settings (token saved)' : 'Settings (no token)';
   }
   function setConnection(msg, kind) {

@@ -73,6 +73,13 @@
   const DBLCLICK_MS = 280;
   const DIM_HOVER = 0.10; // dim factor while a hover (not a pin) anchors the focus
   const DIM = 0.15; // opacity factor for nodes/links outside the focus neighborhood
+  // Hairball recession: end-to-end links read at ~LINK_OPACITY_END effective
+  // opacity in the default (no-focus) view. The lib multiplies the global
+  // linkOpacity scalar by each colour's alpha, so the factor is the ratio.
+  const LINK_OPACITY_GLOBAL = 0.55; // must match .linkOpacity(0.55) below
+  const LINK_OPACITY_END = 0.30;
+  const LINK_END_ALPHA = LINK_OPACITY_END / LINK_OPACITY_GLOBAL;
+  const isDomainLink = (l) => !!l && (l.type || '').toUpperCase() === 'DOMAIN';
 
   let S = null; // live state; null when not initialised
 
@@ -497,6 +504,7 @@
             c = scaleAlpha(c, 1 + 0.03 * Math.sin(t * 0.9));
           }
         }
+        if (!S.focusSet && !isDomainLink(l)) c = scaleAlpha(c, LINK_END_ALPHA); // recession: default view only
         return c;
       })
       .linkDirectionalParticles((l) => particleCount(l));
@@ -1232,6 +1240,7 @@
           if (sId === 'core' || tId === 'core') return 'rgba(234, 246, 255, 0.38)';
           return 'rgba(234, 246, 255, 0.25)';
         }
+        if (l) return scaleAlpha(l.color || '#9aa0b4', LINK_END_ALPHA);
         return l.color || '#9aa0b4';
       })
       .linkOpacity(0.55)
@@ -1785,10 +1794,12 @@
       hud._head.type = 'button';
       hud._head.setAttribute('aria-expanded', 'true');
       hud._stage = h('span', 'hud-stage');
+      hud._prog = h('span', 'hud-progress');
       hud._sync = h('span', 'hud-sync');
       hud._sync.setAttribute('role', 'img');
       hud._beat = h('span', 'hud-beat');
       hud._head.append(hud._stage, hud._sync, hud._beat);
+      hud._head.insertBefore(hud._prog, hud._sync);
       hud._head.addEventListener('click', (e) => { e.stopPropagation(); setHudCollapsed(!S.hudCollapsed); });
       hud._body = h('div', 'hud-body');
       hud._focus = h('ul', 'hud-focus');
@@ -1811,6 +1822,10 @@
       }
     }
     hud._stage.textContent = (fm && fm.words) || (core ? 'the core is awake' : 'listening');
+    // Formation progress: shown only while fresh. The asleep gate is CSS
+    // (body:has(.sleeping) .hud-progress) off the same class vitals.js toggles.
+    const prog = fm && fm.progress_0_1;
+    hud._prog.textContent = (typeof prog === 'number' && isFinite(prog)) ? Math.round(Math.max(0, Math.min(1, prog)) * 100) + '%' : '';
     hud._beat.textContent = 'beat ' + st.beat;
     // Sync dial: the bridge relay's live sync face (st.sync). Ring fills with
     // percent; amber while syncing, teal when idle. Tooltip carries the words.

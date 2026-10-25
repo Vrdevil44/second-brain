@@ -1168,6 +1168,8 @@ body.view-3d .node-panel { display: none; }
 }
 .hud-stage { font: 600 10px var(--mono); letter-spacing: 1.5px; color: var(--text-3); text-transform: uppercase; }
 .hud-beat { font: 600 10px var(--mono); letter-spacing: 1px; color: var(--text-3); }
+.hud-progress { font: 600 10px var(--mono); letter-spacing: 1px; color: var(--text-3); margin-right: auto; }
+.hud-progress:empty, body:has(#universe.sleeping) .hud-progress, body:has(#graph.sleeping) .hud-progress { display: none; }
 /* Sync dial: tiny ring showing bridge-relay sync percent. Teal when idle,
    amber while a sync is in flight. Same quiet language as the rest of the HUD. */
 .hud-sync { --p: 100%; width: 13px; height: 13px; border-radius: 50%; flex: none; align-self: center;
