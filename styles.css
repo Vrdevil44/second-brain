@@ -1498,3 +1498,32 @@ body.view-3d .node-panel { display: none; }
   line-height: 1.4;
 }
 /* ==== S6:end ==== */
+
+/* === UI iteration 2 (owner call 2026-10-26): one Updates button; Beats + Updates collapsed by default === */
+#bottom-stack .updates-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--surface);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 1px var(--border);
+  font-size: 13px;
+  color: var(--text-2);
+  cursor: pointer;
+  border: none;
+  order: 3;
+  align-self: flex-start;
+}
+#bottom-stack:not(.updates-open) .hud,
+#bottom-stack:not(.updates-open) .updates-log { display: none; }
+#bottom-stack.updates-open .hud { display: block; }
+#bottom-stack.updates-open .updates-log { display: block; }
+#bottom-stack.updates-open .hud .hud-body { display: block; }
+#bottom-stack .pills-row { display: none; }
+@media (max-width: 640px) {
+  #bottom-stack.updates-open .updates-log { max-height: 50vh; padding: 10px 14px; border-radius: 12px; overflow-y: auto; }
+  #bottom-stack.updates-open .hud { max-height: 50vh; overflow-y: auto; }
+}

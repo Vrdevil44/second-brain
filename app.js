@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=8a096ff');
-        await loadScriptOnce('universe.js?v=8a096ff');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=dd47534');
+        await loadScriptOnce('universe.js?v=dd47534');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2834,6 +2834,23 @@
     badge.textContent = newCount > 0 ? newCount : '';
   }
 
+  function initUpdatesToggle() {
+    const btn = document.getElementById('updates-toggle');
+    const stack = document.getElementById('bottom-stack');
+    if (!btn || !stack) return;
+    btn.addEventListener('click', () => {
+      const open = stack.classList.toggle('updates-open');
+      btn.setAttribute('aria-expanded', String(open));
+      if (open) scrollUpdatesToBottom();
+    });
+    document.addEventListener('click', (e) => {
+      if (stack.classList.contains('updates-open') && !(e.target && e.target.closest && e.target.closest('#bottom-stack'))) {
+        stack.classList.remove('updates-open');
+        btn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
   function initMobileUI() {
     if (!isMobile()) return;
 
@@ -4052,4 +4069,5 @@
   loadUpdatesLog();
   initUpdatesAutoScroll();
   initMobileUI();
+  initUpdatesToggle();
 })();
