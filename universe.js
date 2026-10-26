@@ -913,6 +913,9 @@
         head.querySelector('.u-legend-caret').textContent = collapsed ? '▸' : '▾';
       });
       sec.append(head, body);
+      body.classList.add('collapsed');
+      head.setAttribute('aria-expanded', 'false');
+      head.querySelector('.u-legend-caret').textContent = '▸';
       return sec;
     }
 

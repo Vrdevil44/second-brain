@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ba3ea59');
-        await loadScriptOnce('universe.js?v=ba3ea59');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=8a096ff');
+        await loadScriptOnce('universe.js?v=8a096ff');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2998,6 +2998,17 @@
             cloneRow.classList.toggle('u-off', origRow.classList.contains('u-off'));
             cloneRow.addEventListener('click', () => origRow.click());
           }
+        });
+        clone.querySelectorAll('.u-legend-sec').forEach((sec) => {
+          const header = sec.querySelector('.u-legend-title');
+          const body = sec.querySelector('.u-legend-rows');
+          if (!header || !body) return;
+          header.addEventListener('click', () => {
+            const collapsed = body.classList.toggle('collapsed');
+            header.setAttribute('aria-expanded', String(!collapsed));
+            const caret = header.querySelector('.u-legend-caret');
+            if (caret) caret.textContent = collapsed ? '▸' : '▾';
+          });
         });
         container.appendChild(clone);
         return;
