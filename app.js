@@ -651,6 +651,7 @@ function expandQueryVariants(q, groups) {
   // In-memory only. The 3D scripts are injected strictly after unlock+decrypt;
   // nothing 3D-related is referenced from index.html.
   let viewMode = '3d';
+  document.body.classList.add('view-3d');
   let graphData = null;
   let sessionDataKey = null; // derived data key, held in memory only while unlocked (same lifetime as graphData)
   let graph2dBuilt = false;
@@ -675,8 +676,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7d18c0a');
-        await loadScriptOnce('universe.js?v=7d18c0a');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=318e913');
+        await loadScriptOnce('universe.js?v=318e913');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
