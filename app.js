@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=275da61');
-        await loadScriptOnce('universe.js?v=275da61');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ecd8c22');
+        await loadScriptOnce('universe.js?v=ecd8c22');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -780,6 +780,10 @@
   function liveApiBase() {
     try { return (window.BRAIN_CONFIG && window.BRAIN_CONFIG.LIVE_API_BASE) || ''; }
     catch (e) { return ''; }
+  }
+  function historyLiveUrl() {
+    const b = liveApiBase();
+    return b ? b + '/graph-history.jsonl' : '';
   }
 
   async function fetchLiveState() {
@@ -3859,7 +3863,7 @@
     sliderSleep.render();
     let rows = null;
     try {
-      const res = await fetch(S5_HISTORY_URL, { cache: 'no-store', credentials: 'same-origin' });
+      const res = await fetch(historyLiveUrl() || S5_HISTORY_URL, { cache: 'no-store', credentials: 'same-origin' });
       if (res.ok) rows = sliderSleep.parseHistory(await res.text());
     } catch (e) { rows = null; }
     if (sliderSleep.session !== session) return; // locked or reloaded meanwhile
