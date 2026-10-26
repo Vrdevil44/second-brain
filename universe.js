@@ -1855,6 +1855,12 @@
       }
     }
     const meta = [st.nodes + ' facts', st.inbox + ' demand' + (st.inbox === 1 ? '' : 's')];
+    // Live-feed fix (2026-10-26): the box backend names the facts count 'facts',
+    // the staged snapshot names it 'nodes'; accept either, never print undefined.
+    const factsCount = Number.isFinite(st.nodes) ? st.nodes : (Number.isFinite(st.facts) ? st.facts : null);
+    meta.length = 0;
+    if (factsCount !== null) meta.push(factsCount + ' facts');
+    if (Number.isFinite(st.inbox)) meta.push(st.inbox + ' demand' + (st.inbox === 1 ? '' : 's'));
     if (core && typeof core.open_questions === 'number' && core.open_questions > 0) {
       meta.push(core.open_questions + ' open question' + (core.open_questions === 1 ? '' : 's'));
     }
