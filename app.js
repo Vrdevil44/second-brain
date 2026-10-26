@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ecd8c22');
-        await loadScriptOnce('universe.js?v=ecd8c22');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=617743f');
+        await loadScriptOnce('universe.js?v=617743f');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -799,6 +799,21 @@
       const body = await res.json();
       if (body && typeof body.beat === 'number') liveFetchOkAt = Date.now();
       return (body && typeof body.beat === 'number') ? body : null;
+    } catch (e) { return null; }
+  }
+
+  async function fetchSyncStatusLive() {
+    const base = liveApiBase();
+    if (!base || typeof fetch !== 'function') return null;
+    try {
+      const ctl = new AbortController();
+      const ms = (window.BRAIN_CONFIG && window.BRAIN_CONFIG.LIVE_TIMEOUT_MS) || 2500;
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ms);
+      const res = await fetch(base + '/sync-status.json', { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const body = await res.json();
+      return (body && body.dial && typeof body.dial.percent === 'number') ? body : null;
     } catch (e) { return null; }
   }
 
@@ -2776,6 +2791,29 @@
     el.textContent = 'data ' + fmtFreshAge(Date.now() - t);
   }
   setInterval(renderFreshness, 30000);
+
+  // Feed the HUD sync dial from the backend; hand it back to the built-in poll when the backend is down.
+  let syncDialLiveDown = false;
+  async function tickSyncDialLive() {
+    if (!liveApiBase()) return;
+    const sy = await fetchSyncStatusLive();
+    if (sy) {
+      try {
+        if (window.BrainUniverse && typeof BrainUniverse.setSyncDial === 'function') {
+          const busy = (sy.state === 'delivering' || sy.state === 'peek' || sy.state === 'busy');
+          BrainUniverse.setSyncDial(sy.dial.percent, sy.words || 'sync', busy);
+        }
+      } catch (e) {}
+      syncDialLiveDown = false;
+    } else if (!syncDialLiveDown) {
+      try {
+        if (window.BrainUniverse && typeof BrainUniverse.releaseSyncDial === 'function') BrainUniverse.releaseSyncDial();
+      } catch (e) {}
+      syncDialLiveDown = true;
+    }
+  }
+  tickSyncDialLive();
+  setInterval(tickSyncDialLive, 30000);
 
   function appendBeatUpdates(st) {
     const list = $('#updates-list');
