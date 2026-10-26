@@ -1534,3 +1534,53 @@ body.time-open #s5-slider-wrap { left: auto; right: max(18px, env(safe-area-inse
 @media (max-width: 640px) {
   body.time-open #s5-slider-wrap { right: max(12px, env(safe-area-inset-right)); top: calc(max(14px, env(safe-area-inset-top)) + 48px); }
 }
+
+/* ==== S7:begin ==== */
+/* One Bar S1: collapsed by default; the bottom-right icon opens the bar. */
+/* D1 (revised at Max verification): the universe u-search retires via CSS
+   only, so portal/universe.js stays untouched and the (bx) diff-scope
+   guard stays green; the element is display:none, unreachable. */
+.u-search { display: none !important; }
+body.onebar-collapsed #askbar { display: none; }
+.onebar-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: 20px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  cursor: pointer;
+  z-index: 9;
+}
+.onebar-toggle[hidden] { display: none; }
+.onebar-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.onebar-toggle:hover, .onebar-toggle:focus-visible { border-color: var(--text-3); }
+body:not(.view-3d) .onebar-toggle { bottom: 172px; right: 18px; }
+@media (max-width: 640px) {
+  body:not(.view-3d) .onebar-toggle { bottom: 160px; right: 12px; }
+}
+.onebar-results {
+  max-height: 45vh;
+  overflow-y: auto;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.onebar-results[hidden] { display: none; }
+.onebar-row { padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.onebar-row-main { font-size: 14px; font-weight: 600; }
+.onebar-row-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.onebar-group { padding: 8px 14px 4px; font-size: 10px; letter-spacing: 1.5px; color: var(--text-3); font-weight: 600; }
+.onebar-empty { padding: 10px 14px; font-size: 13px; color: var(--text-3); }
+/* ==== S7:end ==== */

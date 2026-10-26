@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=617743f');
-        await loadScriptOnce('universe.js?v=617743f');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=91d24cd');
+        await loadScriptOnce('universe.js?v=91d24cd');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3009,6 +3009,7 @@
       searchBtn.setAttribute('aria-label', 'Search');
       searchBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
       searchBtn.addEventListener('click', toggleMobileSearch);
+      searchBtn.hidden = true;
       topbarActions.insertBefore(searchBtn, topbarActions.firstChild);
     }
 
@@ -4122,9 +4123,103 @@
   }
   // ==== S6:end ====
 
+  // ==== S7:begin ====
+  // S7 One Bar shell. One owner (oneBar). The bottom bar is the bar: an icon opens
+  // it, typing shows live results above it. #askbar's hidden property belongs to
+  // askBar.refresh(); S7 only flips the body.onebar-collapsed class.
+  const oneBar = {};
+  oneBar.isUnlocked = function () {
+    try {
+      const v = window.__brainVitals && window.__brainVitals.read();
+      return !!(v && v.unlocked);
+    } catch (e) { return false; }
+  };
+  oneBar.setOpen = function (open) {
+    document.body.classList.toggle('onebar-collapsed', !open);
+    $('#onebar-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) $('#askbar-input').focus();
+    else oneBar.clear();
+  };
+  oneBar.clear = function () {
+    const box = $('#onebar-results');
+    while (box.firstChild) box.removeChild(box.firstChild);
+    box.hidden = true;
+  };
+  oneBar.row = function (main, sub, onPick) {
+    const row = document.createElement('div');
+    row.className = 'onebar-row';
+    const a = document.createElement('div');
+    a.className = 'onebar-row-main';
+    a.textContent = main;
+    const b = document.createElement('div');
+    b.className = 'onebar-row-sub';
+    b.textContent = sub;
+    row.append(a, b);
+    row.addEventListener('click', () => {
+      oneBar.clear();
+      onPick();
+    });
+    return row;
+  };
+  oneBar.render = function () {
+    const box = $('#onebar-results');
+    const q = $('#askbar-input').value.toLowerCase().trim();
+    if (q.length < 2) { oneBar.clear(); return; }
+    const U = window.BrainUniverse;
+    let nodes = [];
+    let rels = [];
+    try { if (U && U.searchNodes) nodes = U.searchNodes(q) || []; } catch (e) { /* noop */ }
+    try { if (U && U.searchRelations) rels = U.searchRelations(q) || []; } catch (e) { /* noop */ }
+    while (box.firstChild) box.removeChild(box.firstChild);
+    const focus = (id) => { if (U && U.focusNode) U.focusNode(id); };
+    for (const m of nodes.slice(0, 20)) {
+      box.appendChild(oneBar.row(m.label || m.id, m.id, () => focus(m.id)));
+    }
+    if (rels.length) {
+      const head = document.createElement('div');
+      head.className = 'onebar-group';
+      head.textContent = 'RELATIONS';
+      box.appendChild(head);
+      for (const r of rels) {
+        const main = (r.fromLabel || r.from).slice(0, 40) + ' ' + r.type + ' \u2192 ' + (r.toLabel || r.to).slice(0, 40);
+        box.appendChild(oneBar.row(main, r.from + ' \u2192 ' + r.to, () => focus(r.from)));
+      }
+    }
+    if (!nodes.length && !rels.length) {
+      const none = document.createElement('div');
+      none.className = 'onebar-empty';
+      none.textContent = 'No matches';
+      box.appendChild(none);
+    }
+    box.hidden = false;
+  };
+  oneBar.tick = function () {
+    $('#onebar-toggle').hidden = !oneBar.isUnlocked();
+  };
+  (function initOneBar() {
+    const toggle = $('#onebar-toggle');
+    const input = $('#askbar-input');
+    if (!toggle || !input || !$('#onebar-results')) return;
+    toggle.addEventListener('click', () => {
+      oneBar.setOpen(document.body.classList.contains('onebar-collapsed'));
+    });
+    input.addEventListener('input', oneBar.render);
+    $('#askbar-go').addEventListener('click', oneBar.clear);
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (document.body.classList.contains('onebar-collapsed')) return;
+      if (!$('#askbar-panel').hidden) return;
+      oneBar.setOpen(false);
+    });
+    oneBar.tick();
+    setInterval(oneBar.tick, 1000);
+  })();
+  // ==== S7:end ====
+
   // ===========================================================================
   // Boot
   // ===========================================================================
+  document.body.classList.add('onebar-collapsed');
   resize();
   updateCounter();
   refreshTokenDot();
