@@ -647,8 +647,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=8e7c279');
-        await loadScriptOnce('universe.js?v=8e7c279');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=275da61');
+        await loadScriptOnce('universe.js?v=275da61');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2851,6 +2851,27 @@
     });
   }
 
+  function initTimeButton() {
+    const btn = document.getElementById('open-time');
+    if (!btn) return;
+    const close = () => { document.body.classList.remove('time-open'); btn.setAttribute('aria-expanded', 'false'); };
+    btn.addEventListener('click', () => {
+      const open = document.body.classList.toggle('time-open');
+      btn.setAttribute('aria-expanded', String(open));
+    });
+    let downInside = false;
+    document.addEventListener('pointerdown', (e) => {
+      downInside = !!(e.target && e.target.closest && (e.target.closest('#s5-slider-wrap') || e.target.closest('#open-time')));
+    }, true);
+    document.addEventListener('click', (e) => {
+      if (downInside) { downInside = false; return; }
+      if (document.body.classList.contains('time-open') && !(e.target && e.target.closest && (e.target.closest('#s5-slider-wrap') || e.target.closest('#open-time')))) close();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('time-open')) close();
+    });
+  }
+
   function initMobileUI() {
     if (!isMobile()) return;
 
@@ -4070,4 +4091,5 @@
   initUpdatesAutoScroll();
   initMobileUI();
   initUpdatesToggle();
+  initTimeButton();
 })();

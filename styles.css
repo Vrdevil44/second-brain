@@ -1527,3 +1527,10 @@ body.view-3d .node-panel { display: none; }
   #bottom-stack.updates-open .updates-log { max-height: 50vh; padding: 10px 14px; border-radius: 12px; overflow-y: auto; }
   #bottom-stack.updates-open .hud { max-height: 50vh; overflow-y: auto; }
 }
+/* ==== UI iteration 3: growth-timeline tray behind topbar clock button (owner call 2026-10-26) ==== */
+body:not(.time-open) #s5-slider-wrap { display: none; }
+body.time-open #s5-slider-wrap { left: auto; right: max(18px, env(safe-area-inset-right)); top: calc(max(14px, env(safe-area-inset-top)) + 52px); bottom: auto; transform: none; width: min(360px, calc(100vw - 24px)); }
+#s5-slider-wrap .s5-replay, #s5-slider-wrap .s5-replay-label { display: none; }
+@media (max-width: 640px) {
+  body.time-open #s5-slider-wrap { right: max(12px, env(safe-area-inset-right)); top: calc(max(14px, env(safe-area-inset-top)) + 48px); }
+}
