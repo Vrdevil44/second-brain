@@ -17,6 +17,8 @@
  *   2. GET  https://api.github.com/user        (settings: test connection)
  *   3. PUT  https://api.github.com/repos/Vrdevil44/about-vibhu/contents/daily-dump/...
  *                                              (write-only dump uploads)
+ *   4. GET  aliases.json                       (same origin, public alias subset:
+ *                                              generic family words only)
  * Every request goes through `guardedRequest()`, which rejects anything else.
  * The Content-Security-Policy in index.html enforces the same limits in the
  * browser. Do not add reads of the private repo here, ever.
@@ -24,6 +26,29 @@
  *
  * No build step, no dependencies. Vanilla JS only.
  */
+/**
+ * Pure query expansion for search (R3). Finds the first whitespace token of q
+ * that belongs to an alias group and returns q followed by q with that token
+ * swapped for each other group member, in group order. Capped at 6.
+ */
+function expandQueryVariants(q, groups) {
+  const out = [q];
+  if (!q || !Array.isArray(groups) || !groups.length) return out;
+  const tokens = q.split(/\s+/);
+  for (let i = 0; i < tokens.length; i++) {
+    const group = groups.find((g) => Array.isArray(g) && g.includes(tokens[i]));
+    if (!group) continue;
+    for (const member of group) {
+      if (member === tokens[i]) continue;
+      const t = tokens.slice();
+      t[i] = member;
+      out.push(t.join(' '));
+    }
+    break;
+  }
+  return out.slice(0, 6);
+}
+
 (() => {
   'use strict';
 
@@ -88,6 +113,9 @@
       const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
       const isKb = u.pathname.endsWith('/knowledge-base.json') || u.pathname === '/knowledge-base.json';
       if (m === 'GET' && (isGraph || isMfa || isLive || isKb) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      // R3: aliases.json (public subset) is also readable, GET only.
+      const isAliases = u.pathname.endsWith('/aliases.json') || u.pathname === '/aliases.json';
+      if (m === 'GET' && isAliases) return;
       throw new Error('Blocked by privacy rule: ' + m + ' ' + u.pathname);
     }
 
@@ -647,8 +675,8 @@
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=91d24cd');
-        await loadScriptOnce('universe.js?v=91d24cd');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7d18c0a');
+        await loadScriptOnce('universe.js?v=7d18c0a');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -686,6 +714,51 @@
 
   const viewToggle = $('#view-toggle');
   if (viewToggle) viewToggle.addEventListener('click', () => { setViewMode(viewMode === '3d' ? '2d' : '3d'); });
+
+  // ---- Alias dictionary + merged search (R3) ---------------------------------
+  let aliasGroups = [];
+
+  function loadAliases() {
+    guardedFetch('aliases.json')
+      .then((res) => { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+      .then((body) => {
+        const groups = body && Array.isArray(body.groups) ? body.groups : [];
+        aliasGroups = groups
+          .filter((g) => Array.isArray(g))
+          .map((g) => g.map((w) => String(w).toLowerCase()));
+      })
+      .catch(() => { aliasGroups = []; });
+  }
+
+  function expandedSearch(q) {
+    const U = window.BrainUniverse;
+    const nodes = [];
+    const rels = [];
+    const seenNodes = new Set();
+    const seenRels = new Set();
+    for (const v of expandQueryVariants(q, aliasGroups)) {
+      try {
+        if (U && U.searchNodes) {
+          for (const n of U.searchNodes(v) || []) {
+            if (seenNodes.has(n.id)) continue;
+            seenNodes.add(n.id);
+            nodes.push(n);
+          }
+        }
+      } catch (e) { /* noop */ }
+      try {
+        if (U && U.searchRelations) {
+          for (const r of U.searchRelations(v) || []) {
+            const key = r.from + '|' + r.type + '|' + r.to;
+            if (seenRels.has(key)) continue;
+            seenRels.add(key);
+            rels.push(r);
+          }
+        }
+      } catch (e) { /* noop */ }
+    }
+    return { nodes: nodes.slice(0, 20), rels: rels.slice(0, 20) };
+  }
 
   // ---- Load + sanitize graph.json -------------------------------------------
   async function loadGraph() {
@@ -3174,13 +3247,14 @@
       if (q.length < 2) return;
       // Search graph nodes.
       const matches = [];
+      const merged = expandedSearch(q);
       if (window.BrainUniverse && window.BrainUniverse.searchNodes) {
-        matches.push(...window.BrainUniverse.searchNodes(q));
+        matches.push(...merged.nodes);
       }
       // Search relations too ("contradicts", "blocks", "F-0308"…).
       let relMatches = [];
       if (window.BrainUniverse && window.BrainUniverse.searchRelations) {
-        try { relMatches = window.BrainUniverse.searchRelations(q); } catch (e) { /* noop */ }
+        try { relMatches = merged.rels; } catch (e) { /* noop */ }
       }
       const closePanel = () => { panel.remove(); document.removeEventListener('click', outsideCloser, true); };
       for (const m of matches.slice(0, 20)) {
@@ -4168,8 +4242,9 @@
     const U = window.BrainUniverse;
     let nodes = [];
     let rels = [];
-    try { if (U && U.searchNodes) nodes = U.searchNodes(q) || []; } catch (e) { /* noop */ }
-    try { if (U && U.searchRelations) rels = U.searchRelations(q) || []; } catch (e) { /* noop */ }
+    const merged = expandedSearch(q);
+    try { if (U && U.searchNodes) nodes = merged.nodes; } catch (e) { /* noop */ }
+    try { if (U && U.searchRelations) rels = merged.rels; } catch (e) { /* noop */ }
     while (box.firstChild) box.removeChild(box.firstChild);
     const focus = (id) => { if (U && U.focusNode) U.focusNode(id); };
     for (const m of nodes.slice(0, 20)) {
@@ -4224,6 +4299,7 @@
   updateCounter();
   refreshTokenDot();
   loadGraph();
+  loadAliases();
   loadUpdatesLog();
   initUpdatesAutoScroll();
   initMobileUI();
