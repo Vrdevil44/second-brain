@@ -688,8 +688,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=85713b8');
-        await loadScriptOnce('universe.js?v=85713b8');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0ada78b');
+        await loadScriptOnce('universe.js?v=0ada78b');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3813,6 +3813,11 @@ function expandQueryVariants(q, groups) {
 
   sliderSleep.applyRow = function (index, rows, uni, graph) {
     const plan = sliderSleep.planVisible(rows, index, graph);
+    // Catching up: graph nodes with no birth row exist only at the head.
+    if (sliderSleep.status === 'catching-up' && index === rows.length - 1 && graph) {
+      const have = new Set(plan.visibleNodes);
+      for (const id of graph.ids) if (!have.has(id)) plan.visibleNodes.push(id);
+    }
     uni.setVisibleNodeIds(plan.visibleNodes, plan.visibleEdges);
     return plan;
   };
@@ -3884,6 +3889,23 @@ function expandQueryVariants(q, groups) {
     return true;
   };
 
+  // Classify the history against today's graph. 'invalid': a row's recorded
+  // node count lies, or history names an id the graph lacks. 'catching-up':
+  // rows are true but the graph is ahead (missing = graph ids not yet placed
+  // in time). 'ready': exact. Edge counts are not per-row checked.
+  sliderSleep.assessHistory = function (rows, graphIds) {
+    const vis = new Set();
+    for (const r of rows) {
+      for (const id of r.born_nodes) vis.add(id);
+      for (const id of r.died_nodes) vis.delete(id);
+      if (vis.size !== r.counts.nodes) return { state: 'invalid', missing: 0 };
+    }
+    for (const id of vis) if (!graphIds.has(id)) return { state: 'invalid', missing: 0 };
+    let missing = 0;
+    for (const id of graphIds) if (!vis.has(id)) missing++;
+    return { state: missing === 0 ? 'ready' : 'catching-up', missing };
+  };
+
   sliderSleep.graphFacts = function (data) {
     const idOfRef = (x) => String((x && typeof x === 'object') ? x.id : x);
     const nodes = (data && Array.isArray(data.nodes)) ? data.nodes : [];
@@ -3905,6 +3927,7 @@ function expandQueryVariants(q, groups) {
     const plan = sliderSleep.planVisible(sliderSleep.rows, index, sliderSleep.graph);
     let nodes = 0;
     for (const id of plan.visibleNodes) if (sliderSleep.graph.ids.has(id)) nodes++;
+    if (sliderSleep.status === 'catching-up' && index === sliderSleep.rows.length - 1) nodes += sliderSleep.missing;
     return { nodes, edges: plan.visibleEdges.length };
   };
 
@@ -3930,7 +3953,11 @@ function expandQueryVariants(q, groups) {
       idx > 0 ? rows[idx - 1].beat : NaN);
     rowEl.textContent = parts.head;
     countsEl.textContent = parts.counts;
+    if (sliderSleep.status === 'catching-up') {
+      countsEl.textContent += ' · History catching up: ' + sliderSleep.missing + ' newest nodes not yet placed in time';
+    }
     slider.setAttribute('aria-valuetext', parts.head + ' — ' + parts.counts);
+    if (sliderSleep.status === 'catching-up') slider.setAttribute('aria-valuetext', parts.head + ' — ' + countsEl.textContent);
     const rp = sliderSleep.replay;
     const ok = sliderSleep.canReplay(rows, idx);
     btn.disabled = !ok && !rp.on;
@@ -4001,10 +4028,19 @@ function expandQueryVariants(q, groups) {
     } catch (e) { rows = null; }
     if (sliderSleep.session !== session) return; // locked or reloaded meanwhile
     const facts = sliderSleep.graphFacts(session);
+    let state = 'unavailable';
+    if (rows) {
+      const a = sliderSleep.assessHistory(rows, facts.ids);
+      if (a.state === 'invalid') rows = null;
+      else { state = a.state; sliderSleep.missing = a.missing; }
+    }
+    // The strict equality check only governs an exact ('ready') history.
+    if (state !== 'catching-up')
     if (rows && !sliderSleep.checkRows(rows, facts.ids)) rows = null;
     sliderSleep.graph = facts;
     sliderSleep.rows = rows;
     sliderSleep.status = rows ? 'ready' : 'unavailable';
+    if (rows && state === 'catching-up') sliderSleep.status = 'catching-up';
     sliderSleep.index = rows ? rows.length - 1 : 0;
     const slider = sliderSleep.dom('s5-slider');
     if (rows) {
