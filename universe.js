@@ -2755,7 +2755,6 @@ function searchRankOf(node) {
   const STRIKE_PEER_LEVEL = 0.7;  // peer strikes light their endpoints softer than core strikes
   const STRIKE_MAX_SPARKS = 24;   // concurrent initiation sparks (own buffer share, outside the scheduler cap)
   const STRIKE_SPEED_X = 2.6;     // initiation sparks run faster than ambient packets
-  const STRIKE_EMA_MAX_MS = 50;   // directors pause only when the frame-interval EMA is truly bad (phones sit >24 ms)
   const SPARKS_HEX = new Map();
   // U2 SPARKS v2: fast packets with fading trails shoot back and forth along REAL
   // relations only. The permanent lines return as a faint SHIMMER (low alpha, a
@@ -2997,6 +2996,7 @@ function searchRankOf(node) {
     const SP = S && S.sparks;
     if (!SP || !SP.running || document.hidden || !S.graph || !S.shimBase || S.s5dim) return;
     if (sparksReducedMotion()) return;
+    if (SP.ema > 40) return; // heavy frames: pause the twinkle, never add a full re-digest spike
     S.graph.linkColor(sparksShimmerAccessor(S.shimBase));
   }
 
@@ -3183,7 +3183,7 @@ function searchRankOf(node) {
     if (!W) {
       if (SP.clock < SP.waveAt) return;
       // No new wave while focused/selected/hovered, over frame budget (hidden/reduced motion never reach here).
-      if (S.hovered || S.selected || S.focusSet || SP.ema > STRIKE_EMA_MAX_MS) return;
+      if (S.hovered || S.selected || S.focusSet) return;
       const hubs = SP.ctx.core.filter((e) => e.source === 'core');
       const hubDomain = new Map();
       const nodeDate = new Map();
@@ -3282,7 +3282,7 @@ function searchRankOf(node) {
     if (SP.clock < SP.strikeAt) return;
     const rng = SP.ctx.rng;
     SP.strikeAt = SP.clock + STRIKE_GAP_MIN_MS + rng() * (STRIKE_GAP_MAX_MS - STRIKE_GAP_MIN_MS);
-    if (S.hovered || S.selected || S.focusSet || SP.ema > STRIKE_EMA_MAX_MS) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
+    if (S.hovered || S.selected || S.focusSet) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
     const total = 2 + Math.floor(rng() * 2);
     let peers = 0;
     for (let i = 0; i < total; i++) if (rng() < STRIKE_PEER_P) peers++;
@@ -3312,6 +3312,14 @@ function searchRankOf(node) {
     const SP = S && S.sparks;
     if (!SP || !SP.running || document.hidden) return;
     if (sparksReducedMotion()) { sparksStop(); return; }
+    // rAF stall watchdog: the frame clears SP.raf on entry and re-arms on exit, so an armed
+    // raf with a stale SP.last means the loop is stuck; cancel it first so it cannot double-arm.
+    if (SP.raf && SP.last && performance.now() - SP.last > 600) {
+      cancelAnimationFrame(SP.raf);
+      SP.raf = 0;
+      SP.last = 0;
+      sparksFrame();
+    }
     const act = SP.state.active;
     let w = 0; // drop sparks whose edge left the rendered set
     for (let i = 0; i < act.length; i++) {
@@ -3402,7 +3410,7 @@ function searchRankOf(node) {
       SP.slow = 0;
       if (SP.liveCap > SPARKS_MIN_ACTIVE) SP.liveCap--;
       else if (SP.trailSegs > 6) SP.trailSegs--;
-    } else if (SP.fast > 600) {
+    } else if (SP.fast > 120) {
       SP.fast = 0;
       if (SP.trailSegs < SPARKS_TRAIL_SEGS) SP.trailSegs++;
       else if (SP.liveCap < SPARKS_MAX_ACTIVE) SP.liveCap++;
