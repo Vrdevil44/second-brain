@@ -1243,6 +1243,21 @@ function searchRankOf(node) {
 
     // Graph
     const d = size();
+    // Base link colour, named so the shimmer layer wraps it from the very first digest.
+    const baseLinkColor = (l) => {
+      // His call 2026-10-17: core->hub stays visible (0.38);
+      // end->domain (fact->hub) slightly fainter (0.25);
+      // end-to-end relations untouched.
+      if (l && (l.type || '').toUpperCase() === 'DOMAIN') {
+        const s = l.source, tg = l.target;
+        const sId = s && (s.id || s), tId = tg && (tg.id || tg);
+        if (sId === 'core' || tId === 'core') return 'rgba(234, 246, 255, 0.38)';
+        return 'rgba(234, 246, 255, 0.25)';
+      }
+      if (l) return scaleAlpha(l.color || '#9aa0b4', LINK_END_ALPHA);
+      return l.color || '#9aa0b4';
+    };
+    S.shimBase = baseLinkColor;
     S.graph = window.ForceGraph3D({ controlType: 'orbit' })(stage)
       .width(d.w).height(d.h)
       .backgroundColor('rgba(0,0,0,0)') // transparent: deep-space background shows through
@@ -1262,19 +1277,8 @@ function searchRankOf(node) {
       .nodeOpacity(1)
       .nodeResolution(16)
       .nodeLabel(() => '') // library tooltip stays off (prime suspect for the hover shift-down); we render our own hover tip instead
-      .linkColor((l) => {
-        // His call 2026-10-17: core->hub stays visible (0.38);
-        // end->domain (fact->hub) slightly fainter (0.25);
-        // end-to-end relations untouched.
-        if (l && (l.type || '').toUpperCase() === 'DOMAIN') {
-          const s = l.source, tg = l.target;
-          const sId = s && (s.id || s), tId = tg && (tg.id || tg);
-          if (sId === 'core' || tId === 'core') return 'rgba(234, 246, 255, 0.38)';
-          return 'rgba(234, 246, 255, 0.25)';
-        }
-        if (l) return scaleAlpha(l.color || '#9aa0b4', LINK_END_ALPHA);
-        return l.color || '#9aa0b4';
-      })
+      .linkColor(sparksShimmerAccessor(baseLinkColor))
+      .linkVisibility(composeLinkVis(S.s5vis, S.s5keys)) // hidden-by-default from the first digest
       .linkOpacity(0.55)
       .linkWidth((l) => {
         // His call 2026-10-17: core -> domain hubs slightly thicker (highways);
@@ -2729,7 +2733,7 @@ function searchRankOf(node) {
   // ==== S5:end ====
 
   // ==== U2-SPARKS:begin ====
-  const SPARKS_MAX_ACTIVE = 80;   // concurrent sparks (v3: quantity up again)
+  const SPARKS_MAX_ACTIVE = 180;  // concurrent sparks (v4: owner asked 150-200)
   const SPARKS_MIN_ACTIVE = 20;   // live-cap floor when the frame time sags
   const CORE_SHARE = 0.34;        // share of picks from the core's own spokes
   const REACH_SHARE = 0.10;       // share of picks from relation-less facts' hub spokes
@@ -2754,6 +2758,7 @@ function searchRankOf(node) {
   const BOLT_AFTERGLOW_MS = 600;  // travelled edges keep a soft glow this long (k 0.5)
   const BOLT_FLASH_MS = 800;      // the end node flashes this long (k 1)
   const BOLT_NEWEST_EVERY = 5;    // every Nth event aims at a hub's newest fact
+  const BOLT_CORE_P = 0.55;       // per bolt: chance of a core bolt (else a field bolt)
   const BOLT_PEER_P = 0.4;        // per event: chance of one extra peer strike
   const STRIKE_PEER_LEVEL = 0.7;  // peer strikes light their endpoints softer than a bolt end
   const STRIKE_MAX_SPARKS = 36;   // concurrent bolt/peer sparks (shared travel buffer, outside the scheduler cap)
@@ -2851,14 +2856,17 @@ function searchRankOf(node) {
   // SPARKS-SCHEDULER:end
 
   // SPARKS-QUAL:begin
-  // Pure classifier: typed relations, and DOMAIN edges touching the core, are "qualified"
-  // (permanent thin shining lines). CONTEXT and hub spokes are not.
+  // Pure classifier: typed relations, DOMAIN edges touching the core, and DOMAIN hub spokes
+  // of a connected fact (an endpoint in `connected`: ids with a non-DOMAIN relation) are
+  // "qualified" (permanent thin shining lines). CONTEXT and other hub spokes are not.
   const QUALIFIED_TYPES = new Set(['CAUSES', 'CAUSED-BY', 'SUPPORTS', 'ENABLES', 'REFINES',
     'EXTENDS', 'CHALLENGES', 'BLOCKS', 'UPDATES', 'INSTANCE']);
-  function sparksQualified(type, s, t) {
+  function sparksQualified(type, s, t, connected) {
     const ty = String(type || '').toUpperCase();
     if (QUALIFIED_TYPES.has(ty)) return true;
-    return ty === 'DOMAIN' && (s === 'core' || t === 'core');
+    if (ty !== 'DOMAIN') return false;
+    if (s === 'core' || t === 'core') return true;
+    return !!connected && (connected.has(s) || connected.has(t));
   }
   // SPARKS-QUAL:end
 
@@ -2902,6 +2910,24 @@ function searchRankOf(node) {
     return path;
   }
   // SPARKS-BOLT:end
+
+  // SPARKS-FIELD:begin
+  // Pure field bolt: one uniform link from the whole web (ctx.links), plus (50%) one
+  // continuation along an OUTGOING edge of the first leg's target (ctx.outBy), any type.
+  function fieldPath(ctx) {
+    const links = ctx.links || [];
+    if (!links.length) return [];
+    const rng = ctx.rng;
+    rng(); // burn one draw: first outputs of small-seed generators are strongly correlated
+    const leg1 = links[Math.floor(rng() * links.length) % links.length];
+    const path = [leg1];
+    if (rng() < 0.5) {
+      const outs = (ctx.outBy && ctx.outBy.get(leg1.target)) || [];
+      if (outs.length) path.push(outs[Math.floor(rng() * outs.length) % outs.length]);
+    }
+    return path;
+  }
+  // SPARKS-FIELD:end
 
   // SPARKS-PEER:begin
   // Pure inter-node strike plan: one uniform random link and its two endpoints; null when empty.
@@ -2961,7 +2987,7 @@ function searchRankOf(node) {
         const lv = strikeEdgeLevel(l);
         if (lv > 0) return focusLinkColor(l, lv); // the focus light-up, transient
       }
-      if (l.__q === undefined) l.__q = sparksQualified(l.type, String(idOf(l.source)), String(idOf(l.target)));
+      if (l.__q === undefined) l.__q = sparksQualified(l.type, String(idOf(l.source)), String(idOf(l.target)), null); // stamped for real in sparksOnData
       let a = l.__q ? QUAL_ALPHA : (isDomainLink(l) ? SHIMMER_DOMAIN : SHIMMER_BASE);
       if (sparksOn() && !sparksReducedMotion()) {
         if (l.__ph === undefined) l.__ph = hash01(linkKey(l) + '|' + l.type) * 6.283185;
@@ -3056,8 +3082,21 @@ function searchRankOf(node) {
         }
       }
     }
+    // Verdicts, once per data refresh: DOMAIN hub spokes qualify through a connected endpoint.
+    for (const l of links || []) {
+      l.__q = sparksQualified(l.type, String(idOf(l.source)), String(idOf(l.target)), plain);
+    }
+    // Field pools: every rendered edge by SOURCE (outgoing continuation, any type).
+    const outBy = new Map();
+    for (const e of edges) {
+      if (!outBy.has(e.source)) outBy.set(e.source, []);
+      outBy.get(e.source).push(e);
+    }
+    SP.outBy = outBy;
+    SP.connected = plain;
     // REACH: hub->fact DOMAIN edges whose fact has no non-DOMAIN rendered edge.
     for (const e of SP.hub) if (!plain.has(e.target)) ctx.reach.push(e);
+    SP.fieldLinks = ctx.main.concat(ctx.reach); // field-bolt starting pool: main + reach
     ctx.byNode = byNode;
     SP.edges = edges;
     SP.relByNode = relByNode;
@@ -3139,7 +3178,7 @@ function searchRankOf(node) {
         cap: SPARKS_MAX_ACTIVE, coreShare: CORE_SHARE, reachShare: REACH_SHARE, freshShare: FRESH_SHARE },
       hub: [], keys: new Set(), nodes: new Map(),
       reachable: new Set(), unreachable: 0, sparked: new Set(), cycleSeen: 0,
-      spokes: [], relByNode: new Map(), nodeDate: new Map(), prevParticles: null,
+      spokes: [], outBy: new Map(), connected: new Set(), fieldLinks: [], relByNode: new Map(), nodeDate: new Map(), prevParticles: null,
       strikeSparks: [], glowEdges: new Map(), glowNodes: new Map(), glowLast: 0, glowDirty: false, haloPrev: new Set(),
       strikeAt: BOLT_GAP_MIN_MS + Math.random() * (BOLT_GAP_MAX_MS - BOLT_GAP_MIN_MS), strikesRun: 0, boltsRun: 0, boltEvents: 0,
       liveCap: SPARKS_MAX_ACTIVE, trailSegs: SPARKS_TRAIL_SEGS,
@@ -3260,8 +3299,11 @@ function searchRankOf(node) {
     const newest = ++SP.boltEvents % BOLT_NEWEST_EVERY === 0;
     const total = 2 + Math.floor(rng() * 2);
     for (let i = 0; i < total; i++) {
-      const path = boltPath({ coreEdges: SP.spokes, hubEdges: SP.hub, relByNode: SP.relByNode, nodeDate: SP.nodeDate,
-        rng, preferNewest: newest, isQualified: sparksQualified });
+      const field = rng() >= BOLT_CORE_P; // each bolt rolls 55% core / 45% field
+      const path = field
+        ? fieldPath({ links: SP.fieldLinks, outBy: SP.outBy, rng })
+        : boltPath({ coreEdges: SP.spokes, hubEdges: SP.hub, relByNode: SP.relByNode, nodeDate: SP.nodeDate,
+          rng, preferNewest: newest, isQualified: (t, a, b) => sparksQualified(t, a, b, SP.connected) });
       if (path.length && strikeStart(SP, path, i * BOLT_STAGGER_MS)) { SP.boltsRun++; SP.strikesRun++; }
     }
     if (rng() < BOLT_PEER_P) {
