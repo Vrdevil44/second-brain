@@ -75,6 +75,7 @@ a:hover { color: #b0a6ff; }
   inset: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   display: block;
   touch-action: none;
   cursor: grab;
@@ -1588,3 +1589,13 @@ body:not(.view-3d) .onebar-toggle { bottom: 172px; right: 18px; }
 /* ==== U3:begin ==== */
 .scene-nav-info { display: none !important; }
 /* ==== U3:end ==== */
+
+/* ==== A8:begin ==== */
+/* Mobile ergonomics: 44px touch floor (hit areas only; desktop untouched). */
+@media (max-width: 640px) {
+  button { min-height: 44px; }
+  .btn-icon, .file-remove, .u-btn-icon { min-width: 44px; min-height: 44px; }
+  .btn-small, .askbar-go, .askbar-close, .askbar-cite-btn, .askbar-input { min-height: 44px; }
+  .topbar-actions .btn-primary { width: 44px; min-height: 44px; }
+}
+/* ==== A8:end ==== */
