@@ -2729,7 +2729,7 @@ function searchRankOf(node) {
   // ==== S5:end ====
 
   // ==== U2-SPARKS:begin ====
-  const SPARKS_MAX_ACTIVE = 45;   // concurrent sparks (owner v2: more sparks)
+  const SPARKS_MAX_ACTIVE = 60;   // concurrent sparks (owner storm tuning: more again)
   const SPARKS_MIN_ACTIVE = 20;   // live-cap floor when the frame time sags
   const CORE_SHARE = 0.34;        // share of picks from the core's own spokes
   const REACH_SHARE = 0.10;       // share of picks from relation-less facts' hub spokes
@@ -2745,13 +2745,14 @@ function searchRankOf(node) {
   const SPARKS_WAVE_GAP_MS = 18000;   // gap after a wave ENDS: 18-32 s (rng)
   const SPARKS_WAVE_GAP_SPAN_MS = 14000;
   const SPARKS_WAVE_STEP_MS = 450;    // one plan edge per step
-  const SHIMMER_BASE = 0.08;      // relation alpha under the sparks (per-link twinkle on top)
-  const SHIMMER_DOMAIN = 0.05;    // DOMAIN scaffolding alpha
+  const SHIMMER_BASE = 0.05;      // relation alpha under the sparks (per-link twinkle on top)
+  const SHIMMER_DOMAIN = 0.03;    // DOMAIN scaffolding alpha
   const SHIMMER_DIGEST_MS = 500;  // twinkle digest period (2 Hz max)
   const STRIKE_GLOW_MS = 900;     // a lit network decays over this long (per-entry expiry)
-  const STRIKE_GAP_MS = 6000;     // weather: next event in 6-14 s
-  const STRIKE_GAP_SPAN_MS = 8000;
-  const STRIKE_BURST_P = 0.25;    // share of events that are bursts (2-3 events, 300-700 ms apart)
+  const STRIKE_GAP_MIN_MS = 350;  // storm: a strike event every 350-1000 ms, continuously
+  const STRIKE_GAP_MAX_MS = 1000; // (each event strikes 2-3 nodes, so a second holds 2-3+ strikes)
+  const STRIKE_PEER_P = 0.5;      // share of each event's strikes that are inter-node (peer)
+  const STRIKE_PEER_LEVEL = 0.7;  // peer strikes light their endpoints softer than core strikes
   const STRIKE_MAX_SPARKS = 24;   // concurrent initiation sparks (own buffer share, outside the scheduler cap)
   const STRIKE_SPEED_X = 2.6;     // initiation sparks run faster than ambient packets
   const SPARKS_HEX = new Map();
@@ -2905,15 +2906,26 @@ function searchRankOf(node) {
   }
   // SPARKS-STRIKE:end
 
-  // Transient light-up levels (1 -> 0 over STRIKE_GLOW_MS), quantised to quarters so
-  // the lib's colour+opacity material cache stays small. The levels feed the SAME
-  // focusLinkColor / focusHaloBoost path that selection uses.
+  // SPARKS-PEER:begin
+  // Pure inter-node strike plan: one uniform random link and its two endpoints; null when empty.
+  function peerPlan(ctx) {
+    const links = ctx.links || [];
+    if (!links.length) return null;
+    ctx.rng(); // burn one draw: first outputs of small-seed generators are strongly correlated
+    const edge = links[Math.floor(ctx.rng() * links.length) % links.length];
+    return { edge, nodes: [edge.source, edge.target] };
+  }
+  // SPARKS-PEER:end
+
+  // Transient light-up levels (k -> 0 over STRIKE_GLOW_MS, k = strike strength), quantised
+  // to quarters so the lib's colour+opacity material cache stays small. The levels feed
+  // the SAME focusLinkColor / focusHaloBoost path that selection uses.
   function strikeLevel(map, id) {
     const SP = S && S.sparks;
-    const until = SP && SP[map].get(id);
-    if (!until) return 0;
-    const rem = until - performance.now();
-    return rem <= 0 ? 0 : Math.max(0.25, Math.ceil((rem / STRIKE_GLOW_MS) * 4) / 4);
+    const g = SP && SP[map].get(id);
+    if (!g) return 0;
+    const rem = g.until - performance.now();
+    return rem <= 0 ? 0 : Math.min(1, Math.max(0.25, Math.ceil((rem / STRIKE_GLOW_MS) * g.k * 4) / 4));
   }
   function strikeNodeLevel(id) { return strikeLevel('glowNodes', id); }
   function strikeEdgeLevel(l) { return strikeLevel('glowEdges', idOf(l.source) + '|' + idOf(l.target) + '|' + l.type); }
@@ -3119,7 +3131,7 @@ function searchRankOf(node) {
       reachable: new Set(), unreachable: 0, sparked: new Set(), cycleSeen: 0,
       wave: null, waveSparks: [], waveAt: SPARKS_WAVE_FIRST_MS, wavesRun: 0, rotate: 0,
       edges: [], byNodeAll: new Map(), strikeSparks: [], glowEdges: new Map(), glowNodes: new Map(), glowAt: 0,
-      strikeAt: STRIKE_GAP_MS + Math.random() * STRIKE_GAP_SPAN_MS, burstLeft: 0, strikesRun: 0,
+      strikeAt: STRIKE_GAP_MIN_MS + Math.random() * (STRIKE_GAP_MAX_MS - STRIKE_GAP_MIN_MS), strikesRun: 0,
       liveCap: SPARKS_MAX_ACTIVE, trailSegs: SPARKS_TRAIL_SEGS,
       clock: 0, last: 0, ema: 16, slow: 0, fast: 0, raf: 0, timer: 0, shimTimer: 0, pub: 0, pubAt: 0,
     };
@@ -3211,10 +3223,14 @@ function searchRankOf(node) {
   // ---- lightning (U2 v2.1) ---------------------------------------------------
   // Light a node's whole direct network with the shared focus treatment; entries
   // expire individually (STRIKE_GLOW_MS) and a refresh re-digests the colours.
-  function strikeLight(SP, node) {
+  function strikeLight(SP, node, k = 1) {
     const until = performance.now() + STRIKE_GLOW_MS;
-    for (const e of SP.ctx.byNode.get(node) || []) SP.glowEdges.set(e.source + '|' + e.target + '|' + e.type, until);
-    SP.glowNodes.set(node, until);
+    const put = (m, id) => { // a softer strike never dims a stronger one still burning
+      const old = m.get(id);
+      m.set(id, { until, k: old && old.until > until - STRIKE_GLOW_MS ? Math.max(old.k, k) : k });
+    };
+    for (const e of SP.ctx.byNode.get(node) || []) put(SP.glowEdges, e.source + '|' + e.target + '|' + e.type);
+    put(SP.glowNodes, node);
     if (SP.reachable.has(node)) SP.sparked.add(node);
     SP.glowAt = 0; // refresh on the next frame
   }
@@ -3247,16 +3263,37 @@ function searchRankOf(node) {
     launch(0);
   }
 
-  // Weather: next event in 6-14 s; ~25% are bursts (2-3 events 300-700 ms apart), then a rest.
+  // Peer strike: a fast bright spark runs a real non-DOMAIN edge; on arrival BOTH endpoints'
+  // direct networks light (softer). Rides the strike buffer share, not the scheduler cap.
+  function peerStart(SP, plan) {
+    const e = plan.edge;
+    const both = () => { strikeLight(SP, e.source, STRIKE_PEER_LEVEL); strikeLight(SP, e.target, STRIKE_PEER_LEVEL); };
+    const key = e.source + '|' + e.target + '|' + e.type;
+    if (!SP.keys.has(key) || SP.strikeSparks.length >= STRIKE_MAX_SPARKS) { both(); return; }
+    const flip = SP.ctx.rng() < 0.5; // direction is arbitrary; completion lights both ends
+    SP.strikeSparks.push({ s: flip ? e.target : e.source, t: flip ? e.source : e.target, type: e.type, t0: SP.clock,
+      ph: 0, legs: 0, wave: true, fast: STRIKE_SPEED_X, glow: 1.8, rgb: sparksHexRgb(SPARKS_CORE_COLOR), key, done: both });
+  }
+
+  // Storm: an event every 350-1000 ms (random), each striking 2-3 nodes, about half of them
+  // peer strikes. The short random gap is itself the burst/lull rhythm (1 s holds 2-3+ strikes).
   function sparksStrikeTick(SP) {
     if (SP.clock < SP.strikeAt) return;
-    if (S.hovered || S.selected || S.focusSet || SP.ema > 24) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
     const rng = SP.ctx.rng;
-    const plan = strikePlan({ links: SP.edges, byNodeAll: SP.byNodeAll, rng, count: 2 + Math.floor(rng() * 3) });
-    if (plan.length) { SP.strikesRun++; for (const st of plan) strikeStart(SP, st.node); }
-    if (SP.burstLeft > 0) SP.burstLeft--;
-    else if (rng() < STRIKE_BURST_P) SP.burstLeft = 1 + Math.floor(rng() * 2);
-    SP.strikeAt = SP.clock + (SP.burstLeft > 0 ? 300 + rng() * 400 : STRIKE_GAP_MS + rng() * STRIKE_GAP_SPAN_MS);
+    SP.strikeAt = SP.clock + STRIKE_GAP_MIN_MS + rng() * (STRIKE_GAP_MAX_MS - STRIKE_GAP_MIN_MS);
+    if (S.hovered || S.selected || S.focusSet || SP.ema > 24) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
+    const total = 2 + Math.floor(rng() * 2);
+    let peers = 0;
+    for (let i = 0; i < total; i++) if (rng() < STRIKE_PEER_P) peers++;
+    const core = strikePlan({ links: SP.edges, byNodeAll: SP.byNodeAll, rng, count: total - peers });
+    const mains = SP.ctx.main;
+    let ran = core.length;
+    for (const st of core) strikeStart(SP, st.node);
+    for (let i = 0; i < peers; i++) {
+      const p = peerPlan({ links: mains, rng });
+      if (p) { ran++; peerStart(SP, p); }
+    }
+    if (ran) SP.strikesRun++;
   }
 
   // Prune expired glow entries and re-digest the colours/halos while anything is lit.
@@ -3264,7 +3301,7 @@ function searchRankOf(node) {
     if (!SP.glowEdges.size && !SP.glowNodes.size) return;
     if (SP.glowAt && now - SP.glowAt < 140) return;
     SP.glowAt = now;
-    for (const m of [SP.glowEdges, SP.glowNodes]) for (const [k, until] of m) if (until <= now) m.delete(k);
+    for (const m of [SP.glowEdges, SP.glowNodes]) for (const [id, g] of m) if (g.until <= now) m.delete(id);
     if (S.graph && S.shimBase && !S.s5dim) S.graph.linkColor(sparksShimmerAccessor(S.shimBase));
     if (S.live && S.live.on) return; // the per-frame live painter owns the halos
     applyRestHalos(S.graph.graphData().nodes, S.hovered ? DIM_HOVER : DIM);
