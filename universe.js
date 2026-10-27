@@ -2755,6 +2755,7 @@ function searchRankOf(node) {
   const STRIKE_PEER_LEVEL = 0.7;  // peer strikes light their endpoints softer than core strikes
   const STRIKE_MAX_SPARKS = 24;   // concurrent initiation sparks (own buffer share, outside the scheduler cap)
   const STRIKE_SPEED_X = 2.6;     // initiation sparks run faster than ambient packets
+  const STRIKE_EMA_MAX_MS = 50;   // directors pause only when the frame-interval EMA is truly bad (phones sit >24 ms)
   const SPARKS_HEX = new Map();
   // U2 SPARKS v2: fast packets with fading trails shoot back and forth along REAL
   // relations only. The permanent lines return as a faint SHIMMER (low alpha, a
@@ -3182,7 +3183,7 @@ function searchRankOf(node) {
     if (!W) {
       if (SP.clock < SP.waveAt) return;
       // No new wave while focused/selected/hovered, over frame budget (hidden/reduced motion never reach here).
-      if (S.hovered || S.selected || S.focusSet || SP.ema > 24) return;
+      if (S.hovered || S.selected || S.focusSet || SP.ema > STRIKE_EMA_MAX_MS) return;
       const hubs = SP.ctx.core.filter((e) => e.source === 'core');
       const hubDomain = new Map();
       const nodeDate = new Map();
@@ -3281,7 +3282,7 @@ function searchRankOf(node) {
     if (SP.clock < SP.strikeAt) return;
     const rng = SP.ctx.rng;
     SP.strikeAt = SP.clock + STRIKE_GAP_MIN_MS + rng() * (STRIKE_GAP_MAX_MS - STRIKE_GAP_MIN_MS);
-    if (S.hovered || S.selected || S.focusSet || SP.ema > 24) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
+    if (S.hovered || S.selected || S.focusSet || SP.ema > STRIKE_EMA_MAX_MS) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
     const total = 2 + Math.floor(rng() * 2);
     let peers = 0;
     for (let i = 0; i < total; i++) if (rng() < STRIKE_PEER_P) peers++;
