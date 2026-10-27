@@ -2729,7 +2729,7 @@ function searchRankOf(node) {
   // ==== S5:end ====
 
   // ==== U2-SPARKS:begin ====
-  const SPARKS_MAX_ACTIVE = 60;   // concurrent sparks (owner storm tuning: more again)
+  const SPARKS_MAX_ACTIVE = 80;   // concurrent sparks (v3: quantity up again)
   const SPARKS_MIN_ACTIVE = 20;   // live-cap floor when the frame time sags
   const CORE_SHARE = 0.34;        // share of picks from the core's own spokes
   const REACH_SHARE = 0.10;       // share of picks from relation-less facts' hub spokes
@@ -2737,24 +2737,27 @@ function searchRankOf(node) {
   const FRESH_BOOST = 6;          // born-edge weight multiplier (birth-glow)
   const SPARKS_TICK_MS = 150;     // scheduler tick
   const SPARKS_TRAIL_SEGS = 12;   // trail segments behind each head
-  const SPARKS_WAVE_TRAIL_SEGS = 16; // wave trails are the longest; buffers are sized for them
+  const SPARKS_BOLT_TRAIL_SEGS = 16; // bolt trails are the longest; buffers are sized for them
   const SPARKS_TRAIL_WORLD = 60;  // trail length in world units (capped by edge length)
   const SPARKS_SPEED = 480;       // world units per second
   const SPARKS_CORE_COLOR = '#eaf6ff';
-  const SPARKS_WAVE_FIRST_MS = 10000; // first growth wave after start
-  const SPARKS_WAVE_GAP_MS = 18000;   // gap after a wave ENDS: 18-32 s (rng)
-  const SPARKS_WAVE_GAP_SPAN_MS = 14000;
-  const SPARKS_WAVE_STEP_MS = 450;    // one plan edge per step
   const SHIMMER_BASE = 0.05;      // relation alpha under the sparks (per-link twinkle on top)
   const SHIMMER_DOMAIN = 0.03;    // DOMAIN scaffolding alpha
-  const SHIMMER_DIGEST_MS = 500;  // twinkle digest period (2 Hz max)
+  const QUAL_ALPHA = 0.30;        // qualified lines (typed relations, core spokes): permanent thin shine
+  const SHIMMER_DIGEST_MS = 1000; // twinkle digest period (1 Hz max)
+  const GLOW_REFRESH_MS = 250;    // lit-network re-digest gate (timestamp only, never reset)
+  const GLOW_REFRESH_SLOW_MS = 500; // same gate while frames are heavy (ema > 30)
   const STRIKE_GLOW_MS = 900;     // a lit network decays over this long (per-entry expiry)
-  const STRIKE_GAP_MIN_MS = 150;  // storm: a strike event every 150-450 ms, continuously
-  const STRIKE_GAP_MAX_MS = 450;  // (each event strikes 2-4 nodes, so a second holds many strikes)
-  const STRIKE_PEER_P = 0.5;      // share of each event's strikes that are inter-node (peer)
-  const STRIKE_PEER_LEVEL = 0.7;  // peer strikes light their endpoints softer than core strikes
-  const STRIKE_MAX_SPARKS = 36;   // concurrent initiation sparks (own buffer share, outside the scheduler cap)
-  const STRIKE_SPEED_X = 2.6;     // initiation sparks run faster than ambient packets
+  const BOLT_GAP_MIN_MS = 600;    // storm: one bolt event every 600-1200 ms
+  const BOLT_GAP_MAX_MS = 1200;   // (each event fires 2-3 staggered bolts)
+  const BOLT_STAGGER_MS = 120;    // start offset between bolts of one event
+  const BOLT_AFTERGLOW_MS = 600;  // travelled edges keep a soft glow this long (k 0.5)
+  const BOLT_FLASH_MS = 800;      // the end node flashes this long (k 1)
+  const BOLT_NEWEST_EVERY = 5;    // every Nth event aims at a hub's newest fact
+  const BOLT_PEER_P = 0.4;        // per event: chance of one extra peer strike
+  const STRIKE_PEER_LEVEL = 0.7;  // peer strikes light their endpoints softer than a bolt end
+  const STRIKE_MAX_SPARKS = 36;   // concurrent bolt/peer sparks (shared travel buffer, outside the scheduler cap)
+  const STRIKE_SPEED_X = 2.6;     // bolt and peer sparks run faster than ambient packets
   const SPARKS_HEX = new Map();
   // U2 SPARKS v2: fast packets with fading trails shoot back and forth along REAL
   // relations only. The permanent lines return as a faint SHIMMER (low alpha, a
@@ -2847,64 +2850,58 @@ function searchRankOf(node) {
   }
   // SPARKS-SCHEDULER:end
 
-  // SPARKS-WAVE:begin
-  // Pure growth-wave plan: per domain (rng-shuffled), the core->hub edge then the
-  // hub->newest edge; newest rotates among the domain's top-3 by date via ctx.rotate.
-  function wavePlan(ctx) {
-    const order = Array.from(ctx.coreEdges || []);
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(ctx.rng() * (i + 1));
-      const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
-    }
-    const byHub = new Map();
-    for (const e of ctx.hubEdges || []) {
-      if (!byHub.has(e.source)) byHub.set(e.source, []);
-      byHub.get(e.source).push(e);
-    }
-    const dateOf = (e) => String((ctx.nodeDate && ctx.nodeDate.get(e.target)) || '');
-    const plan = [];
-    const seen = new Set();
-    for (const ce of order) {
-      const hub = ce.target;
-      const dom = (ctx.hubDomain && ctx.hubDomain.get(hub)) || hub;
-      const facts = byHub.get(hub);
-      if (seen.has(dom) || !facts || !facts.length) continue;
-      seen.add(dom);
-      const top = facts.slice().sort((a, b) => {
-        const da = dateOf(a), db = dateOf(b);
-        return da < db ? 1 : (da > db ? -1 : (a.target < b.target ? -1 : 1));
-      }).slice(0, 3);
-      const pick = top[(ctx.rotate | 0) % top.length];
-      plan.push({ source: ce.source, target: ce.target, type: ce.type, s: ce.source, t: ce.target });
-      plan.push({ source: pick.source, target: pick.target, type: pick.type, s: pick.source, t: pick.target });
-    }
-    return plan;
+  // SPARKS-QUAL:begin
+  // Pure classifier: typed relations, and DOMAIN edges touching the core, are "qualified"
+  // (permanent thin shining lines). CONTEXT and hub spokes are not.
+  const QUALIFIED_TYPES = new Set(['CAUSES', 'CAUSED-BY', 'SUPPORTS', 'ENABLES', 'REFINES',
+    'EXTENDS', 'CHALLENGES', 'BLOCKS', 'UPDATES', 'INSTANCE']);
+  function sparksQualified(type, s, t) {
+    const ty = String(type || '').toUpperCase();
+    if (QUALIFIED_TYPES.has(ty)) return true;
+    return ty === 'DOMAIN' && (s === 'core' || t === 'core');
   }
-  // SPARKS-WAVE:end
+  // SPARKS-QUAL:end
 
-  // SPARKS-STRIKE:begin
-  // Pure lightning plan: `count` distinct nodes (uniform, rng) that HAVE edges; each
-  // carries ALL its incident edges (its direct network = the glow set). Only edges
-  // present in ctx.links are returned.
-  function strikePlan(ctx) {
-    const keyOf = (e) => e.source + '|' + e.target + '|' + e.type;
-    const live = new Set();
-    for (const e of ctx.links || []) live.add(keyOf(e));
-    const pool = [];
-    if (ctx.byNodeAll) {
-      for (const [node, es] of ctx.byNodeAll) {
-        const edges = (es || []).filter((e) => live.has(keyOf(e)));
-        if (edges.length) pool.push({ node, edges });
+  // SPARKS-BOLT:begin
+  // Pure bolt plan: core -> hub, hub -> one fact, and (50%) one more hop along an OUTGOING
+  // relation of that fact. Returns an ordered, head-to-tail path of real edges; [] with no
+  // core spoke, one leg when the hub has no facts. preferNewest picks the hub's newest fact
+  // (ctx.nodeDate); the third hop prefers qualified relations (ctx.isQualified).
+  function boltPath(ctx) {
+    const rng = ctx.rng;
+    const spokes = ctx.coreEdges || [];
+    if (!spokes.length) return [];
+    rng(); // burn one draw: first outputs of small-seed generators are strongly correlated
+    const pick = (arr) => arr[Math.floor(rng() * arr.length) % arr.length];
+    const spoke = pick(spokes);
+    const path = [spoke];
+    const hub = spoke.target;
+    const facts = (ctx.hubEdges || []).filter((e) => e.source === hub);
+    if (!facts.length) return path;
+    let leg;
+    if (ctx.preferNewest) {
+      const dateOf = (e) => String((ctx.nodeDate && ctx.nodeDate.get(e.target)) || '');
+      leg = facts[0];
+      for (const e of facts) {
+        const d = dateOf(e), best = dateOf(leg);
+        if (d > best || (d === best && e.target < leg.target)) leg = e;
+      }
+    } else {
+      leg = pick(facts);
+    }
+    path.push(leg);
+    if (rng() < 0.5) {
+      const fact = leg.target;
+      const outs = ((ctx.relByNode && ctx.relByNode.get(fact)) || [])
+        .filter((e) => e.source === fact && String(e.type).toUpperCase() !== 'DOMAIN');
+      if (outs.length) {
+        const qual = ctx.isQualified ? outs.filter((e) => ctx.isQualified(e.type, e.source, e.target)) : [];
+        path.push(pick(qual.length ? qual : outs));
       }
     }
-    const n = Math.min(Math.max(0, ctx.count | 0), pool.length);
-    for (let i = 0; i < n; i++) { // partial Fisher-Yates: the first n slots are the draw
-      const j = i + Math.floor(ctx.rng() * (pool.length - i));
-      const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
-    }
-    return pool.slice(0, n);
+    return path;
   }
-  // SPARKS-STRIKE:end
+  // SPARKS-BOLT:end
 
   // SPARKS-PEER:begin
   // Pure inter-node strike plan: one uniform random link and its two endpoints; null when empty.
@@ -2917,7 +2914,7 @@ function searchRankOf(node) {
   }
   // SPARKS-PEER:end
 
-  // Transient light-up levels (k -> 0 over STRIKE_GLOW_MS, k = strike strength), quantised
+  // Transient light-up levels (k -> 0 over the entry's own duration, k = strength), quantised
   // to quarters so the lib's colour+opacity material cache stays small. The levels feed
   // the SAME focusLinkColor / focusHaloBoost path that selection uses.
   function strikeLevel(map, id) {
@@ -2925,7 +2922,7 @@ function searchRankOf(node) {
     const g = SP && SP[map].get(id);
     if (!g) return 0;
     const rem = g.until - performance.now();
-    return rem <= 0 ? 0 : Math.min(1, Math.max(0.25, Math.ceil((rem / STRIKE_GLOW_MS) * g.k * 4) / 4));
+    return rem <= 0 ? 0 : Math.min(1, Math.max(0.25, Math.ceil((rem / (g.dur || STRIKE_GLOW_MS)) * g.k * 4) / 4));
   }
   function strikeNodeLevel(id) { return strikeLevel('glowNodes', id); }
   function strikeEdgeLevel(l) { return strikeLevel('glowEdges', idOf(l.source) + '|' + idOf(l.target) + '|' + l.type); }
@@ -2952,7 +2949,7 @@ function searchRankOf(node) {
 
   // Shimmer colour accessor over the focus accessor `base`. Focus / selection
   // neighbourhood and drawing-session links keep the base (solid) colour; the rest
-  // are type-coloured at SHIMMER alpha x twinkle. Twinkle: 0.6 + 0.4 sin(t/1400 + phase),
+  // are type-coloured at SHIMMER alpha x twinkle (qualified lines: QUAL_ALPHA x a soft shine). Twinkle: 0.6 + 0.4 sin(t/1400 + phase),
   // phase = hash of the edge key. Reduced motion: static at base alpha. Alpha is
   // quantised so the lib's colour+opacity material cache stays small.
   function sparksShimmerAccessor(base) {
@@ -2964,10 +2961,12 @@ function searchRankOf(node) {
         const lv = strikeEdgeLevel(l);
         if (lv > 0) return focusLinkColor(l, lv); // the focus light-up, transient
       }
-      let a = isDomainLink(l) ? SHIMMER_DOMAIN : SHIMMER_BASE;
+      if (l.__q === undefined) l.__q = sparksQualified(l.type, String(idOf(l.source)), String(idOf(l.target)));
+      let a = l.__q ? QUAL_ALPHA : (isDomainLink(l) ? SHIMMER_DOMAIN : SHIMMER_BASE);
       if (sparksOn() && !sparksReducedMotion()) {
         if (l.__ph === undefined) l.__ph = hash01(linkKey(l) + '|' + l.type) * 6.283185;
-        a *= 0.6 + 0.4 * Math.sin(performance.now() / 1400 + l.__ph);
+        const sn = Math.sin(performance.now() / 1400 + l.__ph);
+        a *= l.__q ? 0.85 + 0.15 * sn : 0.6 + 0.4 * sn; // qualified lines: soft shine, not a twinkle
       }
       return hexToRgba(l.color || FALLBACK_LINK, Math.round(a * 500) / 500);
     };
@@ -2991,12 +2990,13 @@ function searchRankOf(node) {
   }
 
   // The vendored lib re-digests EVERY link when linkColor is re-set (no per-link
-  // subset), so the twinkle re-digests the whole set at 2 Hz, never per frame.
+  // subset), so the twinkle re-digests the whole set at 1 Hz, never per frame.
   function sparksShimmerTick() {
     const SP = S && S.sparks;
     if (!SP || !SP.running || document.hidden || !S.graph || !S.shimBase || S.s5dim) return;
     if (sparksReducedMotion()) return;
     if (SP.ema > 40) return; // heavy frames: pause the twinkle, never add a full re-digest spike
+    if (performance.now() - SP.glowLast < 800) return; // a glow refresh just re-digested every colour
     S.graph.linkColor(sparksShimmerAccessor(S.shimBase));
   }
 
@@ -3035,6 +3035,7 @@ function searchRankOf(node) {
     ctx.reach.length = 0;
     SP.hub.length = 0;
     SP.keys.clear();
+    const relByNode = new Map(); // non-DOMAIN relations by endpoint (bolt third hop)
     for (const l of links || []) {
       const e = { source: String(idOf(l.source)), target: String(idOf(l.target)), type: String(l.type) };
       edges.push(e);
@@ -3049,14 +3050,18 @@ function searchRankOf(node) {
       } else {
         ctx.main.push(e);
         plain.add(e.source); plain.add(e.target);
+        for (const id of [e.source, e.target]) {
+          if (!relByNode.has(id)) relByNode.set(id, []);
+          relByNode.get(id).push(e);
+        }
       }
     }
     // REACH: hub->fact DOMAIN edges whose fact has no non-DOMAIN rendered edge.
     for (const e of SP.hub) if (!plain.has(e.target)) ctx.reach.push(e);
     ctx.byNode = byNode;
     SP.edges = edges;
-    SP.byNodeAll = new Map(byNode); // the core is never struck (it would light the whole brain)
-    SP.byNodeAll.delete('core');
+    SP.relByNode = relByNode;
+    SP.spokes = ctx.core.filter((e) => e.source === 'core');
     // Bag survives rebuilds: keep entries still present, shuffle NEW ids in, cycle untouched.
     const st = SP.state;
     st.bag = st.bag.filter((id) => byNode.has(id));
@@ -3064,7 +3069,11 @@ function searchRankOf(node) {
       st.bag.splice(Math.floor(Math.random() * (st.bag.length + 1)), 0, id);
     }
     SP.nodes.clear();
-    for (const n of S.graph.graphData().nodes) SP.nodes.set(String(n.id), n);
+    SP.nodeDate.clear();
+    for (const n of S.graph.graphData().nodes) {
+      SP.nodes.set(String(n.id), n);
+      if (n.date) SP.nodeDate.set(String(n.id), n.date);
+    }
     SP.reachable = new Set(byNode.keys());
     SP.unreachable = 0;
     for (const id of SP.nodes.keys()) if (!SP.reachable.has(id)) SP.unreachable++;
@@ -3089,8 +3098,8 @@ function searchRankOf(node) {
       const Geo = proto && proto.constructor;
       const Attr = glowTpl.geo.attributes.position.constructor;
       if (!Geo || !Attr) throw new Error('no buffer constructors');
-      // Sized cap x the longest (wave, 16-segment) trail x 2 vertices per segment.
-      const verts = (SPARKS_MAX_ACTIVE + STRIKE_MAX_SPARKS) * Math.max(SPARKS_TRAIL_SEGS, SPARKS_WAVE_TRAIL_SEGS) * 2;
+      // Sized cap x the longest (bolt, 16-segment) trail x 2 vertices per segment.
+      const verts = (SPARKS_MAX_ACTIVE + STRIKE_MAX_SPARKS) * Math.max(SPARKS_TRAIL_SEGS, SPARKS_BOLT_TRAIL_SEGS) * 2;
       const geo = new Geo();
       const posA = new Attr(new Float32Array(verts * 3), 3);
       const colA = new Attr(new Float32Array(verts * 3), 3);
@@ -3130,9 +3139,9 @@ function searchRankOf(node) {
         cap: SPARKS_MAX_ACTIVE, coreShare: CORE_SHARE, reachShare: REACH_SHARE, freshShare: FRESH_SHARE },
       hub: [], keys: new Set(), nodes: new Map(),
       reachable: new Set(), unreachable: 0, sparked: new Set(), cycleSeen: 0,
-      wave: null, waveSparks: [], waveAt: SPARKS_WAVE_FIRST_MS, wavesRun: 0, rotate: 0,
-      edges: [], byNodeAll: new Map(), strikeSparks: [], glowEdges: new Map(), glowNodes: new Map(), glowAt: 0,
-      strikeAt: STRIKE_GAP_MIN_MS + Math.random() * (STRIKE_GAP_MAX_MS - STRIKE_GAP_MIN_MS), strikesRun: 0,
+      spokes: [], relByNode: new Map(), nodeDate: new Map(), prevParticles: null,
+      strikeSparks: [], glowEdges: new Map(), glowNodes: new Map(), glowLast: 0, glowDirty: false, haloPrev: new Set(),
+      strikeAt: BOLT_GAP_MIN_MS + Math.random() * (BOLT_GAP_MAX_MS - BOLT_GAP_MIN_MS), strikesRun: 0, boltsRun: 0, boltEvents: 0,
       liveCap: SPARKS_MAX_ACTIVE, trailSegs: SPARKS_TRAIL_SEGS,
       clock: 0, last: 0, ema: 16, slow: 0, fast: 0, raf: 0, timer: 0, shimTimer: 0, pub: 0, pubAt: 0,
     };
@@ -3142,13 +3151,16 @@ function searchRankOf(node) {
     SP.shimTimer = setInterval(sparksShimmerTick, SHIMMER_DIGEST_MS);
     SP.raf = requestAnimationFrame(sparksFrame);
     sparksOnData(S.graph.graphData().links);
+    // The construction accessor still gives core highways engine particles; updateFocus
+    // re-applies the sparks-aware one (0 while running). Remember the old one for stop.
+    SP.prevParticles = S.graph.linkDirectionalParticles();
     updateFocus(); // installs the shimmer over the focus accessor now the layer is live
     S.graph.refresh();
   }
 
   function sparksPublishIdle() {
     window.__sparks = { active: 0, cap: 0, poolMain: 0, poolCore: 0, poolReach: 0, frameMsEMA: 0,
-      nodesSparked: 0, nodesTotal: 0, coveragePct: 0, cycle: 0, wavesRun: 0, strikesRun: 0 };
+      nodesSparked: 0, nodesTotal: 0, coveragePct: 0, cycle: 0, boltsRun: 0, strikesRun: 0 };
   }
 
   function sparksStop(tearDown) {
@@ -3166,6 +3178,7 @@ function searchRankOf(node) {
     if (!tearDown && S.graph) { // give the plain lines (or the static reduced-motion shimmer) back
       S.graph.linkVisibility(composeLinkVis(S.s5vis, S.s5keys));
       updateFocus();
+      if (typeof SP.prevParticles === 'function') S.graph.linkDirectionalParticles(SP.prevParticles);
       S.graph.refresh();
     }
   }
@@ -3176,92 +3189,53 @@ function searchRankOf(node) {
   }
   const EMPTY_FRESH = new Set();
 
-  // Growth-wave director. Runs on the scheduler tick; the wave's own sparks live in
-  // SP.waveSparks (outside the scheduler) and shrink its effective cap while alive.
-  function sparksWaveTick(SP) {
-    let W = SP.wave;
-    if (!W) {
-      if (SP.clock < SP.waveAt) return;
-      // No new wave while focused/selected/hovered, over frame budget (hidden/reduced motion never reach here).
-      if (S.hovered || S.selected || S.focusSet) return;
-      const hubs = SP.ctx.core.filter((e) => e.source === 'core');
-      const hubDomain = new Map();
-      const nodeDate = new Map();
-      for (const e of hubs) {
-        const hn = SP.nodes.get(e.target);
-        if (hn && hn.domain) hubDomain.set(e.target, hn.domain);
-      }
-      for (const e of SP.hub) {
-        const fn = SP.nodes.get(e.target);
-        if (fn && fn.date) nodeDate.set(e.target, fn.date);
-      }
-      const plan = wavePlan({ coreEdges: hubs, hubEdges: SP.hub, nodeDate, hubDomain, rng: SP.ctx.rng, rotate: SP.rotate });
-      if (!plan.length) { SP.waveAt = SP.clock + SPARKS_WAVE_GAP_MS; return; }
-      W = SP.wave = { plan, i: 0, nextAt: SP.clock, done: false, aborted: false };
-    }
-    if (!W.done && SP.clock >= W.nextAt) {
-      const e = W.plan[W.i];
-      if (!SP.keys.has(e.s + '|' + e.t + '|' + e.type)) { // re-validated against the CURRENT rendered links
-        W.done = true; W.aborted = true;
-      } else {
-        SP.waveSparks.push({ s: e.s, t: e.t, type: e.type, t0: SP.clock, ph: 0, legs: 0, wave: true,
-          glow: 1.4, rgb: sparksHexRgb(SPARKS_CORE_COLOR),
-          // the hub->newest leg ends a domain's chain: its final node lights up like a strike
-          done: W.i % 2 === 1 ? () => strikeLight(SP, e.t) : null });
-        W.i++;
-        W.nextAt = SP.clock + SPARKS_WAVE_STEP_MS;
-        if (W.i >= W.plan.length) W.done = true;
-      }
-    }
-    if (W.done && !SP.waveSparks.length) {
-      if (!W.aborted) SP.wavesRun++;
-      SP.rotate++;
-      SP.wave = null;
-      SP.waveAt = SP.clock + SPARKS_WAVE_GAP_MS + SP.ctx.rng() * SPARKS_WAVE_GAP_SPAN_MS;
-    }
+  // (The growth-wave director, function sparksWaveTick, is retired: bolts replace it.)
+
+  // ---- lightning ---------------------------------------------------------------
+  // Glow entries { until, k, dur } expire individually; a later put never shortens or
+  // softens one still burning (until = max, k = max while live); the entry owning the
+  // later expiry owns the duration strikeLevel divides by.
+  function glowPut(SP, m, id, dur, k) {
+    const now = performance.now();
+    const old = m.get(id);
+    const live = old && old.until > now;
+    const until = now + dur;
+    if (live && old.until >= until) { if (k > old.k) old.k = k; }
+    else m.set(id, { until, dur, k: live ? Math.max(old.k, k) : k });
+    SP.glowDirty = true;
   }
 
-  // ---- lightning (U2 v2.1) ---------------------------------------------------
-  // Light a node's whole direct network with the shared focus treatment; entries
-  // expire individually (STRIKE_GLOW_MS) and a refresh re-digests the colours.
+  // Peer strike light-up: a node's whole direct network with the shared focus treatment.
   function strikeLight(SP, node, k = 1) {
-    const until = performance.now() + STRIKE_GLOW_MS;
-    const put = (m, id) => { // a softer strike never dims a stronger one still burning
-      const old = m.get(id);
-      m.set(id, { until, k: old && old.until > until - STRIKE_GLOW_MS ? Math.max(old.k, k) : k });
-    };
-    for (const e of SP.ctx.byNode.get(node) || []) put(SP.glowEdges, e.source + '|' + e.target + '|' + e.type);
-    put(SP.glowNodes, node);
+    for (const e of SP.ctx.byNode.get(node) || []) glowPut(SP, SP.glowEdges, e.source + '|' + e.target + '|' + e.type, STRIKE_GLOW_MS, k);
+    glowPut(SP, SP.glowNodes, node, STRIKE_GLOW_MS, k);
     if (SP.reachable.has(node)) SP.sparked.add(node);
-    SP.glowAt = 0; // refresh on the next frame
   }
 
-  // Initiation: a fast spark core -> hub -> node over the real DOMAIN edges. A missing
-  // leg skips the travel and just lights up.
-  function strikeStart(SP, node) {
-    const es = SP.ctx.byNode.get(node) || [];
-    const touches = (e, id) => e.source === id || e.target === id;
-    const orient = (e, from) => (e.source === from ? e : { source: e.target, target: e.source, type: e.type });
-    let legs = [];
-    if (!es.some((e) => SP.ctx.core.includes(e))) { // a hub is reached by its core spoke alone
-      const he = es.find((e) => SP.hub.includes(e));
-      const hub = he && (he.source === node ? he.target : he.source);
-      const ce = hub && SP.ctx.core.find((e) => touches(e, hub));
-      legs = he && ce ? [orient(ce, 'core'), orient(he, hub)] : [];
-    } else {
-      const ce = es.find((e) => SP.ctx.core.includes(e) && touches(e, 'core'));
-      legs = ce ? [orient(ce, 'core')] : [];
-    }
-    const fresh = legs.length && legs.every((e) => SP.keys.has(e.source + '|' + e.target + '|' + e.type));
-    if (!fresh || SP.strikeSparks.length + legs.length > STRIKE_MAX_SPARKS) { strikeLight(SP, node); return; }
-    const launch = (i) => {
-      const e = legs[i];
-      SP.strikeSparks.push({ s: e.source, t: e.target, type: e.type, t0: SP.clock, ph: 0, legs: 0, wave: true,
-        fast: STRIKE_SPEED_X, glow: 1.8, rgb: sparksHexRgb(SPARKS_CORE_COLOR),
-        key: e.source + '|' + e.target + '|' + e.type,
-        done: () => (i + 1 < legs.length ? launch(i + 1) : strikeLight(SP, node)) });
+  // Bolt: chain a fast spark along each path leg. Every leg re-checks the rendered set at
+  // launch; a travelled edge keeps a soft afterglow and the final node flashes (node-only).
+  function strikeStart(SP, path, wait) {
+    const keyOf = (e) => e.source + '|' + e.target + '|' + e.type;
+    const flash = (node) => {
+      glowPut(SP, SP.glowNodes, node, BOLT_FLASH_MS, 1);
+      if (SP.reachable.has(node)) SP.sparked.add(node);
     };
-    launch(0);
+    const launch = (i, delay) => {
+      const e = path[i];
+      const key = keyOf(e);
+      if (!SP.keys.has(key) || SP.strikeSparks.length >= STRIKE_MAX_SPARKS) {
+        if (i > 0) flash(path[i - 1].target); // the chain ends where it got to
+        return false;
+      }
+      SP.strikeSparks.push({ s: e.source, t: e.target, type: e.type, t0: SP.clock, ph: 0, legs: 0, once: true,
+        fast: STRIKE_SPEED_X, glow: 1.8, wait: delay, segs: SPARKS_BOLT_TRAIL_SEGS, rgb: sparksHexRgb(SPARKS_CORE_COLOR), key,
+        done: () => {
+          glowPut(SP, SP.glowEdges, key, BOLT_AFTERGLOW_MS, 0.5);
+          if (i + 1 < path.length) launch(i + 1, 0); else flash(e.target);
+        } });
+      return true;
+    };
+    return launch(0, wait);
   }
 
   // Peer strike: a fast bright spark runs a real non-DOMAIN edge; on arrival BOTH endpoints'
@@ -3273,39 +3247,47 @@ function searchRankOf(node) {
     if (!SP.keys.has(key) || SP.strikeSparks.length >= STRIKE_MAX_SPARKS) { both(); return; }
     const flip = SP.ctx.rng() < 0.5; // direction is arbitrary; completion lights both ends
     SP.strikeSparks.push({ s: flip ? e.target : e.source, t: flip ? e.source : e.target, type: e.type, t0: SP.clock,
-      ph: 0, legs: 0, wave: true, fast: STRIKE_SPEED_X, glow: 1.8, rgb: sparksHexRgb(SPARKS_CORE_COLOR), key, done: both });
+      ph: 0, legs: 0, once: true, fast: STRIKE_SPEED_X, glow: 1.8, rgb: sparksHexRgb(SPARKS_CORE_COLOR), key, done: both });
   }
 
-  // Storm: an event every 350-1000 ms (random), each striking 2-3 nodes, about half of them
-  // peer strikes. The short random gap is itself the burst/lull rhythm (1 s holds 2-3+ strikes).
+  // The single storm director: an event every 600-1200 ms fires 2-3 bolts staggered ~120 ms,
+  // a 40% roll adds one peer strike, and every 5th event aims its bolts at a hub's newest fact.
   function sparksStrikeTick(SP) {
     if (SP.clock < SP.strikeAt) return;
     const rng = SP.ctx.rng;
-    SP.strikeAt = SP.clock + STRIKE_GAP_MIN_MS + rng() * (STRIKE_GAP_MAX_MS - STRIKE_GAP_MIN_MS);
+    SP.strikeAt = SP.clock + BOLT_GAP_MIN_MS + rng() * (BOLT_GAP_MAX_MS - BOLT_GAP_MIN_MS);
     if (S.hovered || S.selected || S.focusSet) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
-    const total = 2 + Math.floor(rng() * 3);
-    let peers = 0;
-    for (let i = 0; i < total; i++) if (rng() < STRIKE_PEER_P) peers++;
-    const core = strikePlan({ links: SP.edges, byNodeAll: SP.byNodeAll, rng, count: total - peers });
-    const mains = SP.ctx.main;
-    let ran = core.length;
-    for (const st of core) strikeStart(SP, st.node);
-    for (let i = 0; i < peers; i++) {
-      const p = peerPlan({ links: mains, rng });
-      if (p) { ran++; peerStart(SP, p); }
+    const newest = ++SP.boltEvents % BOLT_NEWEST_EVERY === 0;
+    const total = 2 + Math.floor(rng() * 2);
+    for (let i = 0; i < total; i++) {
+      const path = boltPath({ coreEdges: SP.spokes, hubEdges: SP.hub, relByNode: SP.relByNode, nodeDate: SP.nodeDate,
+        rng, preferNewest: newest, isQualified: sparksQualified });
+      if (path.length && strikeStart(SP, path, i * BOLT_STAGGER_MS)) { SP.boltsRun++; SP.strikesRun++; }
     }
-    if (ran) SP.strikesRun++;
+    if (rng() < BOLT_PEER_P) {
+      const p = peerPlan({ links: SP.ctx.main, rng });
+      if (p) peerStart(SP, p);
+    }
   }
 
   // Prune expired glow entries and re-digest the colours/halos while anything is lit.
+  // Timestamp-only gate: nothing resets it. Heavy frames stretch the cadence (refresh only;
+  // the storm itself is never gated).
   function sparksGlowRefresh(SP, now) {
-    if (!SP.glowEdges.size && !SP.glowNodes.size) return;
-    if (SP.glowAt && now - SP.glowAt < 140) return;
-    SP.glowAt = now;
+    if (!SP.glowEdges.size && !SP.glowNodes.size && !SP.glowDirty) return;
+    if (now - SP.glowLast < (SP.ema > 30 ? GLOW_REFRESH_SLOW_MS : GLOW_REFRESH_MS)) return;
+    SP.glowLast = now;
+    SP.glowDirty = false;
     for (const m of [SP.glowEdges, SP.glowNodes]) for (const [id, g] of m) if (g.until <= now) m.delete(id);
     if (S.graph && S.shimBase && !S.s5dim) S.graph.linkColor(sparksShimmerAccessor(S.shimBase));
     if (S.live && S.live.on) return; // the per-frame live painter owns the halos
-    applyRestHalos(S.graph.graphData().nodes, S.hovered ? DIM_HOVER : DIM);
+    // Halos: only nodes lit now or lit at the previous pass can have changed.
+    const ids = new Set(SP.haloPrev);
+    for (const id of SP.glowNodes.keys()) ids.add(id);
+    const nodes = [];
+    for (const id of ids) { const n = SP.nodes.get(id); if (n) nodes.push(n); }
+    SP.haloPrev = new Set(SP.glowNodes.keys());
+    applyRestHalos(nodes, S.hovered ? DIM_HOVER : DIM);
   }
 
   function sparksTick() {
@@ -3326,21 +3308,14 @@ function searchRankOf(node) {
       if (SP.keys.has(act[i].s + '|' + act[i].t + '|' + act[i].type)) act[w++] = act[i];
     }
     act.length = w;
-    const ws = SP.waveSparks;
-    w = 0;
-    for (let i = 0; i < ws.length; i++) {
-      if (!ws[i].dead && SP.keys.has(ws[i].s + '|' + ws[i].t + '|' + ws[i].type)) ws[w++] = ws[i];
-    }
-    ws.length = w;
     const ss = SP.strikeSparks;
     w = 0;
     for (let i = 0; i < ss.length; i++) {
       if (!ss[i].dead && SP.keys.has(ss[i].key)) ss[w++] = ss[i];
     }
     ss.length = w;
-    sparksWaveTick(SP);
     sparksStrikeTick(SP);
-    SP.ctx.cap = Math.max(0, SP.liveCap - ws.length);
+    SP.ctx.cap = SP.liveCap;
     SP.ctx.fresh = sparksFreshSet();
     sparksStep(SP.state, SP.ctx);
     if (SP.state.bagCycle !== SP.cycleSeen) { SP.cycleSeen = SP.state.bagCycle; SP.sparked.clear(); }
@@ -3361,13 +3336,14 @@ function searchRankOf(node) {
     const A = SP.nodes.get(a.s), B = SP.nodes.get(a.t);
     if (!A || !B || A.x === undefined || B.x === undefined) return o;
     if (o + segs * 6 > pos.length) return o;
+    if (a.wait > 0) { a.wait -= dt; return o; } // staggered bolt: not launched yet
     const dx = B.x - A.x, dy = (B.y || 0) - (A.y || 0), dz = (B.z || 0) - (A.z || 0);
     const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (len < 1e-3) return o;
     const D = Math.min(2000, Math.max(500, (len / SPARKS_SPEED) * 1000)) / (a.fast || 1);
     a.ph += dt / D;
     const legs = Math.floor(a.ph);
-    while (a.legs < legs) { a.legs++; SP.sparked.add(a.legs & 1 ? a.t : a.s); if (a.wave) { a.dead = true; if (a.done) { const d = a.done; a.done = null; d(); } } }
+    while (a.legs < legs) { a.legs++; SP.sparked.add(a.legs & 1 ? a.t : a.s); if (a.once) { a.dead = true; if (a.done) { const d = a.done; a.done = null; d(); } } }
     if (a.dead) return o;
     const m = a.ph % 2;
     const f = m < 1 ? m : 2 - m;
@@ -3425,12 +3401,9 @@ function searchRankOf(node) {
       if (u >= 1) continue;
       o = sparksDraw(SP, a, Math.min(1, u / 0.1, (1 - u) / 0.18), dt, SP.trailSegs, o);
     }
-    for (const a of SP.waveSparks) {
-      o = sparksDraw(SP, a, Math.min(1, (a.ph + 0.15) / 0.1, (1 - a.ph) / 0.12), dt, SPARKS_WAVE_TRAIL_SEGS, o);
-    }
-    for (let i = 0; i < SP.strikeSparks.length; i++) { // may grow while drawing (leg 2 launches)
+    for (let i = 0; i < SP.strikeSparks.length; i++) { // may grow while drawing (next legs launch)
       const a = SP.strikeSparks[i];
-      o = sparksDraw(SP, a, Math.min(1, (a.ph + 0.15) / 0.1), dt, SP.trailSegs, o);
+      o = sparksDraw(SP, a, Math.min(1, (a.ph + 0.15) / 0.1), dt, a.segs || SP.trailSegs, o);
     }
     sparksGlowRefresh(SP, now);
     SP.layer.geo.setDrawRange(0, o / 3);
@@ -3441,12 +3414,12 @@ function searchRankOf(node) {
       let sparked = 0;
       for (const id of SP.sparked) if (SP.reachable.has(id)) sparked++;
       const total = SP.reachable.size;
-      window.__sparks = { active: act.length + SP.waveSparks.length, cap: SP.liveCap, poolMain: SP.ctx.main.length,
+      window.__sparks = { active: act.length, cap: SP.liveCap, poolMain: SP.ctx.main.length,
         poolCore: SP.ctx.core.length, poolReach: SP.ctx.reach.length,
         frameMsEMA: Math.round(SP.ema * 10) / 10,
         nodesSparked: sparked, nodesTotal: total, nodesUnreachable: SP.unreachable,
         coveragePct: total ? Math.round((sparked / total) * 1000) / 10 : 0,
-        cycle: SP.state.bagCycle, wavesRun: SP.wavesRun, strikesRun: SP.strikesRun };
+        cycle: SP.state.bagCycle, boltsRun: SP.boltsRun, strikesRun: SP.strikesRun };
     }
     SP.raf = requestAnimationFrame(sparksFrame);
   }
