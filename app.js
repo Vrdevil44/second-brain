@@ -689,8 +689,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=bef1b51');
-        await loadScriptOnce('universe.js?v=bef1b51');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=69c8a35');
+        await loadScriptOnce('universe.js?v=69c8a35');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4110,6 +4110,8 @@ function expandQueryVariants(q, groups) {
     if (rows && !sliderSleep.checkRows(rows, facts.ids)) rows = null;
     sliderSleep.graph = facts;
     sliderSleep.rows = rows;
+    // U2 sparks: the latest row's born edges earn a birth-glow weight (universe.js reads this Set).
+    if (rows) window.__brainFreshEdges = new Set(rows[rows.length - 1].born_edges.map((e) => e[0] + '|' + e[1] + '|' + e[2]));
     sliderSleep.status = rows ? 'ready' : 'unavailable';
     if (rows && state === 'catching-up') sliderSleep.status = 'catching-up';
     sliderSleep.index = rows ? rows.length - 1 : 0;

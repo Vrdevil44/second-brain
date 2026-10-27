@@ -455,6 +455,7 @@ function searchRankOf(node) {
     if (S.resetBtn) S.resetBtn.hidden = !S.isolated;
     refreshSuggestions();
     updateFocus();
+    sparksOnData(links); // U2: rebuild spark pools + node map from the rendered links
     if (S.panelNode && !S.panel.hidden) renderNodePanel(S.panelNode); // refresh hidden-by-filter rows
   }
 
@@ -492,6 +493,7 @@ function searchRankOf(node) {
   // render full-bright on a dimmed link).
   function particleCount(l) {
     if (fxSession.drawing.size && fxSession.drawing.has(linkKey(l))) return 1;
+    if (sparksOn()) return 0; // U2: the custom spark layer replaces ambient particles
     if (!S || !S.focusSet) return 1;
     return (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : 0;
   }
@@ -520,6 +522,7 @@ function searchRankOf(node) {
         return c;
       })
       .linkDirectionalParticles((l) => particleCount(l));
+    sparksRefreshVisibility(); // U2: focus neighbourhood lines solid, the rest hidden
     // Halo dimming rides alongside the core's colour-alpha dimming.
     // The per-frame painter owns the halos (breathing core,
     // echo glows); node/link colour accessors above still run.
@@ -1484,6 +1487,7 @@ function searchRankOf(node) {
 
   function destroy() {
     if (!S) return;
+    sparksStop(true);
     stopLiving(); // clears timers, fx meshes, ticker/HUD; S still set
     const s = S;
     S = null;
@@ -2641,12 +2645,10 @@ function searchRankOf(node) {
     const keys = vis && Array.isArray(edges)
       ? new Set(edges.map((e) => (Array.isArray(e) ? e.join('>') : String(e)))) : null;
     S.s5vis = vis;
+    S.s5keys = keys;
     S.graph
       .nodeVisibility(vis ? (n) => vis.has(String(n.id)) : () => true)
-      .linkVisibility(vis ? (l) => {
-        const s = String(idOf(l.source)), t = String(idOf(l.target));
-        return vis.has(s) && vis.has(t) && (!keys || keys.has(s + '>' + t + '>' + l.type));
-      } : () => true);
+      .linkVisibility(composeLinkVis(vis, keys));
     // Hidden nodes cannot stay selected or hovered.
     if (vis && S.selected && !vis.has(String(S.selected))) closePanel();
     if (vis && S.hovered && !vis.has(String(S.hovered))) { S.hovered = null; if (S.tip) S.tip.hidden = true; }
@@ -2710,4 +2712,326 @@ function searchRankOf(node) {
     });
   }
   // ==== S5:end ====
+
+  // ==== U2-SPARKS:begin ====
+  const SPARKS_MAX_ACTIVE = 25;   // concurrent sparks (owner: 20-30 lit at once)
+  const SPARKS_MIN_ACTIVE = 20;   // live-cap floor when the frame time sags
+  const CORE_SHARE = 0.34;        // share of picks from the core's own spokes
+  const FRESH_BOOST = 6;          // born-edge weight multiplier (birth-glow)
+  const SPARKS_TICK_MS = 150;     // scheduler tick
+  const SPARKS_TRAIL_SEGS = 12;   // trail segments behind each head
+  const SPARKS_TRAIL_WORLD = 60;  // trail length in world units (capped by edge length)
+  const SPARKS_SPEED = 480;       // world units per second
+  const SPARKS_CORE_COLOR = '#eaf6ff';
+  const SPARKS_HEX = new Map();
+  // U2 SPARKS: the permanent relation lines are hidden. Life comes from fast
+  // packets with fading trails that shoot back and forth along REAL relations
+  // only. Lines are hidden through linkVisibility (never through linkOpacity,
+  // a global scalar the sparks' own brightness would inherit); the engine's
+  // directional particles cannot ping-pong or trail, so the sparks draw on
+  // their own LineSegments trail layer. Focused / selected nodes keep their
+  // neighbourhood lines solid at normal colour and opacity 1 (focus mode).
+
+  // SPARKS-SCHEDULER:begin
+  // Pure: no DOM, no timers, no globals. state = { active: [{s,t,type,ttl}] }.
+  function sparksStep(state, ctx) {
+    const act = state.active;
+    let w = 0;
+    for (let i = 0; i < act.length; i++) {
+      act[i].ttl -= 1;
+      if (act[i].ttl > 0) act[w++] = act[i];
+    }
+    act.length = w;
+    if (act.length > ctx.cap) act.length = ctx.cap;
+    const rng = ctx.rng;
+    const keyOf = (s, t, type) => s + '|' + t + '|' + type;
+    const taken = new Set();
+    for (const a of act) taken.add(keyOf(a.s, a.t, a.type));
+    const pick = (pool) => {
+      let total = 0;
+      for (const e of pool) {
+        const k = keyOf(e.source, e.target, e.type);
+        if (!taken.has(k)) total += ctx.fresh.has(k) ? ctx.freshBoost : 1;
+      }
+      if (total <= 0) return null;
+      let r = rng() * total;
+      let last = null;
+      for (const e of pool) {
+        const k = keyOf(e.source, e.target, e.type);
+        if (taken.has(k)) continue;
+        last = e;
+        r -= ctx.fresh.has(k) ? ctx.freshBoost : 1;
+        if (r < 0) return e;
+      }
+      return last;
+    };
+    while (act.length < ctx.cap) {
+      const coreFirst = rng() < ctx.coreShare;
+      let pool = coreFirst ? 'core' : 'main';
+      let e = pick(ctx[pool]);
+      if (!e) {
+        pool = coreFirst ? 'main' : 'core';
+        e = pick(ctx[pool]);
+      }
+      if (!e) break;
+      const ttl = 8 + Math.floor(rng() * 13);
+      taken.add(keyOf(e.source, e.target, e.type));
+      act.push({ s: e.source, t: e.target, type: e.type, ttl, life: ttl, pool });
+    }
+    return state;
+  }
+  // SPARKS-SCHEDULER:end
+
+  // Read live at every call, never cached (reduced motion: no engine, static lines).
+  function sparksReducedMotion() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
+  function sparksOn() { return !!(S && S.sparks && S.sparks.running); }
+
+  // Line visibility while sparks run: only the focused neighbourhood (solid)
+  // and edges an fxSession is drawing; everything else is hidden.
+  function sparksLineShown(l) {
+    if (!sparksOn()) return true;
+    if (fxSession.drawing.size && fxSession.drawing.has(linkKey(l))) return true;
+    const fs = S.focusSet;
+    return !!fs && fs.has(idOf(l.source)) && fs.has(idOf(l.target));
+  }
+
+  // Composes the S5 time-slider filter with the sparks line hiding.
+  function composeLinkVis(vis, keys) {
+    return (l) => {
+      if (vis) {
+        const s = String(idOf(l.source)), t = String(idOf(l.target));
+        if (!(vis.has(s) && vis.has(t) && (!keys || keys.has(s + '>' + t + '>' + l.type)))) return false;
+      }
+      return sparksLineShown(l);
+    };
+  }
+
+  function sparksRefreshVisibility() {
+    if (!sparksOn() || !S.graph) return;
+    S.graph.linkVisibility(composeLinkVis(S.s5vis, S.s5keys)); // fresh closure: forces a re-digest
+  }
+
+  function sparksHexRgb(hex) {
+    let c = SPARKS_HEX.get(hex);
+    if (!c) {
+      const n = parseInt(String(hex).slice(1), 16);
+      c = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+      SPARKS_HEX.set(hex, c);
+    }
+    return c;
+  }
+
+  // Pools, key set and node map come from the CURRENT rendered links; link
+  // objects are never held across a refresh.
+  function sparksOnData(links) {
+    if (!S) return;
+    if (!S.sparks) { sparksTryStart(0); }
+    const SP = S.sparks;
+    if (!SP) return;
+    SP.ctx.main.length = 0;
+    SP.ctx.core.length = 0;
+    SP.keys.clear();
+    for (const l of links || []) {
+      const e = { source: String(idOf(l.source)), target: String(idOf(l.target)), type: String(l.type) };
+      SP.keys.add(e.source + '|' + e.target + '|' + e.type);
+      if (e.type.toUpperCase() === 'DOMAIN') {
+        if (e.source === 'core' || e.target === 'core') SP.ctx.core.push(e);
+      } else SP.ctx.main.push(e);
+    }
+    SP.nodes.clear();
+    for (const n of S.graph.graphData().nodes) SP.nodes.set(String(n.id), n);
+  }
+
+  function sparksTryStart(attempt) {
+    if (!S || !S.graph || S.sparks) return;
+    if (sparksReducedMotion()) return; // reduced motion: engine never starts, lines stay as before
+    if (S.sparksRetry) { clearTimeout(S.sparksRetry); S.sparksRetry = 0; }
+    const retry = () => {
+      if (attempt < 40) { const s = S; S.sparksRetry = setTimeout(() => { if (S === s) sparksTryStart(attempt + 1); }, 500); }
+    };
+    if (!glowTpl && !captureGlowTemplate()) { retry(); return; }
+    const scene = liveScene();
+    if (!scene) { retry(); return; }
+    let layer = null;
+    try {
+      // Constructors come from live objects (the bundle keeps Three.js private).
+      let proto = glowTpl.geo.constructor.prototype;
+      while (proto && !Object.prototype.hasOwnProperty.call(proto, 'setAttribute')) proto = Object.getPrototypeOf(proto);
+      const Geo = proto && proto.constructor;
+      const Attr = glowTpl.geo.attributes.position.constructor;
+      if (!Geo || !Attr) throw new Error('no buffer constructors');
+      const verts = SPARKS_MAX_ACTIVE * SPARKS_TRAIL_SEGS * 2;
+      const geo = new Geo();
+      const posA = new Attr(new Float32Array(verts * 3), 3);
+      const colA = new Attr(new Float32Array(verts * 3), 3);
+      posA.setUsage(35048); colA.setUsage(35048); // DynamicDrawUsage
+      geo.setAttribute('position', posA);
+      geo.setAttribute('color', colA);
+      geo.setDrawRange(0, 0);
+      const mat = glowTpl.matProto.clone();
+      mat.vertexColors = true;
+      mat.transparent = true;
+      mat.blending = BLEND_ADDITIVE;
+      mat.depthWrite = false;
+      mat.opacity = 1;
+      // Fade is colour scaled toward black (additive); output the vertex colour flat.
+      mat.onBeforeCompile = (sh) => {
+        sh.fragmentShader = sh.fragmentShader.replace('#include <dithering_fragment>',
+          '#include <dithering_fragment>\n gl_FragColor = vec4( vColor, 1.0 );');
+      };
+      mat.customProgramCacheKey = () => 'u2-sparks';
+      const mesh = new glowTpl.Mesh(geo, mat);
+      // Draw as GL line segments: the renderer picks the primitive from these flags.
+      mesh.isMesh = false; mesh.isLine = true; mesh.isLineSegments = true;
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 5;
+      mesh.raycast = function () {};
+      scene.add(mesh);
+      layer = { mesh, geo, mat, pos: posA.array, col: colA.array, posA, colA };
+    } catch (e) {
+      console.error('sparks: trail layer unavailable', e);
+      retry();
+      return;
+    }
+    const SP = S.sparks = {
+      running: true, layer, scene,
+      state: { active: [] },
+      ctx: { main: [], core: [], fresh: new Set(), rng: Math.random, cap: SPARKS_MAX_ACTIVE,
+        coreShare: CORE_SHARE, freshBoost: FRESH_BOOST },
+      keys: new Set(), nodes: new Map(),
+      liveCap: SPARKS_MAX_ACTIVE, trailSegs: SPARKS_TRAIL_SEGS,
+      clock: 0, last: 0, ema: 16, slow: 0, fast: 0, raf: 0, timer: 0, pub: 0, pubAt: 0,
+    };
+    SP.onVis = () => { if (!document.hidden && SP.running && !SP.raf) { SP.last = 0; SP.raf = requestAnimationFrame(sparksFrame); } };
+    document.addEventListener('visibilitychange', SP.onVis);
+    SP.timer = setInterval(sparksTick, SPARKS_TICK_MS);
+    SP.raf = requestAnimationFrame(sparksFrame);
+    sparksOnData(S.graph.graphData().links);
+    sparksRefreshVisibility(); // hide the lines now the layer is live
+    updateFocus();
+    S.graph.refresh();
+  }
+
+  function sparksStop(tearDown) {
+    const SP = S && S.sparks;
+    if (S && S.sparksRetry) { clearTimeout(S.sparksRetry); S.sparksRetry = 0; }
+    if (!SP) return;
+    SP.running = false;
+    if (SP.timer) clearInterval(SP.timer);
+    if (SP.raf) cancelAnimationFrame(SP.raf);
+    document.removeEventListener('visibilitychange', SP.onVis);
+    try { SP.scene.remove(SP.layer.mesh); SP.layer.geo.dispose(); SP.layer.mat.dispose(); } catch (e) { /* scene gone */ }
+    S.sparks = null;
+    window.__sparks = { active: 0, cap: 0, poolMain: 0, poolCore: 0, frameMsEMA: 0 };
+    if (!tearDown && S.graph) { // give the static lines and ambient particles back
+      S.graph.linkVisibility(composeLinkVis(S.s5vis, S.s5keys));
+      updateFocus();
+      S.graph.refresh();
+    }
+  }
+
+  function sparksFreshSet() {
+    const f = window.__brainFreshEdges;
+    return f instanceof Set ? f : EMPTY_FRESH;
+  }
+  const EMPTY_FRESH = new Set();
+
+  function sparksTick() {
+    const SP = S && S.sparks;
+    if (!SP || !SP.running || document.hidden) return;
+    if (sparksReducedMotion()) { sparksStop(); return; }
+    const act = SP.state.active;
+    let w = 0; // drop sparks whose edge left the rendered set
+    for (let i = 0; i < act.length; i++) {
+      if (SP.keys.has(act[i].s + '|' + act[i].t + '|' + act[i].type)) act[w++] = act[i];
+    }
+    act.length = w;
+    SP.ctx.cap = SP.liveCap;
+    SP.ctx.fresh = sparksFreshSet();
+    sparksStep(SP.state, SP.ctx);
+    for (const a of act) {
+      if (a.t0 !== undefined) continue;
+      a.t0 = SP.clock;
+      a.ph = 0;
+      a.glow = SP.ctx.fresh.has(a.s + '|' + a.t + '|' + a.type) ? 1.6 : 1;
+      a.rgb = sparksHexRgb(a.pool === 'core' ? SPARKS_CORE_COLOR : (TYPE_COLORS[a.type] || FALLBACK_LINK));
+    }
+  }
+
+  function sparksFrame() {
+    const SP = S && S.sparks;
+    if (!SP || !SP.running) return;
+    SP.raf = 0;
+    if (document.hidden) { SP.last = 0; return; } // onVis restarts the loop
+    const now = performance.now();
+    const raw = SP.last ? now - SP.last : 16;
+    SP.last = now;
+    const dt = Math.min(raw, 50);
+    SP.clock += dt;
+    SP.ema += (Math.min(raw, 200) - SP.ema) * 0.05;
+    // Sustained slowness: lower the live cap toward the floor, then shorten trails.
+    if (SP.ema > 24) { SP.slow++; SP.fast = 0; } else if (SP.ema < 19) { SP.fast++; SP.slow = 0; } else { SP.slow = 0; SP.fast = 0; }
+    if (SP.slow > 90) {
+      SP.slow = 0;
+      if (SP.liveCap > SPARKS_MIN_ACTIVE) SP.liveCap--;
+      else if (SP.trailSegs > 6) SP.trailSegs--;
+    } else if (SP.fast > 600) {
+      SP.fast = 0;
+      if (SP.trailSegs < SPARKS_TRAIL_SEGS) SP.trailSegs++;
+      else if (SP.liveCap < SPARKS_MAX_ACTIVE) SP.liveCap++;
+    }
+    const segs = SP.trailSegs;
+    const pos = SP.layer.pos, col = SP.layer.col;
+    const act = SP.state.active;
+    const lifeMs = SPARKS_TICK_MS;
+    let o = 0;
+    for (let i = 0; i < act.length; i++) {
+      const a = act[i];
+      if (a.t0 === undefined) continue;
+      const A = SP.nodes.get(a.s), B = SP.nodes.get(a.t);
+      if (!A || !B || A.x === undefined || B.x === undefined) continue;
+      const dx = B.x - A.x, dy = (B.y || 0) - (A.y || 0), dz = (B.z || 0) - (A.z || 0);
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (len < 1e-3) continue;
+      const u = (SP.clock - a.t0) / (a.life * lifeMs);
+      if (u >= 1) continue;
+      const env = Math.min(1, u / 0.1, (1 - u) / 0.18);
+      const D = Math.min(2000, Math.max(500, (len / SPARKS_SPEED) * 1000));
+      a.ph += dt / D;
+      const m = a.ph % 2;
+      const f = m < 1 ? m : 2 - m;
+      const dir = m < 1 ? 1 : -1;
+      const span = Math.min(0.45, SPARKS_TRAIL_WORLD / len);
+      const gain = env * a.glow;
+      const r = a.rgb[0] * gain, g = a.rgb[1] * gain, b = a.rgb[2] * gain;
+      let p0 = f;
+      let k0 = 1;
+      for (let k = 0; k < segs; k++) {
+        let p1 = f - dir * ((k + 1) / segs) * span;
+        p1 = p1 < 0 ? 0 : (p1 > 1 ? 1 : p1);
+        const k1 = 1 - (k + 1) / segs;
+        pos[o] = A.x + dx * p0; pos[o + 1] = (A.y || 0) + dy * p0; pos[o + 2] = (A.z || 0) + dz * p0;
+        col[o] = r * k0 * k0; col[o + 1] = g * k0 * k0; col[o + 2] = b * k0 * k0;
+        o += 3;
+        pos[o] = A.x + dx * p1; pos[o + 1] = (A.y || 0) + dy * p1; pos[o + 2] = (A.z || 0) + dz * p1;
+        col[o] = r * k1 * k1; col[o + 1] = g * k1 * k1; col[o + 2] = b * k1 * k1;
+        o += 3;
+        p0 = p1;
+        k0 = k1;
+      }
+    }
+    SP.layer.geo.setDrawRange(0, o / 3);
+    SP.layer.posA.needsUpdate = true;
+    SP.layer.colA.needsUpdate = true;
+    if (now - SP.pubAt > 1000) {
+      SP.pubAt = now;
+      window.__sparks = { active: act.length, cap: SP.liveCap, poolMain: SP.ctx.main.length,
+        poolCore: SP.ctx.core.length, frameMsEMA: Math.round(SP.ema * 10) / 10 };
+    }
+    SP.raf = requestAnimationFrame(sparksFrame);
+  }
+  // ==== U2-SPARKS:end ====
 })();
