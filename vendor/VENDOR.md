@@ -18,6 +18,8 @@ layout engine are bundled INSIDE `3d-force-graph.min.js`. Verified by
 inspection: the bundle contains `WebGLRenderer` and `alphaDecay`, has zero
 `require("…")` calls, and references no external `THREE` global. Do NOT add
 a standalone `three.min.js` — two Three.js instances break rendering.
+(The stray standalone copy that sat in this folder was retired to
+`archive/portal-retired/` in the A10 dead-weight pass, 2026-10-26.)
 
 ## Re-verification
 
