@@ -649,6 +649,7 @@ function expandQueryVariants(q, groups) {
     const key = await deriveDataKey(envelope, password);
     const data = await decryptWithKey(envelope, key);
     sessionDataKey = key;
+    await acquirePortalToken(password);
     password = ''; // dropped from our variables; JS can't guarantee the string is wiped
     lock.hidden = true;
     if (remember) {
@@ -688,8 +689,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0ada78b');
-        await loadScriptOnce('universe.js?v=0ada78b');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=bef1b51');
+        await loadScriptOnce('universe.js?v=bef1b51');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -877,6 +878,76 @@ function expandQueryVariants(q, groups) {
   function historyLiveUrl() {
     const b = liveApiBase();
     return b ? b + '/graph-history.jsonl' : '';
+  }
+
+  // Server-side portal auth. The bearer token lives in this variable ONLY
+  // (never localStorage/sessionStorage); a reload drops it and the lock screen
+  // asks for the password again.
+  let portalToken = null;
+  function liveAuthHeaders(h) {
+    const out = Object.assign({}, h || {});
+    if (portalToken) out['Authorization'] = 'Bearer ' + portalToken;
+    return out;
+  }
+  // Any 401 from a live route: forget the token and go back to the gate.
+  function liveAuthFail() {
+    if (!portalToken && !graphData) return;
+    portalToken = null;
+    lockNow();
+  }
+  // The live-state, stream, history and portal-ask calls stay as they are; they
+  // are authenticated here, in one place. Only requests to the live API's gated
+  // routes are touched, and the auth call itself is never rewritten.
+  const LIVE_GATED_PATHS = ['/live-state', '/stream', '/graph-history.jsonl', '/api/portal-ask', '/sync-status.json', '/api/window', '/api/gate-queue'];
+  function liveGatedPath(url) {
+    const base = liveApiBase();
+    if (!base || typeof url !== 'string' || url.indexOf(base) !== 0) return '';
+    const rest = url.slice(base.length).split('?')[0];
+    return LIVE_GATED_PATHS.indexOf(rest) !== -1 ? rest : '';
+  }
+  if (typeof window.fetch === 'function') {
+    const plainFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      const url = typeof input === 'string' ? input : '';
+      if (!liveGatedPath(url)) return plainFetch(input, init);
+      const next = Object.assign({}, init || {});
+      next.headers = liveAuthHeaders(next.headers);
+      return plainFetch(input, next).then((res) => {
+        if (res && res.status === 401) liveAuthFail();
+        return res;
+      });
+    };
+  }
+  if (typeof window.EventSource === 'function') {
+    const PlainEventSource = window.EventSource;
+    window.EventSource = function (url, opts) {
+      const u = (portalToken && liveGatedPath(String(url)) === '/stream')
+        ? String(url) + (String(url).indexOf('?') === -1 ? '?' : '&') + 't=' + encodeURIComponent(portalToken) : url;
+      return new PlainEventSource(u, opts);
+    };
+    window.EventSource.prototype = PlainEventSource.prototype;
+  }
+  // Called once after a full unlock with the password just typed. Failure is
+  // silent: without a token the live routes simply stay behind the gate.
+  async function acquirePortalToken(password) {
+    const base = liveApiBase();
+    portalToken = null;
+    if (!base || typeof fetch !== 'function') return;
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 5000);
+      const res = await fetch(base + '/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: password }),
+        credentials: 'omit',
+        cache: 'no-store',
+        signal: ctl.signal,
+      });
+      clearTimeout(timer);
+      const body = res.ok ? await res.json() : null;
+      if (body && typeof body.token === 'string') portalToken = body.token;
+    } catch (e) { portalToken = null; }
   }
 
   async function fetchLiveState() {
