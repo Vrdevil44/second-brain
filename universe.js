@@ -498,6 +498,16 @@ function searchRankOf(node) {
     return (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : 0;
   }
 
+  // The focus light-up, shared by selection and by lightning strikes (U2 v2.1):
+  // link colour at factor f (1 = solid, lower = dimmed/decaying) and the halo
+  // emphasis a node earns. A strike feeds the same functions a transient factor.
+  function focusLinkColor(l, f) { return f >= 1 ? l.color : hexToRgba(l.color, f); }
+  function focusHaloBoost(id) {
+    if (S.selected === id) return 1.6;
+    const lv = strikeNodeLevel(id);
+    return lv > 0 ? 1.6 * lv : 1;
+  }
+
   function updateFocus() {
     if (!S || !S.graph) return;
     S.focusSet = computeFocusSet();
@@ -507,7 +517,7 @@ function searchRankOf(node) {
       .nodeColor((n) => nodeColor(n, focusOpacity(n.id, dim)))
       .linkColor((l) => {
         const f = !S.focusSet || (S.focusSet.has(idOf(l.source)) && S.focusSet.has(idOf(l.target))) ? 1 : dim;
-        let c = f === 1 ? l.color : hexToRgba(l.color, f);
+        let c = focusLinkColor(l, f);
         // Domain breath: links inside the most active domain oscillate ±0.03 —
         // almost imperceptible, and only when there is real recent activity.
         const bd = S.live && S.live.breathDomain;
@@ -528,13 +538,17 @@ function searchRankOf(node) {
     // echo glows); node/link colour accessors above still run.
     const nodes = S.graph.graphData().nodes;
     if (S.live && S.live.on) { paintLiveHalos(nodes); return; }
+    applyRestHalos(nodes, dim);
+  }
+
+  function applyRestHalos(nodes, dim) {
     for (const n of nodes) {
       if (!n._halo) continue;
-      // Rest state: halo off. Only the selected node and fresh nodes earn a glow.
-      const show = (S.selected === n.id) || isFresh(n.id);
+      // Rest state: halo off. Only the selected node, struck nodes and fresh nodes earn a glow.
+      const show = (S.selected === n.id) || isFresh(n.id) || strikeNodeLevel(n.id) > 0;
       if (!show) { setHaloOpacity(n._halo, 0); continue; }
       const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * focusOpacity(n.id, dim);
-      const boost = (S.selected === n.id) ? 1.6 : 1;
+      const boost = focusHaloBoost(n.id);
       const fresh = isFresh(n.id) ? 1.9 : 1;
       setHaloOpacity(n._halo, Math.min(0.5, HALO_OPACITY * a * boost * fresh));
     }
@@ -2328,6 +2342,7 @@ function searchRankOf(node) {
       } else if (!kind) {
         if (S.selected === n.id) o = Math.min(0.5, HALO_OPACITY * a * 1.6);
         else if (isFresh(n.id)) o = Math.min(0.5, HALO_OPACITY * a * 1.9);
+        else if (strikeNodeLevel(n.id) > 0) o = Math.min(0.5, HALO_OPACITY * a * focusHaloBoost(n.id));
       }
       if (n._liveKind !== kind) {
         n._liveKind = kind;
@@ -2714,64 +2729,113 @@ function searchRankOf(node) {
   // ==== S5:end ====
 
   // ==== U2-SPARKS:begin ====
-  const SPARKS_MAX_ACTIVE = 25;   // concurrent sparks (owner: 20-30 lit at once)
+  const SPARKS_MAX_ACTIVE = 45;   // concurrent sparks (owner v2: more sparks)
   const SPARKS_MIN_ACTIVE = 20;   // live-cap floor when the frame time sags
   const CORE_SHARE = 0.34;        // share of picks from the core's own spokes
+  const REACH_SHARE = 0.10;       // share of picks from relation-less facts' hub spokes
+  const FRESH_SHARE = 0.15;       // share of picks from born (fresh) edges
   const FRESH_BOOST = 6;          // born-edge weight multiplier (birth-glow)
   const SPARKS_TICK_MS = 150;     // scheduler tick
   const SPARKS_TRAIL_SEGS = 12;   // trail segments behind each head
+  const SPARKS_WAVE_TRAIL_SEGS = 16; // wave trails are the longest; buffers are sized for them
   const SPARKS_TRAIL_WORLD = 60;  // trail length in world units (capped by edge length)
   const SPARKS_SPEED = 480;       // world units per second
   const SPARKS_CORE_COLOR = '#eaf6ff';
+  const SPARKS_WAVE_FIRST_MS = 10000; // first growth wave after start
+  const SPARKS_WAVE_GAP_MS = 18000;   // gap after a wave ENDS: 18-32 s (rng)
+  const SPARKS_WAVE_GAP_SPAN_MS = 14000;
+  const SPARKS_WAVE_STEP_MS = 450;    // one plan edge per step
+  const SHIMMER_BASE = 0.08;      // relation alpha under the sparks (per-link twinkle on top)
+  const SHIMMER_DOMAIN = 0.05;    // DOMAIN scaffolding alpha
+  const SHIMMER_DIGEST_MS = 500;  // twinkle digest period (2 Hz max)
+  const STRIKE_GLOW_MS = 900;     // a lit network decays over this long (per-entry expiry)
+  const STRIKE_GAP_MS = 6000;     // weather: next event in 6-14 s
+  const STRIKE_GAP_SPAN_MS = 8000;
+  const STRIKE_BURST_P = 0.25;    // share of events that are bursts (2-3 events, 300-700 ms apart)
+  const STRIKE_MAX_SPARKS = 24;   // concurrent initiation sparks (own buffer share, outside the scheduler cap)
+  const STRIKE_SPEED_X = 2.6;     // initiation sparks run faster than ambient packets
   const SPARKS_HEX = new Map();
-  // U2 SPARKS: the permanent relation lines are hidden. Life comes from fast
-  // packets with fading trails that shoot back and forth along REAL relations
-  // only. Lines are hidden through linkVisibility (never through linkOpacity,
-  // a global scalar the sparks' own brightness would inherit); the engine's
-  // directional particles cannot ping-pong or trail, so the sparks draw on
-  // their own LineSegments trail layer. Focused / selected nodes keep their
-  // neighbourhood lines solid at normal colour and opacity 1 (focus mode).
+  // U2 SPARKS v2: fast packets with fading trails shoot back and forth along REAL
+  // relations only. The permanent lines return as a faint SHIMMER (low alpha, a
+  // per-link twinkle) under them. The engine's directional particles cannot
+  // ping-pong or trail, so sparks draw on their own LineSegments trail layer.
+  // Focused / selected nodes keep their neighbourhood lines solid (opacity 1).
+  // The time-slider filter still hides links first (linkVisibility).
 
   // SPARKS-SCHEDULER:begin
-  // Pure: no DOM, no timers, no globals. state = { active: [{s,t,type,ttl}] }.
+  // Pure: no DOM, no timers, no globals. state = { active: [{s,t,type,ttl,pool}],
+  // bag: [nodeId], bagCycle }. Lanes per top-up draw: fresh -> core -> reach -> node bag.
   function sparksStep(state, ctx) {
     const act = state.active;
+    const rng = ctx.rng;
+    const keyOf = (s, t, type) => s + '|' + t + '|' + type;
+    const taken = new Set();
     let w = 0;
     for (let i = 0; i < act.length; i++) {
       act[i].ttl -= 1;
       if (act[i].ttl > 0) act[w++] = act[i];
+      else taken.add(keyOf(act[i].s, act[i].t, act[i].type)); // one-tick cooldown: no instant re-pick
     }
     act.length = w;
-    if (act.length > ctx.cap) act.length = ctx.cap;
-    const rng = ctx.rng;
-    const keyOf = (s, t, type) => s + '|' + t + '|' + type;
-    const taken = new Set();
     for (const a of act) taken.add(keyOf(a.s, a.t, a.type));
-    const pick = (pool) => {
-      let total = 0;
-      for (const e of pool) {
-        const k = keyOf(e.source, e.target, e.type);
-        if (!taken.has(k)) total += ctx.fresh.has(k) ? ctx.freshBoost : 1;
+    const free = (e) => !taken.has(keyOf(e.source, e.target, e.type));
+    const pickFree = (pool) => {
+      const n = pool ? pool.length : 0;
+      if (!n) return null;
+      for (let i = 0; i < 8; i++) {
+        const e = pool[Math.floor(rng() * n)];
+        if (free(e)) return e;
       }
-      if (total <= 0) return null;
-      let r = rng() * total;
-      let last = null;
-      for (const e of pool) {
-        const k = keyOf(e.source, e.target, e.type);
-        if (taken.has(k)) continue;
-        last = e;
-        r -= ctx.fresh.has(k) ? ctx.freshBoost : 1;
-        if (r < 0) return e;
+      const off = Math.floor(rng() * n);
+      for (let i = 0; i < n; i++) {
+        const e = pool[(off + i) % n];
+        if (free(e)) return e;
       }
-      return last;
+      return null;
     };
+    let freshList = null;
+    const pickFresh = () => {
+      if (!ctx.fresh || !ctx.fresh.size) return null;
+      if (!freshList) {
+        freshList = [];
+        for (const pool of [ctx.main, ctx.core, ctx.reach]) {
+          for (const e of pool || []) if (ctx.fresh.has(keyOf(e.source, e.target, e.type))) freshList.push(e);
+        }
+      }
+      return pickFree(freshList);
+    };
+    const pickBag = () => {
+      let guard = state.bag.length;
+      if (!guard && ctx.byNode && ctx.byNode.size) {
+        const ids = Array.from(ctx.byNode.keys());
+        for (let i = ids.length - 1; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          const tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+        }
+        state.bag = ids;
+        guard = ids.length;
+      }
+      while (guard-- > 0 && state.bag.length) {
+        const node = state.bag.pop();
+        if (!state.bag.length) state.bagCycle++; // the cycle is complete once its last node is offered
+        const e = pickFree(ctx.byNode.get(node));
+        if (e) return e;
+      }
+      return null;
+    };
+    const lanes = { fresh: pickFresh, core: () => pickFree(ctx.core), reach: () => pickFree(ctx.reach), bag: pickBag };
     while (act.length < ctx.cap) {
-      const coreFirst = rng() < ctx.coreShare;
-      let pool = coreFirst ? 'core' : 'main';
-      let e = pick(ctx[pool]);
-      if (!e) {
-        pool = coreFirst ? 'main' : 'core';
-        e = pick(ctx[pool]);
+      const u = rng();
+      let first = 'bag';
+      if (u < ctx.freshShare) first = 'fresh';
+      else if (u < ctx.freshShare + ctx.coreShare) first = 'core';
+      else if (u < ctx.freshShare + ctx.coreShare + ctx.reachShare) first = 'reach';
+      const order = [first, 'fresh', 'core', 'reach', 'bag'];
+      let e = null;
+      let pool = first;
+      for (const lane of order) {
+        e = lanes[lane]();
+        if (e) { pool = lane; break; }
       }
       if (!e) break;
       const ttl = 8 + Math.floor(rng() * 13);
@@ -2782,36 +2846,145 @@ function searchRankOf(node) {
   }
   // SPARKS-SCHEDULER:end
 
-  // Read live at every call, never cached (reduced motion: no engine, static lines).
+  // SPARKS-WAVE:begin
+  // Pure growth-wave plan: per domain (rng-shuffled), the core->hub edge then the
+  // hub->newest edge; newest rotates among the domain's top-3 by date via ctx.rotate.
+  function wavePlan(ctx) {
+    const order = Array.from(ctx.coreEdges || []);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(ctx.rng() * (i + 1));
+      const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+    }
+    const byHub = new Map();
+    for (const e of ctx.hubEdges || []) {
+      if (!byHub.has(e.source)) byHub.set(e.source, []);
+      byHub.get(e.source).push(e);
+    }
+    const dateOf = (e) => String((ctx.nodeDate && ctx.nodeDate.get(e.target)) || '');
+    const plan = [];
+    const seen = new Set();
+    for (const ce of order) {
+      const hub = ce.target;
+      const dom = (ctx.hubDomain && ctx.hubDomain.get(hub)) || hub;
+      const facts = byHub.get(hub);
+      if (seen.has(dom) || !facts || !facts.length) continue;
+      seen.add(dom);
+      const top = facts.slice().sort((a, b) => {
+        const da = dateOf(a), db = dateOf(b);
+        return da < db ? 1 : (da > db ? -1 : (a.target < b.target ? -1 : 1));
+      }).slice(0, 3);
+      const pick = top[(ctx.rotate | 0) % top.length];
+      plan.push({ source: ce.source, target: ce.target, type: ce.type, s: ce.source, t: ce.target });
+      plan.push({ source: pick.source, target: pick.target, type: pick.type, s: pick.source, t: pick.target });
+    }
+    return plan;
+  }
+  // SPARKS-WAVE:end
+
+  // SPARKS-STRIKE:begin
+  // Pure lightning plan: `count` distinct nodes (uniform, rng) that HAVE edges; each
+  // carries ALL its incident edges (its direct network = the glow set). Only edges
+  // present in ctx.links are returned.
+  function strikePlan(ctx) {
+    const keyOf = (e) => e.source + '|' + e.target + '|' + e.type;
+    const live = new Set();
+    for (const e of ctx.links || []) live.add(keyOf(e));
+    const pool = [];
+    if (ctx.byNodeAll) {
+      for (const [node, es] of ctx.byNodeAll) {
+        const edges = (es || []).filter((e) => live.has(keyOf(e)));
+        if (edges.length) pool.push({ node, edges });
+      }
+    }
+    const n = Math.min(Math.max(0, ctx.count | 0), pool.length);
+    for (let i = 0; i < n; i++) { // partial Fisher-Yates: the first n slots are the draw
+      const j = i + Math.floor(ctx.rng() * (pool.length - i));
+      const tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+    }
+    return pool.slice(0, n);
+  }
+  // SPARKS-STRIKE:end
+
+  // Transient light-up levels (1 -> 0 over STRIKE_GLOW_MS), quantised to quarters so
+  // the lib's colour+opacity material cache stays small. The levels feed the SAME
+  // focusLinkColor / focusHaloBoost path that selection uses.
+  function strikeLevel(map, id) {
+    const SP = S && S.sparks;
+    const until = SP && SP[map].get(id);
+    if (!until) return 0;
+    const rem = until - performance.now();
+    return rem <= 0 ? 0 : Math.max(0.25, Math.ceil((rem / STRIKE_GLOW_MS) * 4) / 4);
+  }
+  function strikeNodeLevel(id) { return strikeLevel('glowNodes', id); }
+  function strikeEdgeLevel(l) { return strikeLevel('glowEdges', idOf(l.source) + '|' + idOf(l.target) + '|' + l.type); }
+
+  // Read live at every call, never cached (reduced motion: no engine, static shimmer).
   function sparksReducedMotion() {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
 
   function sparksOn() { return !!(S && S.sparks && S.sparks.running); }
 
-  // Line visibility while sparks run: only the focused neighbourhood (solid)
-  // and edges an fxSession is drawing; everything else is hidden.
-  function sparksLineShown(l) {
-    if (!sparksOn()) return true;
-    if (fxSession.drawing.size && fxSession.drawing.has(linkKey(l))) return true;
-    const fs = S.focusSet;
-    return !!fs && fs.has(idOf(l.source)) && fs.has(idOf(l.target));
-  }
+  // Shimmer shows while sparks run, and statically under reduced motion.
+  function sparksShimmerActive() { return sparksOn() || sparksReducedMotion(); }
 
-  // Composes the S5 time-slider filter with the sparks line hiding.
+  // The S5 time-slider filter hides links first; everything it leaves visible stays
+  // visible while sparks run (the shimmer layer dims them through colour alpha).
   function composeLinkVis(vis, keys) {
     return (l) => {
-      if (vis) {
-        const s = String(idOf(l.source)), t = String(idOf(l.target));
-        if (!(vis.has(s) && vis.has(t) && (!keys || keys.has(s + '>' + t + '>' + l.type)))) return false;
-      }
-      return sparksLineShown(l);
+      if (!vis) return true;
+      const s = String(idOf(l.source)), t = String(idOf(l.target));
+      return vis.has(s) && vis.has(t) && (!keys || keys.has(s + '>' + t + '>' + l.type));
     };
   }
 
+  // Shimmer colour accessor over the focus accessor `base`. Focus / selection
+  // neighbourhood and drawing-session links keep the base (solid) colour; the rest
+  // are type-coloured at SHIMMER alpha x twinkle. Twinkle: 0.6 + 0.4 sin(t/1400 + phase),
+  // phase = hash of the edge key. Reduced motion: static at base alpha. Alpha is
+  // quantised so the lib's colour+opacity material cache stays small.
+  function sparksShimmerAccessor(base) {
+    const f = (l) => {
+      if (fxSession.drawing.size && fxSession.drawing.has(linkKey(l))) return base(l);
+      const fs = S.focusSet;
+      if (fs && fs.has(idOf(l.source)) && fs.has(idOf(l.target))) return base(l);
+      if (S.sparks && S.sparks.glowEdges.size) {
+        const lv = strikeEdgeLevel(l);
+        if (lv > 0) return focusLinkColor(l, lv); // the focus light-up, transient
+      }
+      let a = isDomainLink(l) ? SHIMMER_DOMAIN : SHIMMER_BASE;
+      if (sparksOn() && !sparksReducedMotion()) {
+        if (l.__ph === undefined) l.__ph = hash01(linkKey(l) + '|' + l.type) * 6.283185;
+        a *= 0.6 + 0.4 * Math.sin(performance.now() / 1400 + l.__ph);
+      }
+      return hexToRgba(l.color || FALLBACK_LINK, Math.round(a * 500) / 500);
+    };
+    f.__shimBase = base;
+    return f;
+  }
+
+  function sparksInstallShimmer() {
+    if (!S || !S.graph) return;
+    const cur = S.graph.linkColor();
+    const base = cur && cur.__shimBase ? cur.__shimBase : cur;
+    if (typeof base !== 'function') return;
+    S.shimBase = base;
+    S.graph.linkColor(sparksShimmerAccessor(base));
+  }
+
   function sparksRefreshVisibility() {
-    if (!sparksOn() || !S.graph) return;
+    if (!S || !S.graph || !sparksShimmerActive()) return;
     S.graph.linkVisibility(composeLinkVis(S.s5vis, S.s5keys)); // fresh closure: forces a re-digest
+    sparksInstallShimmer();
+  }
+
+  // The vendored lib re-digests EVERY link when linkColor is re-set (no per-link
+  // subset), so the twinkle re-digests the whole set at 2 Hz, never per frame.
+  function sparksShimmerTick() {
+    const SP = S && S.sparks;
+    if (!SP || !SP.running || document.hidden || !S.graph || !S.shimBase || S.s5dim) return;
+    if (sparksReducedMotion()) return;
+    S.graph.linkColor(sparksShimmerAccessor(S.shimBase));
   }
 
   function sparksHexRgb(hex) {
@@ -2824,6 +2997,14 @@ function searchRankOf(node) {
     return c;
   }
 
+  const sparksShuffle = (arr) => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  };
+
   // Pools, key set and node map come from the CURRENT rendered links; link
   // objects are never held across a refresh.
   function sparksOnData(links) {
@@ -2831,23 +3012,55 @@ function searchRankOf(node) {
     if (!S.sparks) { sparksTryStart(0); }
     const SP = S.sparks;
     if (!SP) return;
-    SP.ctx.main.length = 0;
-    SP.ctx.core.length = 0;
+    const ctx = SP.ctx;
+    const prevNodes = ctx.byNode;
+    const byNode = new Map();
+    const edges = [];
+    const plain = new Set(); // nodes with a non-DOMAIN rendered edge
+    ctx.main.length = 0;
+    ctx.core.length = 0;
+    ctx.reach.length = 0;
+    SP.hub.length = 0;
     SP.keys.clear();
     for (const l of links || []) {
       const e = { source: String(idOf(l.source)), target: String(idOf(l.target)), type: String(l.type) };
+      edges.push(e);
       SP.keys.add(e.source + '|' + e.target + '|' + e.type);
+      for (const id of [e.source, e.target]) {
+        if (!byNode.has(id)) byNode.set(id, []);
+        byNode.get(id).push(e);
+      }
       if (e.type.toUpperCase() === 'DOMAIN') {
-        if (e.source === 'core' || e.target === 'core') SP.ctx.core.push(e);
-      } else SP.ctx.main.push(e);
+        if (e.source === 'core' || e.target === 'core') ctx.core.push(e);
+        else SP.hub.push(e);
+      } else {
+        ctx.main.push(e);
+        plain.add(e.source); plain.add(e.target);
+      }
+    }
+    // REACH: hub->fact DOMAIN edges whose fact has no non-DOMAIN rendered edge.
+    for (const e of SP.hub) if (!plain.has(e.target)) ctx.reach.push(e);
+    ctx.byNode = byNode;
+    SP.edges = edges;
+    SP.byNodeAll = new Map(byNode); // the core is never struck (it would light the whole brain)
+    SP.byNodeAll.delete('core');
+    // Bag survives rebuilds: keep entries still present, shuffle NEW ids in, cycle untouched.
+    const st = SP.state;
+    st.bag = st.bag.filter((id) => byNode.has(id));
+    for (const id of sparksShuffle(Array.from(byNode.keys()).filter((id) => !prevNodes.has(id)))) {
+      st.bag.splice(Math.floor(Math.random() * (st.bag.length + 1)), 0, id);
     }
     SP.nodes.clear();
     for (const n of S.graph.graphData().nodes) SP.nodes.set(String(n.id), n);
+    SP.reachable = new Set(byNode.keys());
+    SP.unreachable = 0;
+    for (const id of SP.nodes.keys()) if (!SP.reachable.has(id)) SP.unreachable++;
+    for (const id of Array.from(SP.sparked)) if (!SP.reachable.has(id)) SP.sparked.delete(id);
   }
 
   function sparksTryStart(attempt) {
     if (!S || !S.graph || S.sparks) return;
-    if (sparksReducedMotion()) return; // reduced motion: engine never starts, lines stay as before
+    if (sparksReducedMotion()) return; // reduced motion: engine never starts, shimmer stays static
     if (S.sparksRetry) { clearTimeout(S.sparksRetry); S.sparksRetry = 0; }
     const retry = () => {
       if (attempt < 40) { const s = S; S.sparksRetry = setTimeout(() => { if (S === s) sparksTryStart(attempt + 1); }, 500); }
@@ -2863,7 +3076,8 @@ function searchRankOf(node) {
       const Geo = proto && proto.constructor;
       const Attr = glowTpl.geo.attributes.position.constructor;
       if (!Geo || !Attr) throw new Error('no buffer constructors');
-      const verts = SPARKS_MAX_ACTIVE * SPARKS_TRAIL_SEGS * 2;
+      // Sized cap x the longest (wave, 16-segment) trail x 2 vertices per segment.
+      const verts = (SPARKS_MAX_ACTIVE + STRIKE_MAX_SPARKS) * Math.max(SPARKS_TRAIL_SEGS, SPARKS_WAVE_TRAIL_SEGS) * 2;
       const geo = new Geo();
       const posA = new Attr(new Float32Array(verts * 3), 3);
       const colA = new Attr(new Float32Array(verts * 3), 3);
@@ -2898,21 +3112,30 @@ function searchRankOf(node) {
     }
     const SP = S.sparks = {
       running: true, layer, scene,
-      state: { active: [] },
-      ctx: { main: [], core: [], fresh: new Set(), rng: Math.random, cap: SPARKS_MAX_ACTIVE,
-        coreShare: CORE_SHARE, freshBoost: FRESH_BOOST },
-      keys: new Set(), nodes: new Map(),
+      state: { active: [], bag: [], bagCycle: 0 },
+      ctx: { main: [], core: [], reach: [], fresh: new Set(), byNode: new Map(), rng: Math.random,
+        cap: SPARKS_MAX_ACTIVE, coreShare: CORE_SHARE, reachShare: REACH_SHARE, freshShare: FRESH_SHARE },
+      hub: [], keys: new Set(), nodes: new Map(),
+      reachable: new Set(), unreachable: 0, sparked: new Set(), cycleSeen: 0,
+      wave: null, waveSparks: [], waveAt: SPARKS_WAVE_FIRST_MS, wavesRun: 0, rotate: 0,
+      edges: [], byNodeAll: new Map(), strikeSparks: [], glowEdges: new Map(), glowNodes: new Map(), glowAt: 0,
+      strikeAt: STRIKE_GAP_MS + Math.random() * STRIKE_GAP_SPAN_MS, burstLeft: 0, strikesRun: 0,
       liveCap: SPARKS_MAX_ACTIVE, trailSegs: SPARKS_TRAIL_SEGS,
-      clock: 0, last: 0, ema: 16, slow: 0, fast: 0, raf: 0, timer: 0, pub: 0, pubAt: 0,
+      clock: 0, last: 0, ema: 16, slow: 0, fast: 0, raf: 0, timer: 0, shimTimer: 0, pub: 0, pubAt: 0,
     };
     SP.onVis = () => { if (!document.hidden && SP.running && !SP.raf) { SP.last = 0; SP.raf = requestAnimationFrame(sparksFrame); } };
     document.addEventListener('visibilitychange', SP.onVis);
     SP.timer = setInterval(sparksTick, SPARKS_TICK_MS);
+    SP.shimTimer = setInterval(sparksShimmerTick, SHIMMER_DIGEST_MS);
     SP.raf = requestAnimationFrame(sparksFrame);
     sparksOnData(S.graph.graphData().links);
-    sparksRefreshVisibility(); // hide the lines now the layer is live
-    updateFocus();
+    updateFocus(); // installs the shimmer over the focus accessor now the layer is live
     S.graph.refresh();
+  }
+
+  function sparksPublishIdle() {
+    window.__sparks = { active: 0, cap: 0, poolMain: 0, poolCore: 0, poolReach: 0, frameMsEMA: 0,
+      nodesSparked: 0, nodesTotal: 0, coveragePct: 0, cycle: 0, wavesRun: 0, strikesRun: 0 };
   }
 
   function sparksStop(tearDown) {
@@ -2921,12 +3144,13 @@ function searchRankOf(node) {
     if (!SP) return;
     SP.running = false;
     if (SP.timer) clearInterval(SP.timer);
+    if (SP.shimTimer) clearInterval(SP.shimTimer);
     if (SP.raf) cancelAnimationFrame(SP.raf);
     document.removeEventListener('visibilitychange', SP.onVis);
     try { SP.scene.remove(SP.layer.mesh); SP.layer.geo.dispose(); SP.layer.mat.dispose(); } catch (e) { /* scene gone */ }
     S.sparks = null;
-    window.__sparks = { active: 0, cap: 0, poolMain: 0, poolCore: 0, frameMsEMA: 0 };
-    if (!tearDown && S.graph) { // give the static lines and ambient particles back
+    sparksPublishIdle();
+    if (!tearDown && S.graph) { // give the plain lines (or the static reduced-motion shimmer) back
       S.graph.linkVisibility(composeLinkVis(S.s5vis, S.s5keys));
       updateFocus();
       S.graph.refresh();
@@ -2939,6 +3163,113 @@ function searchRankOf(node) {
   }
   const EMPTY_FRESH = new Set();
 
+  // Growth-wave director. Runs on the scheduler tick; the wave's own sparks live in
+  // SP.waveSparks (outside the scheduler) and shrink its effective cap while alive.
+  function sparksWaveTick(SP) {
+    let W = SP.wave;
+    if (!W) {
+      if (SP.clock < SP.waveAt) return;
+      // No new wave while focused/selected/hovered, over frame budget (hidden/reduced motion never reach here).
+      if (S.hovered || S.selected || S.focusSet || SP.ema > 24) return;
+      const hubs = SP.ctx.core.filter((e) => e.source === 'core');
+      const hubDomain = new Map();
+      const nodeDate = new Map();
+      for (const e of hubs) {
+        const hn = SP.nodes.get(e.target);
+        if (hn && hn.domain) hubDomain.set(e.target, hn.domain);
+      }
+      for (const e of SP.hub) {
+        const fn = SP.nodes.get(e.target);
+        if (fn && fn.date) nodeDate.set(e.target, fn.date);
+      }
+      const plan = wavePlan({ coreEdges: hubs, hubEdges: SP.hub, nodeDate, hubDomain, rng: SP.ctx.rng, rotate: SP.rotate });
+      if (!plan.length) { SP.waveAt = SP.clock + SPARKS_WAVE_GAP_MS; return; }
+      W = SP.wave = { plan, i: 0, nextAt: SP.clock, done: false, aborted: false };
+    }
+    if (!W.done && SP.clock >= W.nextAt) {
+      const e = W.plan[W.i];
+      if (!SP.keys.has(e.s + '|' + e.t + '|' + e.type)) { // re-validated against the CURRENT rendered links
+        W.done = true; W.aborted = true;
+      } else {
+        SP.waveSparks.push({ s: e.s, t: e.t, type: e.type, t0: SP.clock, ph: 0, legs: 0, wave: true,
+          glow: 1.4, rgb: sparksHexRgb(SPARKS_CORE_COLOR),
+          // the hub->newest leg ends a domain's chain: its final node lights up like a strike
+          done: W.i % 2 === 1 ? () => strikeLight(SP, e.t) : null });
+        W.i++;
+        W.nextAt = SP.clock + SPARKS_WAVE_STEP_MS;
+        if (W.i >= W.plan.length) W.done = true;
+      }
+    }
+    if (W.done && !SP.waveSparks.length) {
+      if (!W.aborted) SP.wavesRun++;
+      SP.rotate++;
+      SP.wave = null;
+      SP.waveAt = SP.clock + SPARKS_WAVE_GAP_MS + SP.ctx.rng() * SPARKS_WAVE_GAP_SPAN_MS;
+    }
+  }
+
+  // ---- lightning (U2 v2.1) ---------------------------------------------------
+  // Light a node's whole direct network with the shared focus treatment; entries
+  // expire individually (STRIKE_GLOW_MS) and a refresh re-digests the colours.
+  function strikeLight(SP, node) {
+    const until = performance.now() + STRIKE_GLOW_MS;
+    for (const e of SP.ctx.byNode.get(node) || []) SP.glowEdges.set(e.source + '|' + e.target + '|' + e.type, until);
+    SP.glowNodes.set(node, until);
+    if (SP.reachable.has(node)) SP.sparked.add(node);
+    SP.glowAt = 0; // refresh on the next frame
+  }
+
+  // Initiation: a fast spark core -> hub -> node over the real DOMAIN edges. A missing
+  // leg skips the travel and just lights up.
+  function strikeStart(SP, node) {
+    const es = SP.ctx.byNode.get(node) || [];
+    const touches = (e, id) => e.source === id || e.target === id;
+    const orient = (e, from) => (e.source === from ? e : { source: e.target, target: e.source, type: e.type });
+    let legs = [];
+    if (!es.some((e) => SP.ctx.core.includes(e))) { // a hub is reached by its core spoke alone
+      const he = es.find((e) => SP.hub.includes(e));
+      const hub = he && (he.source === node ? he.target : he.source);
+      const ce = hub && SP.ctx.core.find((e) => touches(e, hub));
+      legs = he && ce ? [orient(ce, 'core'), orient(he, hub)] : [];
+    } else {
+      const ce = es.find((e) => SP.ctx.core.includes(e) && touches(e, 'core'));
+      legs = ce ? [orient(ce, 'core')] : [];
+    }
+    const fresh = legs.length && legs.every((e) => SP.keys.has(e.source + '|' + e.target + '|' + e.type));
+    if (!fresh || SP.strikeSparks.length + legs.length > STRIKE_MAX_SPARKS) { strikeLight(SP, node); return; }
+    const launch = (i) => {
+      const e = legs[i];
+      SP.strikeSparks.push({ s: e.source, t: e.target, type: e.type, t0: SP.clock, ph: 0, legs: 0, wave: true,
+        fast: STRIKE_SPEED_X, glow: 1.8, rgb: sparksHexRgb(SPARKS_CORE_COLOR),
+        key: e.source + '|' + e.target + '|' + e.type,
+        done: () => (i + 1 < legs.length ? launch(i + 1) : strikeLight(SP, node)) });
+    };
+    launch(0);
+  }
+
+  // Weather: next event in 6-14 s; ~25% are bursts (2-3 events 300-700 ms apart), then a rest.
+  function sparksStrikeTick(SP) {
+    if (SP.clock < SP.strikeAt) return;
+    if (S.hovered || S.selected || S.focusSet || SP.ema > 24) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
+    const rng = SP.ctx.rng;
+    const plan = strikePlan({ links: SP.edges, byNodeAll: SP.byNodeAll, rng, count: 2 + Math.floor(rng() * 3) });
+    if (plan.length) { SP.strikesRun++; for (const st of plan) strikeStart(SP, st.node); }
+    if (SP.burstLeft > 0) SP.burstLeft--;
+    else if (rng() < STRIKE_BURST_P) SP.burstLeft = 1 + Math.floor(rng() * 2);
+    SP.strikeAt = SP.clock + (SP.burstLeft > 0 ? 300 + rng() * 400 : STRIKE_GAP_MS + rng() * STRIKE_GAP_SPAN_MS);
+  }
+
+  // Prune expired glow entries and re-digest the colours/halos while anything is lit.
+  function sparksGlowRefresh(SP, now) {
+    if (!SP.glowEdges.size && !SP.glowNodes.size) return;
+    if (SP.glowAt && now - SP.glowAt < 140) return;
+    SP.glowAt = now;
+    for (const m of [SP.glowEdges, SP.glowNodes]) for (const [k, until] of m) if (until <= now) m.delete(k);
+    if (S.graph && S.shimBase && !S.s5dim) S.graph.linkColor(sparksShimmerAccessor(S.shimBase));
+    if (S.live && S.live.on) return; // the per-frame live painter owns the halos
+    applyRestHalos(S.graph.graphData().nodes, S.hovered ? DIM_HOVER : DIM);
+  }
+
   function sparksTick() {
     const SP = S && S.sparks;
     if (!SP || !SP.running || document.hidden) return;
@@ -2949,16 +3280,71 @@ function searchRankOf(node) {
       if (SP.keys.has(act[i].s + '|' + act[i].t + '|' + act[i].type)) act[w++] = act[i];
     }
     act.length = w;
-    SP.ctx.cap = SP.liveCap;
+    const ws = SP.waveSparks;
+    w = 0;
+    for (let i = 0; i < ws.length; i++) {
+      if (!ws[i].dead && SP.keys.has(ws[i].s + '|' + ws[i].t + '|' + ws[i].type)) ws[w++] = ws[i];
+    }
+    ws.length = w;
+    const ss = SP.strikeSparks;
+    w = 0;
+    for (let i = 0; i < ss.length; i++) {
+      if (!ss[i].dead && SP.keys.has(ss[i].key)) ss[w++] = ss[i];
+    }
+    ss.length = w;
+    sparksWaveTick(SP);
+    sparksStrikeTick(SP);
+    SP.ctx.cap = Math.max(0, SP.liveCap - ws.length);
     SP.ctx.fresh = sparksFreshSet();
     sparksStep(SP.state, SP.ctx);
+    if (SP.state.bagCycle !== SP.cycleSeen) { SP.cycleSeen = SP.state.bagCycle; SP.sparked.clear(); }
     for (const a of act) {
       if (a.t0 !== undefined) continue;
       a.t0 = SP.clock;
       a.ph = 0;
+      a.legs = 0;
       a.glow = SP.ctx.fresh.has(a.s + '|' + a.t + '|' + a.type) ? 1.6 : 1;
       a.rgb = sparksHexRgb(a.pool === 'core' ? SPARKS_CORE_COLOR : (TYPE_COLORS[a.type] || FALLBACK_LINK));
     }
+  }
+
+  // Writes one spark's trail into the buffers; returns the new float offset.
+  // Every completed traversal leg marks its ARRIVAL node as sparked (honest coverage).
+  function sparksDraw(SP, a, env, dt, segs, o) {
+    const pos = SP.layer.pos, col = SP.layer.col;
+    const A = SP.nodes.get(a.s), B = SP.nodes.get(a.t);
+    if (!A || !B || A.x === undefined || B.x === undefined) return o;
+    if (o + segs * 6 > pos.length) return o;
+    const dx = B.x - A.x, dy = (B.y || 0) - (A.y || 0), dz = (B.z || 0) - (A.z || 0);
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (len < 1e-3) return o;
+    const D = Math.min(2000, Math.max(500, (len / SPARKS_SPEED) * 1000)) / (a.fast || 1);
+    a.ph += dt / D;
+    const legs = Math.floor(a.ph);
+    while (a.legs < legs) { a.legs++; SP.sparked.add(a.legs & 1 ? a.t : a.s); if (a.wave) { a.dead = true; if (a.done) { const d = a.done; a.done = null; d(); } } }
+    if (a.dead) return o;
+    const m = a.ph % 2;
+    const f = m < 1 ? m : 2 - m;
+    const dir = m < 1 ? 1 : -1;
+    const span = Math.min(0.45, SPARKS_TRAIL_WORLD / len);
+    const gain = env * a.glow;
+    const r = a.rgb[0] * gain, g = a.rgb[1] * gain, b = a.rgb[2] * gain;
+    let p0 = f;
+    let k0 = 1;
+    for (let k = 0; k < segs; k++) {
+      let p1 = f - dir * ((k + 1) / segs) * span;
+      p1 = p1 < 0 ? 0 : (p1 > 1 ? 1 : p1);
+      const k1 = 1 - (k + 1) / segs;
+      pos[o] = A.x + dx * p0; pos[o + 1] = (A.y || 0) + dy * p0; pos[o + 2] = (A.z || 0) + dz * p0;
+      col[o] = r * k0 * k0; col[o + 1] = g * k0 * k0; col[o + 2] = b * k0 * k0;
+      o += 3;
+      pos[o] = A.x + dx * p1; pos[o + 1] = (A.y || 0) + dy * p1; pos[o + 2] = (A.z || 0) + dz * p1;
+      col[o] = r * k1 * k1; col[o + 1] = g * k1 * k1; col[o + 2] = b * k1 * k1;
+      o += 3;
+      p0 = p1;
+      k0 = k1;
+    }
+    return o;
   }
 
   function sparksFrame() {
@@ -2983,53 +3369,38 @@ function searchRankOf(node) {
       if (SP.trailSegs < SPARKS_TRAIL_SEGS) SP.trailSegs++;
       else if (SP.liveCap < SPARKS_MAX_ACTIVE) SP.liveCap++;
     }
-    const segs = SP.trailSegs;
-    const pos = SP.layer.pos, col = SP.layer.col;
     const act = SP.state.active;
     const lifeMs = SPARKS_TICK_MS;
     let o = 0;
     for (let i = 0; i < act.length; i++) {
       const a = act[i];
       if (a.t0 === undefined) continue;
-      const A = SP.nodes.get(a.s), B = SP.nodes.get(a.t);
-      if (!A || !B || A.x === undefined || B.x === undefined) continue;
-      const dx = B.x - A.x, dy = (B.y || 0) - (A.y || 0), dz = (B.z || 0) - (A.z || 0);
-      const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (len < 1e-3) continue;
       const u = (SP.clock - a.t0) / (a.life * lifeMs);
       if (u >= 1) continue;
-      const env = Math.min(1, u / 0.1, (1 - u) / 0.18);
-      const D = Math.min(2000, Math.max(500, (len / SPARKS_SPEED) * 1000));
-      a.ph += dt / D;
-      const m = a.ph % 2;
-      const f = m < 1 ? m : 2 - m;
-      const dir = m < 1 ? 1 : -1;
-      const span = Math.min(0.45, SPARKS_TRAIL_WORLD / len);
-      const gain = env * a.glow;
-      const r = a.rgb[0] * gain, g = a.rgb[1] * gain, b = a.rgb[2] * gain;
-      let p0 = f;
-      let k0 = 1;
-      for (let k = 0; k < segs; k++) {
-        let p1 = f - dir * ((k + 1) / segs) * span;
-        p1 = p1 < 0 ? 0 : (p1 > 1 ? 1 : p1);
-        const k1 = 1 - (k + 1) / segs;
-        pos[o] = A.x + dx * p0; pos[o + 1] = (A.y || 0) + dy * p0; pos[o + 2] = (A.z || 0) + dz * p0;
-        col[o] = r * k0 * k0; col[o + 1] = g * k0 * k0; col[o + 2] = b * k0 * k0;
-        o += 3;
-        pos[o] = A.x + dx * p1; pos[o + 1] = (A.y || 0) + dy * p1; pos[o + 2] = (A.z || 0) + dz * p1;
-        col[o] = r * k1 * k1; col[o + 1] = g * k1 * k1; col[o + 2] = b * k1 * k1;
-        o += 3;
-        p0 = p1;
-        k0 = k1;
-      }
+      o = sparksDraw(SP, a, Math.min(1, u / 0.1, (1 - u) / 0.18), dt, SP.trailSegs, o);
     }
+    for (const a of SP.waveSparks) {
+      o = sparksDraw(SP, a, Math.min(1, (a.ph + 0.15) / 0.1, (1 - a.ph) / 0.12), dt, SPARKS_WAVE_TRAIL_SEGS, o);
+    }
+    for (let i = 0; i < SP.strikeSparks.length; i++) { // may grow while drawing (leg 2 launches)
+      const a = SP.strikeSparks[i];
+      o = sparksDraw(SP, a, Math.min(1, (a.ph + 0.15) / 0.1), dt, SP.trailSegs, o);
+    }
+    sparksGlowRefresh(SP, now);
     SP.layer.geo.setDrawRange(0, o / 3);
     SP.layer.posA.needsUpdate = true;
     SP.layer.colA.needsUpdate = true;
     if (now - SP.pubAt > 1000) {
       SP.pubAt = now;
-      window.__sparks = { active: act.length, cap: SP.liveCap, poolMain: SP.ctx.main.length,
-        poolCore: SP.ctx.core.length, frameMsEMA: Math.round(SP.ema * 10) / 10 };
+      let sparked = 0;
+      for (const id of SP.sparked) if (SP.reachable.has(id)) sparked++;
+      const total = SP.reachable.size;
+      window.__sparks = { active: act.length + SP.waveSparks.length, cap: SP.liveCap, poolMain: SP.ctx.main.length,
+        poolCore: SP.ctx.core.length, poolReach: SP.ctx.reach.length,
+        frameMsEMA: Math.round(SP.ema * 10) / 10,
+        nodesSparked: sparked, nodesTotal: total, nodesUnreachable: SP.unreachable,
+        coveragePct: total ? Math.round((sparked / total) * 1000) / 10 : 0,
+        cycle: SP.state.bagCycle, wavesRun: SP.wavesRun, strikesRun: SP.strikesRun };
     }
     SP.raf = requestAnimationFrame(sparksFrame);
   }
