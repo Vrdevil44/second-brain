@@ -27,6 +27,18 @@
  * No build step, no dependencies. Vanilla JS only.
  */
 /**
+ * Search rank class (A4). Demotion, never removal: 0 = current, 1 = brain echo
+ * entry (label starts with "[total-echo"), 2 = superseded (or lifecycle-dimmed).
+ * Superseded outranks echo. Reads name OR label so it fits both the universe
+ * node objects (name) and raw graph nodes (label).
+ */
+function searchRankOf(node) {
+  if (!node) return 0;
+  if (node.status === 'superseded' || node.life) return 2;
+  const t = String(node.name || node.label || '');
+  return t.startsWith('[total-echo') ? 1 : 0;
+}
+/**
  * Pure query expansion for search (R3). Finds the first whitespace token of q
  * that belongs to an alias group and returns q followed by q with that token
  * swapped for each other group member, in group order. Capped at 6.
@@ -676,8 +688,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=405bdba');
-        await loadScriptOnce('universe.js?v=405bdba');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=d52629e');
+        await loadScriptOnce('universe.js?v=d52629e');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -758,6 +770,13 @@ function expandQueryVariants(q, groups) {
         }
       } catch (e) { /* noop */ }
     }
+    // A4: demote superseded / echo hits below current ones (stable by rank, then match quality).
+    const rankById = new Map();
+    if (graphData && Array.isArray(graphData.nodes)) {
+      for (const gn of graphData.nodes) rankById.set(gn.id, searchRankOf(gn));
+    }
+    const rk = (n) => rankById.get(n.id) || 0;
+    nodes.sort((a, b) => (rk(a) - rk(b)) || ((b.score || 0) - (a.score || 0)));
     return { nodes: nodes.slice(0, 20), rels: rels.slice(0, 20) };
   }
 

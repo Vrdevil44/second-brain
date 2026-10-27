@@ -7,6 +7,18 @@
  * Exposes window.BrainUniverse = { init(container, graphData, api), destroy() }.
  * Requires window.ForceGraph3D (vendor/3d-force-graph.min.js, Three.js bundled).
  */
+/**
+ * Search rank class (A4). Demotion, never removal: 0 = current, 1 = brain echo
+ * entry (label starts with "[total-echo"), 2 = superseded (or lifecycle-dimmed).
+ * Superseded outranks echo. Reads name OR label so it fits both the universe
+ * node objects (name) and raw graph nodes (label).
+ */
+function searchRankOf(node) {
+  if (!node) return 0;
+  if (node.status === 'superseded' || node.life) return 2;
+  const t = String(node.name || node.label || '');
+  return t.startsWith('[total-echo') ? 1 : 0;
+}
 (function () {
   'use strict';
 
@@ -2503,7 +2515,10 @@
         else if (text.includes(query)) score = 1;
         if (score > 0) results.push({ id: n.id, label: n.name || n.id, score });
       }
-      return results.sort((a, b) => b.score - a.score).slice(0, 20);
+      // A4: current before echo before superseded, then match quality; ties keep order.
+      const byId = new Map(S.graph.graphData().nodes.map((n) => [n.id, n]));
+      const rk = (r) => searchRankOf(byId.get(r.id));
+      return results.sort((a, b) => (rk(a) - rk(b)) || (b.score - a.score)).slice(0, 20);
     },
     searchRelations: (q) => {
       // Relation search: "contradicts" finds CONTRADICTS edges, "F-0308"
