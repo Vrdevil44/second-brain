@@ -2749,11 +2749,11 @@ function searchRankOf(node) {
   const SHIMMER_DOMAIN = 0.03;    // DOMAIN scaffolding alpha
   const SHIMMER_DIGEST_MS = 500;  // twinkle digest period (2 Hz max)
   const STRIKE_GLOW_MS = 900;     // a lit network decays over this long (per-entry expiry)
-  const STRIKE_GAP_MIN_MS = 350;  // storm: a strike event every 350-1000 ms, continuously
-  const STRIKE_GAP_MAX_MS = 1000; // (each event strikes 2-3 nodes, so a second holds 2-3+ strikes)
+  const STRIKE_GAP_MIN_MS = 150;  // storm: a strike event every 150-450 ms, continuously
+  const STRIKE_GAP_MAX_MS = 450;  // (each event strikes 2-4 nodes, so a second holds many strikes)
   const STRIKE_PEER_P = 0.5;      // share of each event's strikes that are inter-node (peer)
   const STRIKE_PEER_LEVEL = 0.7;  // peer strikes light their endpoints softer than core strikes
-  const STRIKE_MAX_SPARKS = 24;   // concurrent initiation sparks (own buffer share, outside the scheduler cap)
+  const STRIKE_MAX_SPARKS = 36;   // concurrent initiation sparks (own buffer share, outside the scheduler cap)
   const STRIKE_SPEED_X = 2.6;     // initiation sparks run faster than ambient packets
   const SPARKS_HEX = new Map();
   // U2 SPARKS v2: fast packets with fading trails shoot back and forth along REAL
@@ -3283,7 +3283,7 @@ function searchRankOf(node) {
     const rng = SP.ctx.rng;
     SP.strikeAt = SP.clock + STRIKE_GAP_MIN_MS + rng() * (STRIKE_GAP_MAX_MS - STRIKE_GAP_MIN_MS);
     if (S.hovered || S.selected || S.focusSet) { SP.strikeAt = SP.clock + 1000; return; } // their focus wins
-    const total = 2 + Math.floor(rng() * 2);
+    const total = 2 + Math.floor(rng() * 3);
     let peers = 0;
     for (let i = 0; i < total; i++) if (rng() < STRIKE_PEER_P) peers++;
     const core = strikePlan({ links: SP.edges, byNodeAll: SP.byNodeAll, rng, count: total - peers });
