@@ -61,6 +61,7 @@ function searchRankOf(node) {
     patterns: '#fb923c',
     library: '#f97316',
     skills: '#a78bfa',
+    conversations: '#f87171',
     core: '#a5f3fc',
   };
   // Relation types: categorical palette, one hue per type.
