@@ -100,6 +100,7 @@ function expandQueryVariants(q, groups) {
     person: '#ff7eb6',
     project: '#6aa7ff',
     topic: '#9be564',
+    skill: '#a78bfa',
     unknown: '#888888',
   };
   // Node types the renderer knows. Anything else renders as 'unknown'.
@@ -689,8 +690,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=17d56e9');
-        await loadScriptOnce('universe.js?v=17d56e9');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=78c40eb');
+        await loadScriptOnce('universe.js?v=78c40eb');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1034,6 +1035,7 @@ function expandQueryVariants(q, groups) {
       if (graph.byId.has(id)) continue;
       // Map domain → 2D type for coloring. Domains: people, projects, topics, places, patterns, library.
       const domainToType = { people: 'person', projects: 'project', topics: 'topic', places: 'target', patterns: 'idea', library: 'cluster' };
+      domainToType.skills = 'skill'; // Births 1: skills domain -> its own type (not 'cluster': clusters anchor the 2D layout)
       const rawType = n.type || domainToType[n.domain] || 'unknown';
       const type = NODE_TYPES.includes(rawType) ? rawType : 'unknown';
       const size = clamp(Number(n.size) || 1, 1, 1000);
@@ -3267,6 +3269,8 @@ function expandQueryVariants(q, groups) {
         person: '#ff7eb6', project: '#6aa7ff', topic: '#9be564',
       };
       const domainToType = { people: 'person', projects: 'project', topics: 'topic', places: 'target', patterns: 'idea', library: 'cluster' };
+      domainToType.skills = 'skill'; // Births 1: skills domain -> its own type (not 'cluster': clusters anchor the 2D layout)
+      TYPE_COLORS_2D.skill = TYPE_COLORS.skill;
       const tCount = new Map();
       for (const n of graphData.nodes) {
         const t = n.type || domainToType[n.domain] || 'unknown';
