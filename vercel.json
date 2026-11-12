@@ -1,0 +1,1 @@
+{"$schema":"https://openapi.vercel.sh/vercel.json","redirects":[{"destination":"https://second-brain-vibhu-dikshits-projects.vercel.app/$1","has":[{"type":"host","value":"second-brain-iota-nine.vercel.app"}],"permanent":false,"source":"/(.*)"}]}
