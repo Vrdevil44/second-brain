@@ -691,8 +691,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=5622f35');
-        await loadScriptOnce('universe.js?v=5622f35');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=96e7a51');
+        await loadScriptOnce('universe.js?v=96e7a51');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -869,6 +869,8 @@ function expandQueryVariants(q, groups) {
     if (!ok(candidate)) return current;
     if (!ok(current)) return candidate;
     if (candidate.beat !== current.beat) return candidate.beat > current.beat ? candidate : current;
+    // Same beat, new rev: meaningful state changed, accept regardless of ts.
+    if (typeof candidate.rev === 'string' && typeof current.rev === 'string' && candidate.rev !== current.rev) return candidate;
     const ct = Date.parse(candidate.ts), kt = Date.parse(current.ts);
     return (ct > kt) ? candidate : current;
   }
@@ -900,7 +902,7 @@ function expandQueryVariants(q, groups) {
   // The live-state, stream, history and portal-ask calls stay as they are; they
   // are authenticated here, in one place. Only requests to the live API's gated
   // routes are touched, and the auth call itself is never rewritten.
-  const LIVE_GATED_PATHS = ['/live-state', '/stream', '/graph-history.jsonl', '/api/portal-ask', '/sync-status.json', '/api/window', '/api/gate-queue'];
+  const LIVE_GATED_PATHS = ['/live-state', '/stream', '/graph-history.jsonl', '/api/portal-ask', '/sync-status.json', '/api/window', '/api/gate-queue', '/api/graph-delta', '/graph-delta', '/api/graph', '/graph'];
   function liveGatedPath(url) {
     const base = liveApiBase();
     if (!base || typeof url !== 'string' || url.indexOf(base) !== 0) return '';
@@ -983,13 +985,47 @@ function expandQueryVariants(q, groups) {
     } catch (e) { return null; }
   }
 
+  let liveSseEs = null;      // current EventSource instance
+  let lastPingAt = 0;        // last ping (or stream construct) time
+  let pageGraphHash = null;  // hash of the graph the page currently shows
+  let convergeInFlight = false;
+  let convergeRetry = 0;
+  const sseHealthy = () => !!(liveSseOpen && lastPingAt && Date.now() - lastPingAt <= 45000);
+  const liveModeWord = () => (sseHealthy() ? 'LIVE' : ((!graphData || !liveApiBase()) ? 'BAKED' : 'FALLBACK'));
+
+  function storeSseState(b) {
+    if (b && typeof b.beat === 'number' && (!liveSseState || fresherLiveState(liveSseState.st, b) === b)) {
+      liveSseState = { st: b, at: Date.now() };
+    }
+  }
+
+  function doorbellArrival(d) {
+    if (!d || d.kind === 'push') return;
+    const type = (d.kind === 'demand') ? 'demand' : 'knowledge';
+    const headline = (d.kind === 'demand' ? 'A demand just landed' : 'A capture just landed').slice(0, 160);
+    const arrival = { id: null, type: type, headline: headline };
+    const held = liveSseState && liveSseState.st;
+    const st = held
+      ? Object.assign({}, held, { arrivals: [arrival], demands: [], touched: held.touched || [] })
+      : { beat: 0, ts: new Date().toISOString(), arrivals: [arrival], touched: [], demands: [] };
+    let shown = false;
+    try {
+      if (window.BrainLive && typeof BrainLive.isOn === 'function' && BrainLive.isOn() && typeof BrainLive.inject === 'function') {
+        shown = BrainLive.inject(st) !== false;
+      }
+    } catch (e) { shown = false; }
+    if (!shown) toast(headline);
+  }
+
   function ensureLiveStream() {
     const base = liveApiBase();
     if (!base || liveSseOpen || typeof EventSource !== 'function') return;
     if (Date.now() < liveSseRetryAt) return;
     try {
       const es = new EventSource(base + '/stream');
+      liveSseEs = es;
       liveSseOpen = true;
+      lastPingAt = Date.now(); // grace window for a fresh connection
       es.addEventListener('beat', (ev) => {
         try {
           const b = JSON.parse(ev.data);
@@ -998,19 +1034,178 @@ function expandQueryVariants(q, groups) {
           }
         } catch (e) {}
       });
+      es.addEventListener('state', (ev) => {
+        try {
+          const b = JSON.parse(ev.data);
+          storeSseState(b);
+          if (graphData && b && typeof b.graph_hash === 'string' && b.graph_hash && b.graph_hash !== pageGraphHash) {
+            convergeGraph(pageGraphHash === null, b.graph_hash);
+          }
+        } catch (e) {}
+      });
+      es.addEventListener('ping', () => { lastPingAt = Date.now(); });
+      es.addEventListener('doorbell', (ev) => {
+        try { doorbellArrival(JSON.parse(ev.data)); } catch (e) {}
+      });
+      es.addEventListener('graph', (ev) => {
+        try {
+          const g = JSON.parse(ev.data);
+          if (!g || !g.hash || g.hash === pageGraphHash) return;
+          convergeGraph(false, g.hash);
+        } catch (e) {}
+      });
       es.onerror = () => {
         try { es.close(); } catch (e) {}
+        if (liveSseEs === es) liveSseEs = null;
         liveSseOpen = false;
         liveSseRetryAt = Date.now() + 60000; // retry at most once a minute
       };
     } catch (e) { liveSseRetryAt = Date.now() + 60000; }
   }
 
+  // Watchdog: a stream that stopped pinging is dropped and reconnected.
+  setInterval(() => {
+    try {
+      if (liveSseOpen && lastPingAt && Date.now() - lastPingAt > 45000) {
+        try { if (liveSseEs) liveSseEs.close(); } catch (e) {}
+        liveSseOpen = false;
+        liveSseEs = null;
+        liveSseRetryAt = 0;
+        renderFreshness();
+        ensureLiveStream();
+      }
+      renderFreshness();
+    } catch (e) {}
+  }, 10000);
+
+  async function fetchGraphJson(path) {
+    const base = liveApiBase();
+    if (!base || typeof fetch !== 'function') return null;
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 10000);
+      const res = await fetch(base + path, { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return null;
+      const body = await res.json();
+      return (body && typeof body === 'object') ? body : null;
+    } catch (e) { return null; }
+  }
+
+  async function rebuildGraphView() {
+    if (viewMode === '3d') await renderView();
+    else { buildGraph(graphData); graph2dBuilt = true; }
+  }
+
+  // Merge a delta into graphData in place. Returns { addedIds, updatedIds }.
+  function applyGraphDelta(d) {
+    const removedSet = new Set((d.removed_ids || []).map(String));
+    const removedEdgeKeys = new Set(d.removed_edge_keys || []);
+    const edgeKeyOf = (e) => String(e.source ?? e.from) + '|' + String(e.target ?? e.to) + '|' + String(e.type || '');
+    const endOf = (e, a, b) => String(e[a] ?? e[b]);
+    let edges = (graphData.edges || []).filter((e) => !removedEdgeKeys.has(edgeKeyOf(e))
+      && !removedSet.has(endOf(e, 'source', 'from')) && !removedSet.has(endOf(e, 'target', 'to')));
+    let nodes = (graphData.nodes || []).filter((n) => !removedSet.has(String(n.id)));
+    const updatedIds = [];
+    for (const u of (d.updated_nodes || [])) {
+      if (!u || u.id === undefined || u.id === null) continue;
+      const i = nodes.findIndex((n) => String(n.id) === String(u.id));
+      if (i !== -1) nodes[i] = u; else nodes.push(u);
+      updatedIds.push(String(u.id));
+    }
+    const have = new Set(nodes.map((n) => String(n.id)));
+    const addedIds = [];
+    for (const n of (d.added_nodes || [])) {
+      if (!n || n.id === undefined || n.id === null || have.has(String(n.id))) continue;
+      nodes.push(n);
+      have.add(String(n.id));
+      addedIds.push(String(n.id));
+    }
+    const keys = new Set(edges.map(edgeKeyOf));
+    for (const e of (d.added_edges || [])) {
+      if (!e || !have.has(endOf(e, 'source', 'from')) || !have.has(endOf(e, 'target', 'to'))) continue;
+      const k = edgeKeyOf(e);
+      if (keys.has(k)) continue;
+      keys.add(k);
+      edges.push(e);
+    }
+    graphData.nodes = nodes;
+    graphData.edges = edges;
+    return { addedIds: addedIds, updatedIds: updatedIds };
+  }
+
+  // Best real edge touching a node: prefer non-DOMAIN, then highest numeric strength, else first.
+  function strongestEdgeFor(id) {
+    let pool = (graphData && graphData.edges || []).filter((e) => String(e.source ?? e.from) === id || String(e.target ?? e.to) === id);
+    const typed = pool.filter((e) => String(e.type || '') !== 'DOMAIN');
+    if (typed.length) pool = typed;
+    if (!pool.length) return null;
+    let best = pool[0];
+    let bestStr = typeof best.strength === 'number' ? best.strength : -Infinity;
+    for (const e of pool) {
+      if (typeof e.strength === 'number' && e.strength > bestStr) { best = e; bestStr = e.strength; }
+    }
+    return { source: String(best.source ?? best.from), target: String(best.target ?? best.to), type: String(best.type || '') };
+  }
+
+  function scheduleConvergeRetry(silent, targetHash) {
+    const delays = [20000, 30000, 40000];
+    if (convergeRetry >= delays.length) { convergeRetry = 0; return; } // give up quietly
+    const wait = delays[convergeRetry++];
+    setTimeout(() => { convergeGraph(silent, targetHash); }, wait);
+  }
+
+  async function convergeGraph(silent, targetHash) {
+    if (convergeInFlight || !graphData) return;
+    convergeInFlight = true;
+    try {
+      const delta = await fetchGraphJson('/api/graph-delta?from=' + encodeURIComponent(pageGraphHash || ''));
+      if (!delta) { scheduleConvergeRetry(silent, targetHash); return; }
+      let resultingHash;
+      let addedIds = [];
+      let updatedIds = [];
+      if (delta.resync) {
+        const full = await fetchGraphJson('/api/graph');
+        if (!full || !Array.isArray(full.nodes)) { scheduleConvergeRetry(silent, targetHash); return; }
+        const priorIds = new Set(Array.isArray(graphData.nodes) ? graphData.nodes.map(n => String(n.id)) : []);
+        graphData = full;
+        addedIds = graphData.nodes.map(n => String(n.id)).filter(id => !priorIds.has(id));
+        resultingHash = delta.hash || targetHash;
+      } else {
+        const r = applyGraphDelta(delta);
+        addedIds = r.addedIds;
+        updatedIds = r.updatedIds;
+        resultingHash = delta.hash || targetHash;
+      }
+      pageGraphHash = resultingHash;
+      convergeRetry = 0;
+      await rebuildGraphView();
+      if (silent === false && window.BrainUniverse) {
+        try {
+          if (addedIds.length && typeof BrainUniverse.markFresh === 'function') BrainUniverse.markFresh(addedIds);
+          if (addedIds.length && typeof BrainUniverse.syncDone === 'function') BrainUniverse.syncDone(addedIds.length, addedIds);
+          if (updatedIds.length && typeof BrainUniverse.markFresh === 'function') BrainUniverse.markFresh(updatedIds);
+          if (addedIds.length && typeof BrainUniverse.eventPacket === 'function') {
+            const packetEdges = addedIds.slice(0, 12).map(strongestEdgeFor).filter(Boolean);
+            // the rebuilt universe's spark layer needs a moment to start
+            setTimeout(() => {
+              for (const pe of packetEdges) { try { BrainUniverse.eventPacket(pe); } catch (e) {} }
+            }, 700);
+          }
+        } catch (e) {}
+      }
+    } catch (e) {
+      scheduleConvergeRetry(silent, targetHash);
+    } finally {
+      convergeInFlight = false;
+    }
+  }
+
   async function loadLiveStateLive() {
     let st;
-    if (liveSseState && Date.now() - liveSseState.at < 45000) {
-      ensureLiveStream();
-      st = liveSseState.st;
+    ensureLiveStream();
+    if (sseHealthy() && liveSseState) {
+      st = liveSseState.st; // stream is healthy: no fetch
     } else {
       const live = await fetchLiveState();
       if (live) { ensureLiveStream(); st = live; }
@@ -2927,7 +3122,7 @@ function expandQueryVariants(q, groups) {
     if (!pill || !st || !isMobile()) return;
     pill.hidden = false;
     const label = $('#beat-pill-label');
-    if (label) label.textContent = 'beat ' + st.beat; // plain words, never F-IDs
+    if (label) label.textContent = 'beat ' + st.beat + ' · ' + liveModeWord().toLowerCase(); // plain words, never F-IDs
     const dot = $('#beat-dot');
     const hud = document.querySelector('.hud');
     if (dot && (!hud || !hud.classList.contains('expanded'))) dot.classList.add('new');
@@ -2955,23 +3150,32 @@ function expandQueryVariants(q, groups) {
     const el = $('#data-freshness');
     if (!el) return;
     const t = (freshState && freshState.ts) ? Date.parse(freshState.ts) : NaN;
-    if (!Number.isFinite(t)) { el.textContent = ''; return; }
-    el.textContent = 'data ' + fmtFreshAge(Date.now() - t);
+    el.textContent = liveModeWord() + (Number.isFinite(t) ? ' · data ' + fmtFreshAge(Date.now() - t) : '');
   }
   setInterval(renderFreshness, 30000);
+  renderFreshness();
 
   // Feed the HUD sync dial from the backend; hand it back to the built-in poll when the backend is down.
   let syncDialLiveDown = false;
   async function tickSyncDialLive() {
     if (!liveApiBase()) return;
-    const sy = await fetchSyncStatusLive();
-    if (sy) {
+    const renderSyncDialLive = (sy) => {
       try {
         if (window.BrainUniverse && typeof BrainUniverse.setSyncDial === 'function') {
           const busy = (sy.state === 'delivering' || sy.state === 'peek' || sy.state === 'busy');
           BrainUniverse.setSyncDial(sy.dial.percent, sy.words || 'sync', busy);
         }
       } catch (e) {}
+    };
+    const held = liveSseState && liveSseState.st;
+    if (sseHealthy() && held && held.sync && held.sync.dial) {
+      renderSyncDialLive(held.sync);
+      syncDialLiveDown = false;
+      return;
+    }
+    const sy = await fetchSyncStatusLive();
+    if (sy) {
+      renderSyncDialLive(sy);
       syncDialLiveDown = false;
     } else if (!syncDialLiveDown) {
       try {

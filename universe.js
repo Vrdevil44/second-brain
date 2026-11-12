@@ -1573,7 +1573,9 @@ function searchRankOf(node) {
   // Idle (no new beat): the core breathes. Never a dead screen.
   // Silent by design: no audio anywhere — the core's voice lives in the text
   // ticker only.
-  const LIVE_POLL_MS = 15000;
+  // 60s render/fallback cadence: app.js loadLiveStateLive serves SSE-held state
+  // without a network fetch while the stream is healthy.
+  const LIVE_POLL_MS = 60000;
   const LIVE_GLOW_MS = 90 * 1000;
   const LIVE_COLORS = {
     contradiction: '#ff6b4d',
@@ -1689,6 +1691,8 @@ function searchRankOf(node) {
 
   async function pollSyncDial() {
     if (!S || !S.live || !S.live.on) return;
+    // renderHUD already drew the dial from the live state; no fetch needed.
+    if (S.live.state && S.live.state.sync && S.live.state.sync.dial) return;
     try {
       const r = await fetch('sync-status.json', { cache: 'no-store' });
       if (!r.ok) return;
@@ -1726,6 +1730,8 @@ function searchRankOf(node) {
   function isOlderLiveState(applied, incoming) {
     if (!applied || typeof applied.beat !== 'number' || !incoming) return false;
     if (incoming.beat !== applied.beat) return incoming.beat < applied.beat;
+    // Same beat, new rev: meaningful state changed, so it is not older.
+    if (typeof incoming.rev === 'string' && typeof applied.rev === 'string' && incoming.rev !== applied.rev) return false;
     const it = Date.parse(incoming.ts), at = Date.parse(applied.ts);
     return it < at;
   }
@@ -1746,9 +1752,10 @@ function searchRankOf(node) {
       }
     } catch (e) { /* keep last good state */ }
     if (!S || !S.live || !S.live.on || seq !== S.live.seq) return;
-    if (st && !isOlderLiveState({ beat: S.live.appliedBeat, ts: S.live.appliedTs }, st)) {
+    if (st && !isOlderLiveState({ beat: S.live.appliedBeat, ts: S.live.appliedTs, rev: S.live.appliedRev }, st)) {
       S.live.appliedBeat = st.beat;
       S.live.appliedTs = st.ts;
+      S.live.appliedRev = st.rev;
       S.live.state = st;
       S.live.formation = st.formation || null;
       renderHUD(st);
@@ -2506,6 +2513,7 @@ function searchRankOf(node) {
     },
     getPanelRows,
     markFresh,
+    eventPacket: (edge) => fireEventPacket(edge),
     focusNode: (id) => {
       if (!S || !S.graph) return false;
       const node = S.graph.graphData().nodes.find((n) => n.id === id);
@@ -2734,9 +2742,14 @@ function searchRankOf(node) {
   }
   // ==== S5:end ====
 
+  const eventPacketLastAt = new Map(); // edge key -> Date.now() of last event packet (survives re-init)
+
   // ==== U2-SPARKS:begin ====
   const SPARKS_MAX_ACTIVE = 180;  // concurrent sparks (v4: owner asked 150-200)
   const SPARKS_MIN_ACTIVE = 20;   // live-cap floor when the frame time sags
+  const EVENT_PACKET_MAX = 12;    // calm target: max event packets alive at once
+  const EVENT_PACKET_MS = 3000;   // one-way crossing time (2-4 s band)
+  const EVENT_PACKET_COOLDOWN_MS = 60000; // per-relation quiet period
   const CORE_SHARE = 0.34;        // share of picks from the core's own spokes
   const REACH_SHARE = 0.10;       // share of picks from relation-less facts' hub spokes
   const FRESH_SHARE = 0.15;       // share of picks from born (fresh) edges
@@ -2772,6 +2785,8 @@ function searchRankOf(node) {
   // ping-pong or trail, so sparks draw on their own LineSegments trail layer.
   // Focused / selected nodes keep their neighbourhood lines solid (opacity 1).
   // The time-slider filter still hides links first (linkVisibility).
+  // Calm target (owner, 2026-11-12): ambient spawning is OFF. Packets are event-only
+  // (fireEventPacket): one-way, ~3 s, max 12 alive, 1 per relation per 60 s.
 
   // SPARKS-SCHEDULER:begin
   // Pure: no DOM, no timers, no globals. state = { active: [{s,t,type,ttl,pool}],
@@ -3291,6 +3306,31 @@ function searchRankOf(node) {
       ph: 0, legs: 0, once: true, fast: STRIKE_SPEED_X, glow: 1.8, rgb: sparksHexRgb(SPARKS_CORE_COLOR), key, done: both });
   }
 
+  // Event packet: one calm one-way crossing on a real rendered relation, exact direction.
+  function fireEventPacket(edge) {
+    const SP = S && S.sparks;
+    if (!SP || !SP.running || !edge) return false;
+    const s = String(edge.source != null ? edge.source : (edge.from != null ? edge.from : ''));
+    const t = String(edge.target != null ? edge.target : (edge.to != null ? edge.to : ''));
+    const type = String(edge.type || '');
+    if (!s || !t) return false;
+    const key = s + '|' + t + '|' + type;
+    if (!SP.keys.has(key)) return false; // real rendered relation only
+    if (SP.strikeSparks.length >= EVENT_PACKET_MAX) return false; // calm cap
+    const now = Date.now();
+    if (now - (eventPacketLastAt.get(key) || 0) < EVENT_PACKET_COOLDOWN_MS) return false;
+    eventPacketLastAt.set(key, now);
+    SP.strikeSparks.push({ s: s, t: t, type: type, t0: SP.clock, ph: 0, legs: 0, once: true,
+      durMs: EVENT_PACKET_MS, glow: 1.8, segs: SPARKS_BOLT_TRAIL_SEGS,
+      rgb: sparksHexRgb(TYPE_COLORS[type] || SPARKS_CORE_COLOR), key: key,
+      done: () => {
+        glowPut(SP, SP.glowEdges, key, BOLT_AFTERGLOW_MS, 0.5);
+        glowPut(SP, SP.glowNodes, t, BOLT_FLASH_MS, 1);
+        if (SP.reachable.has(t)) SP.sparked.add(t);
+      } });
+    return true;
+  }
+
   // The single storm director: an event every 600-1200 ms fires 2-3 bolts staggered ~120 ms,
   // a 40% roll adds one peer strike, and every 5th event aims its bolts at a hub's newest fact.
   function sparksStrikeTick(SP) {
@@ -3358,10 +3398,9 @@ function searchRankOf(node) {
       if (!ss[i].dead && SP.keys.has(ss[i].key)) ss[w++] = ss[i];
     }
     ss.length = w;
-    sparksStrikeTick(SP);
+    // Calm target (owner, 2026-11-12): no ambient spawning — packets fire on events only (fireEventPacket).
     SP.ctx.cap = SP.liveCap;
     SP.ctx.fresh = sparksFreshSet();
-    sparksStep(SP.state, SP.ctx);
     if (SP.state.bagCycle !== SP.cycleSeen) { SP.cycleSeen = SP.state.bagCycle; SP.sparked.clear(); }
     for (const a of act) {
       if (a.t0 !== undefined) continue;
@@ -3384,7 +3423,7 @@ function searchRankOf(node) {
     const dx = B.x - A.x, dy = (B.y || 0) - (A.y || 0), dz = (B.z || 0) - (A.z || 0);
     const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
     if (len < 1e-3) return o;
-    const D = Math.min(2000, Math.max(500, (len / SPARKS_SPEED) * 1000)) / (a.fast || 1);
+    const D = a.durMs ? a.durMs : Math.min(2000, Math.max(500, (len / SPARKS_SPEED) * 1000)) / (a.fast || 1);
     a.ph += dt / D;
     const legs = Math.floor(a.ph);
     while (a.legs < legs) { a.legs++; SP.sparked.add(a.legs & 1 ? a.t : a.s); if (a.once) { a.dead = true; if (a.done) { const d = a.done; a.done = null; d(); } } }
