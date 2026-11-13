@@ -698,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=29cf801');
-        await loadScriptOnce('universe.js?v=29cf801');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=cf14f31');
+        await loadScriptOnce('universe.js?v=cf14f31');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1047,7 +1047,7 @@ function expandQueryVariants(q, groups) {
         ensureLiveStream();
         fetchLiveState();
         if (window.askBar && askBar.refresh) askBar.refresh();
-        if (window.askBar && askBar.syncThread) askBar.syncThread();
+        if (window.askBar && askBar.revealThread) askBar.revealThread({ session: true });
         refreshWaitingGate();
         scheduleBrainInitiate();
         return true;
@@ -1218,7 +1218,7 @@ function expandQueryVariants(q, groups) {
       const body = res.ok ? await res.json() : null;
       if (body && typeof body.token === 'string') portalToken = body.token;
       if (body && wantDevice && typeof body.device_token === 'string') portalDeviceToken = body.device_token;
-      if (portalToken && window.askBar && askBar.syncThread) askBar.syncThread();
+      if (portalToken && window.askBar && askBar.revealThread) askBar.revealThread({ session: true });
       if (portalToken) refreshWaitingGate();
       if (portalToken) scheduleBrainInitiate();
     } catch (e) { portalToken = null; }
@@ -4507,7 +4507,33 @@ function expandQueryVariants(q, groups) {
   };
 
   askBar.openPanel = function () { $('#askbar-panel').hidden = false; };
-  askBar.closePanel = function () { $('#askbar-panel').hidden = true; if (askBar.micStop) askBar.micStop(); };
+  askBar.closePanel = function () { $('#askbar-panel').hidden = true; askBar.userClosedPanel = true; if (askBar.micStop) askBar.micStop(); };
+  askBar.sessionRevealed = false;
+  askBar.userClosedPanel = false;
+  askBar.syncPromise = null;
+  askBar.revealThread = function (opts) {
+    const fromSession = !!(opts && opts.session);
+    const openNow = () => {
+      if (askBar.userClosedPanel) return;
+      if (fromSession && askBar.sessionRevealed) return;
+      if (askBar.thread.length > 0) {
+        askBar.openPanel();
+        if (fromSession) askBar.sessionRevealed = true;
+      }
+    };
+    let p = askBar.syncPromise;
+    if (!p && typeof askBar.syncThread === 'function') {
+      try { p = askBar.syncThread(); } catch (e) { p = null; }
+      if (p && typeof p.then === 'function') {
+        askBar.syncPromise = p;
+        const clear = () => { if (askBar.syncPromise === p) askBar.syncPromise = null; };
+        p.then(clear, clear);
+      } else p = null;
+    }
+    openNow();
+    if (p && typeof p.then === 'function') p.then(openNow, () => {});
+    return p;
+  };
 
   // Panel for a refusal or failure: plain words, no answer text, no citations.
   askBar.showWords = function (words) {
@@ -4586,6 +4612,7 @@ function expandQueryVariants(q, groups) {
   // The one place the bar asks. Asleep returns early with no request at all.
   askBar.submit = async function () {
     if (askBar.busy) return;
+    askBar.userClosedPanel = false;
     if (askBar.attachments.length) { await askBar.fileDump(); return; }
     let gateState = askBar.askState(askSnapshot());
     if (gateState === 'connecting') {
@@ -5390,6 +5417,7 @@ function expandQueryVariants(q, groups) {
     $('#askbar-clear').addEventListener('click', () => { askBar.clearThread(); });
     $('#askbar-quote-clear').addEventListener('click', () => { askBar.clearQuote(); });
     askBar.restoreThread();
+    input.addEventListener('focus', () => { askBar.revealThread(); });
     $('#askbar-attach').addEventListener('click', () => { fileInput.click(); });
     fileInput.addEventListener('change', () => {
       askBar.addAttachments(fileInput.files);
@@ -6013,8 +6041,10 @@ function expandQueryVariants(q, groups) {
   oneBar.setOpen = function (open) {
     document.body.classList.toggle('onebar-collapsed', !open);
     $('#onebar-toggle').setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) $('#askbar-input').focus();
-    else oneBar.clear();
+    if (open) {
+      if (window.askBar && askBar.revealThread) { askBar.userClosedPanel = false; askBar.revealThread(); }
+      $('#askbar-input').focus();
+    } else oneBar.clear();
   };
   oneBar.clear = function () {
     const box = $('#onebar-results');
