@@ -698,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=a3d9988');
-        await loadScriptOnce('universe.js?v=a3d9988');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7565f52');
+        await loadScriptOnce('universe.js?v=7565f52');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3388,7 +3388,7 @@ function expandQueryVariants(q, groups) {
             }
           } catch { /* fall through */ }
 
-          toast('No graph node found for this update', 'err');
+          // A node absent from the baked graph is a normal state, not an error.
         });
         list.appendChild(li);
       }
