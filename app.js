@@ -698,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=aa52eec');
-        await loadScriptOnce('universe.js?v=aa52eec');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=29cf801');
+        await loadScriptOnce('universe.js?v=29cf801');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4370,6 +4370,7 @@ function expandQueryVariants(q, groups) {
   // response is rendered with textContent / text nodes. The last answer lives
   // in memory only.
   const askBar = {};
+  window.askBar = askBar;
   askBar.lastAnswer = null;
   askBar.busy = false;
   const ASK_SLOW_WORDS = 'brain is slow, try again';
@@ -4830,9 +4831,10 @@ function expandQueryVariants(q, groups) {
       let body = null;
       try { body = await res.json(); } catch (e) { return; }
       askBar.threadSynced = true;
-      const remote = (body && Array.isArray(body.records)) ? body.records.map((r) => askBar.validRecord(r)).filter(Boolean) : [];
-      const clearedAt = (body && typeof body.cleared_at === 'number') ? body.cleared_at : 0;
+      let remote = (body && Array.isArray(body.records)) ? body.records.map((r) => askBar.validRecord(r)).filter(Boolean) : [];
+      const clearedAt = Math.max((body && typeof body.cleared_at === 'number') ? body.cleared_at : 0, askBar.clearedAt || 0);
       let local = askBar.thread;
+      if (clearedAt > 0) remote = remote.filter((r) => (r.ts || 0) > clearedAt);
       if (clearedAt > 0) local = local.filter((r) => (r.ts || 0) > clearedAt);
       const merged = askBar.mergeThreadRecords(local, remote);
       const changed = merged.length !== askBar.thread.length || merged.some((r, i) => r !== askBar.thread[i]);
