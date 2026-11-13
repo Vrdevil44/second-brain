@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=d034cbd');
-        await loadScriptOnce('universe.js?v=d034cbd');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=5fc4366');
+        await loadScriptOnce('universe.js?v=5fc4366');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1018,7 +1018,7 @@ function expandQueryVariants(q, groups) {
   // The live-state, stream, history and portal-ask calls stay as they are; they
   // are authenticated here, in one place. Only requests to the live API's gated
   // routes are touched, and the auth call itself is never rewritten.
-  const LIVE_GATED_PATHS = ['/live-state', '/stream', '/graph-history.jsonl', '/api/portal-ask', '/sync-status.json', '/api/window', '/api/gate-queue', '/api/graph-delta', '/graph-delta', '/api/graph', '/graph'];
+  const LIVE_GATED_PATHS = ['/live-state', '/stream', '/graph-history.jsonl', '/api/portal-ask', '/sync-status.json', '/api/window', '/api/gate-queue', '/api/graph-delta', '/graph-delta', '/api/graph', '/graph', '/thread'];
   function liveGatedPath(url) {
     const base = liveApiBase();
     if (!base || typeof url !== 'string' || url.indexOf(base) !== 0) return '';
@@ -1067,7 +1067,25 @@ function expandQueryVariants(q, groups) {
       clearTimeout(timer);
       const body = res.ok ? await res.json() : null;
       if (body && typeof body.token === 'string') portalToken = body.token;
+      if (portalToken && window.askBar && askBar.syncThread) askBar.syncThread();
     } catch (e) { portalToken = null; }
+  }
+
+  // Wave B2: god-thread box transport. Defined outside the S4 slice on purpose:
+  // the bar slice is a self-contained unit with a one-fetch discipline, and the
+  // portal token lives in this scope. Returns the Response, or null when there
+  // is no token or no live base.
+  async function threadBox(method, body) {
+    if (!portalToken) return null;
+    const base = liveApiBase();
+    if (!base) return null;
+    const init = { credentials: 'omit', cache: 'no-store' };
+    if (method) init.method = method;
+    if (body !== undefined) {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify(body);
+    }
+    return fetch(base + '/thread', init);
   }
 
   async function fetchLiveState() {
@@ -4263,8 +4281,9 @@ function expandQueryVariants(q, groups) {
   // ---- thread: the one permanent thread. Records live in askBar.thread and are
   // mirrored to localStorage on this device/browser (key below); the newest turn
   // lives in the panel's live block until the next turn archives it.
-  // Honest scope: this is permanence on THIS device only. The cross-device home
-  // is the box backend (the data-layer split); that sync is a later increment.
+  // The thread's home is the box backend (the data-layer split): when the portal is unlocked and the
+  // box is reachable, the thread syncs there and follows him across devices. localStorage is the
+  // on-device mirror and the offline fallback; a failed sync degrades to device-local, silently.
   const GOD_THREAD_KEY = 'brain.godthread.v1';
   const GOD_THREAD_MAX = 500;
   const QUOTE_TEXT_MAX = 300;
@@ -4272,6 +4291,8 @@ function expandQueryVariants(q, groups) {
   askBar.thread = [];
   askBar.pendingTurn = null;
   askBar.quote = null;
+
+  askBar.newThreadId = function () { return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); };
 
   askBar.snippet = function (text, max) {
     const t = String(text || '').replace(/\s+/g, ' ').trim();
@@ -4283,6 +4304,7 @@ function expandQueryVariants(q, groups) {
     try {
       localStorage.setItem(GOD_THREAD_KEY, JSON.stringify(askBar.thread.slice(-GOD_THREAD_MAX)));
     } catch (e) { /* session-only from here */ }
+    askBar.schedulePush();
   };
 
   // Returns a clean record or null. Only known fields survive.
@@ -4313,6 +4335,8 @@ function expandQueryVariants(q, groups) {
       out.commitHref = r.commitHref;
       out.commitLabel = typeof r.commitLabel === 'string' ? r.commitLabel : 'View commit on GitHub';
     }
+    if (typeof r.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(r.id)) out.id = r.id;
+    if (typeof r.ts === 'number' && isFinite(r.ts) && r.ts > 0) out.ts = r.ts;
     return out;
   };
 
@@ -4323,12 +4347,88 @@ function expandQueryVariants(q, groups) {
     try { raw = JSON.parse(localStorage.getItem(GOD_THREAD_KEY) || 'null'); } catch (e) { raw = null; }
     if (!Array.isArray(raw)) return;
     const box = $('#askbar-thread');
-    raw.slice(-GOD_THREAD_MAX).forEach((r) => {
+    const stored = raw.slice(-GOD_THREAD_MAX);
+    const total = stored.length;
+    let assigned = false;
+    stored.forEach((r, index) => {
       const rec = askBar.validRecord(r);
       if (!rec) return;
+      if (!rec.id) { rec.id = askBar.legacyThreadId(rec, index); assigned = true; }
+      if (!rec.ts) { rec.ts = (Date.now() - total) + index; assigned = true; }
       askBar.thread.push(rec);
       box.appendChild(askBar.buildArchivedTurn(rec));
     });
+    if (assigned) askBar.saveThread();
+  };
+
+  // Deterministic FNV-1a 32-bit hash, so a legacy record gets the same id on every device.
+  askBar.legacyThreadId = function (rec, idx) {
+    const str = String(rec.question || '') + '\n' + String(rec.answer || '') + '\n' + idx;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return 'legacy-' + h.toString(16);
+  };
+
+  askBar.pushTimer = null;
+  askBar.schedulePush = function () {
+    if (typeof threadBox !== 'function') return;
+    if (askBar.pushTimer) clearTimeout(askBar.pushTimer);
+    askBar.pushTimer = setTimeout(() => { askBar.pushTimer = null; askBar.pushThread(); }, 1200);
+  };
+
+  askBar.pushThread = function () {
+    if (typeof threadBox !== 'function') return;
+    threadBox('PUT', { records: askBar.thread }).catch(() => { /* best-effort: retried on the next save */ });
+  };
+
+  askBar.mergeThreadRecords = function (a, b) {
+    const byId = {};
+    const order = [];
+    const take = (list) => {
+      list.forEach((rec, index) => {
+        if (!rec.id) { rec.id = askBar.legacyThreadId(rec, index); rec.ts = rec.ts || 0; }
+        const prev = byId[rec.id];
+        if (prev) {
+          const archived = !!(prev.archived || rec.archived);
+          byId[rec.id] = rec;
+          rec.archived = archived;
+        } else { byId[rec.id] = rec; order.push(rec.id); }
+      });
+    };
+    take(a);
+    take(b);
+    return order.map((id) => byId[id]).sort((x, y) => (x.ts || 0) - (y.ts || 0)).slice(-GOD_THREAD_MAX);
+  };
+
+  // Returns a promise; the async body lives in an IIFE.
+  askBar.syncThread = function () {
+    return (async () => {
+      if (typeof threadBox !== 'function') return;
+      let res = null;
+      try { res = await threadBox('GET'); } catch (e) { return; }
+      if (!res || !res.ok) return;
+      let body = null;
+      try { body = await res.json(); } catch (e) { return; }
+      const remote = (body && Array.isArray(body.records)) ? body.records.map((r) => askBar.validRecord(r)).filter(Boolean) : [];
+      const clearedAt = (body && typeof body.cleared_at === 'number') ? body.cleared_at : 0;
+      let local = askBar.thread;
+      if (clearedAt > 0) local = local.filter((r) => (r.ts || 0) > clearedAt);
+      const merged = askBar.mergeThreadRecords(local, remote);
+      const changed = merged.length !== askBar.thread.length || merged.some((r, i) => r !== askBar.thread[i]);
+      askBar.thread = merged;
+      if (changed) {
+        askBar.saveThread();
+        const box = $('#askbar-thread');
+        box.textContent = '';
+        merged.forEach((r) => { if (r.archived) box.appendChild(askBar.buildArchivedTurn(r)); });
+      }
+      const remoteIds = {};
+      remote.forEach((r) => { if (r.id) remoteIds[r.id] = true; });
+      if (merged.some((r) => r.id && !remoteIds[r.id])) askBar.pushThread();
+    })();
   };
 
   // ---- quote-reply: pick up any earlier turn and ask in its context
@@ -4383,6 +4483,8 @@ function expandQueryVariants(q, groups) {
     const pending = askBar.pendingTurn || { question: '' };
     askBar.pendingTurn = null;
     const rec = {
+      id: askBar.newThreadId(),
+      ts: Date.now(),
       kind: 'ask',
       question: pending.question,
       caption: $('#askbar-caption').textContent,
@@ -4470,10 +4572,14 @@ function expandQueryVariants(q, groups) {
   };
 
   askBar.clearThread = function () {
+    if (askBar.pushTimer) { clearTimeout(askBar.pushTimer); askBar.pushTimer = null; }
     askBar.thread = [];
     askBar.pendingTurn = null;
     $('#askbar-thread').textContent = '';
     try { localStorage.removeItem(GOD_THREAD_KEY); } catch (e) { /* storage unavailable */ }
+    if (typeof threadBox === 'function') {
+      threadBox('PUT', { records: [], clear: true }).catch(() => {});
+    }
     askBar.archiveLive();
     askBar.closePanel();
   };
