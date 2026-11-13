@@ -716,6 +716,32 @@ function searchRankOf(node) {
     updateFocus();
   }
 
+  // Reset view (DEFECT-6): camera only — no filter, isolation, selection or
+  // focus changes. Snaps to the front direction at the current distance, then
+  // eases to the same framing the settle applies. Residual race: an in-flight
+  // flyTo look-at tween can still run ~33 ms (one frame) alongside; the
+  // zoomToFit tween is created last and wins per-frame.
+  function resetView3D() {
+    if (!S || !S.graph) return;
+    let nodes = [];
+    try {
+      nodes = S.graph.graphData().nodes;
+    } catch (e) {
+      nodes = (S.data && S.data.nodes) || [];
+    }
+    if (!nodes || !nodes.length) return;
+    stopRotation();
+    try {
+      const cam = S.graph.camera();
+      const t = (S.graph.controls() && S.graph.controls().target) || { x: 0, y: 0, z: 0 };
+      let d = Math.hypot(cam.position.x - t.x, cam.position.y - t.y, cam.position.z - t.z);
+      if (!isFinite(d) || d < 1) d = 1000;
+      S.graph.cameraPosition({ x: 0, y: 0, z: d }, { x: 0, y: 0, z: 0 }, 0);
+      S.graph.zoomToFit(800, 40);
+    } catch (e) { /* camera unavailable — non-fatal */ }
+    armResume();
+  }
+
   // ---- Detail panel -----------------------------------------------------------
   function chip(text, color) {
     const c = h('span', 'u-chip', text);
@@ -1038,7 +1064,8 @@ function searchRankOf(node) {
   }
 
   // ---- Idle auto-rotate resume (design doc A10) ----
-  const ROTATE_SPEED = 0.55;
+  // Tamed for DEFECT-6 (the disc reading); semantics unchanged.
+  const ROTATE_SPEED = 0.25;
   const IDLE_RESUME_MS = 3500;
   const ROTATE_RAMP_MS = 1000;
 
@@ -1286,6 +1313,10 @@ function searchRankOf(node) {
     S.resetBtn.hidden = true;
     S.resetBtn.addEventListener('click', resetIsolation);
     controls.append(S.resetBtn);
+    S.resetViewBtn = h('button', 'u-btn u-reset-view', 'Reset view');
+    S.resetViewBtn.type = 'button';
+    S.resetViewBtn.addEventListener('click', resetView3D);
+    controls.append(S.resetViewBtn);
     // No Live button — there is no mode to enter. The single view is alive
     // (his call 2026-10-13): the ambient systems start with the scene.
 
@@ -1446,10 +1477,17 @@ function searchRankOf(node) {
         const n = nodes[i];
         if (n.id === 'core') continue; // core is pinned at center
         const g = typeof n.gravity === 'number' ? n.gravity : 0.10;
-        const targetR = 70 + (1 - g) * 320; // core surface ~70, rim ~390
+        // DEFECT-6: the gravity shell is the node's OUTER anchor, not its exact
+        // radius — a stable per-node hash spreads targets through the volume
+        // beneath the shell, so the settled cloud is a filled ball instead of
+        // a hollow shell (which projected as a flat ring/disc). Floor is the
+        // core surface (~70): no target ever sits inside the core's visual.
+        const shellR = 70 + (1 - g) * 320; // core surface ~70, rim ~390
+        const fill = 0.12 + 0.88 * hash01(n.id + ':gr');
+        const targetR = 70 + (shellR - 70) * fill;
         const x = n.x || 0, y = n.y || 0, z = n.z || 0;
         const r = Math.sqrt(x * x + y * y + z * z) || 0.001;
-        const pull = ((r - targetR) / r) * alpha * 0.35;
+        const pull = ((r - targetR) / r) * alpha * 0.5;
         n.vx = (n.vx || 0) - x * pull;
         n.vy = (n.vy || 0) - y * pull;
         n.vz = (n.vz || 0) - z * pull;

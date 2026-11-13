@@ -759,6 +759,10 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
 
   /* Mobile: hide Pause/Reheat/Fit — not necessary */
   .u-controls { display: none !important; }
+  /* D6: Reset view must exist on phones too (3D is the default everywhere);
+     the row shows when it holds the reset-view button, other buttons stay hidden. */
+  .u-controls:has(.u-reset-view) { display: flex !important; }
+  .u-controls .u-btn:not(.u-reset-view) { display: none !important; }
 
   /* Mobile: hide 2D and Sync from topbar (moved to settings) */
   #view-toggle, #sync-now { display: none !important; }
