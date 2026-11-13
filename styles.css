@@ -1716,3 +1716,10 @@ body:not(.view-3d) .onebar-toggle { bottom: 172px; right: 18px; }
 .askbar-filethis-btn { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; opacity: 0.75; font-size: 0.8em; padding: 2px 0 2px 10px; text-decoration: underline; }
 .askbar-filethis-btn:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
 .askbar-turn-quote { margin: 0 0 2px; font-size: 0.8em; opacity: 0.7; }
+
+/* Invisible scrollbars, portal-wide (owner ruling 2026-11-13): every region
+   still scrolls — wheel, touch, trackpad — the bar itself is never shown.
+   (Per-region rules above already did this piecemeal; this is the one
+   universal rule so no region can grow a visible bar back.) */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
