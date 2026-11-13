@@ -51,19 +51,36 @@ function searchRankOf(node) {
   }
 
   // ---- Palettes ---------------------------------------------------------------
-  // Domains: Okabe-Ito colorblind-safe palette (the dark blue and black are
-  // skipped; they vanish on a dark background).
-  const DOMAIN_COLORS = {
-    people: '#f472b6',
-    projects: '#60a5fa',
-    topics: '#34d399',
-    places: '#facc15',
-    patterns: '#fb923c',
-    library: '#f97316',
-    skills: '#a78bfa',
-    conversations: '#f87171',
-    core: '#a5f3fc',
-  };
+  // Node kinds: colours come from kind-slots.json (design §3.4), never from this file.
+  // The registry is loaded by the portal beside graph.json and handed to init(); null
+  // (load failure) means every kind draws as unassigned — never a guessed colour.
+  const CORE_COLOR = '#f1f4fa'; // --text-1: core is not a kind slot
+  const UNASSIGNED_COLOR = '#8d99b3'; // --text-3: kind not (yet) in the registry
+  let KIND_HEX = null; // Map kind -> hex, or null when the registry is unavailable
+  let KIND_ORDER = []; // registry kinds, in slot order
+  const normKind = (k) => String(k == null ? '' : k).trim().toLowerCase();
+  function setRegistry(reg) {
+    const slots = reg && Array.isArray(reg.slots) ? reg.slots : Array.isArray(reg) ? reg : null;
+    KIND_HEX = null; KIND_ORDER = [];
+    if (!slots) return;
+    KIND_HEX = new Map();
+    for (const s of slots) {
+      const k = s && normKind(s.kind);
+      if (k && typeof s.hex === 'string' && /^#[0-9a-f]{6}$/i.test(s.hex) && !KIND_HEX.has(k)) { KIND_HEX.set(k, s.hex); KIND_ORDER.push(k); }
+    }
+  }
+  // Shared kind rule: core -> null (no slot); domain hub -> id minus 'domain-'; else node.domain.
+  function kindOf(n) {
+    if (!n || String(n.id) === 'core') return null;
+    if (n.node === 'domain-hub') return normKind(String(n.id).replace(/^domain-/, '')) || null;
+    const d = normKind(n.domain);
+    return d && d !== 'core' ? d : null;
+  }
+  function kindColor(n) {
+    if (n && String(n.id) === 'core') return CORE_COLOR;
+    const k = kindOf(n);
+    return (k && KIND_HEX && KIND_HEX.get(k)) || UNASSIGNED_COLOR;
+  }
   // Relation types: categorical palette, one hue per type.
   const TYPE_COLORS = {
     'CONTEXT': '#9aa0b4',
@@ -79,9 +96,7 @@ function searchRankOf(node) {
     'COMPONENT': '#74b9ff',
     'DOMAIN': '#eaf6ff', // visual scaffolding: core -> hub -> facts (his call 2026-10-17)
   };
-  const DOMAINS = Object.keys(DOMAIN_COLORS);
   const TYPES = Object.keys(TYPE_COLORS);
-  const FALLBACK_NODE = '#a3a6b8';
   const FALLBACK_LINK = '#6e7187';
   const BG = '#07080d';
   const DBLCLICK_MS = 280;
@@ -197,7 +212,7 @@ function searchRankOf(node) {
 
   function haloColor(node) {
     if (isFresh(node.id)) return FRESH_COLOR;
-    return DOMAIN_COLORS[node.domain] || FALLBACK_NODE;
+    return kindColor(node);
   }
 
   // ---- Premium glow craft (his bar 2026-10-17: Apple/Jarvis, not a toy) ----
@@ -280,7 +295,7 @@ function searchRankOf(node) {
   function nodeColor(n, f) {
     // Fresh nodes (just synced) glow white-hot for 60s — unmissable.
     if (isFresh(n.id)) return FRESH_COLOR;
-    const c = DOMAIN_COLORS[n.domain] || FALLBACK_NODE;
+    const c = kindColor(n);
     // 4D: dormant/merged host nodes dim exactly like superseded facts.
     const a = (n.status === 'superseded' || n.life ? 0.35 : 1) * (f == null ? 1 : f);
     return a === 1 ? c : hexToRgba(c, a);
@@ -299,9 +314,10 @@ function searchRankOf(node) {
     // across loads. The force simulation still refines from here.
     const SEED_R = 300, SEED_J = 170;
     const centers = {};
-    DOMAINS.forEach((d, i) => {
-      const a = (i / DOMAINS.length) * Math.PI * 2;
-      const b = Math.acos(1 - (2 * (i + 0.5)) / DOMAINS.length);
+    const seedKinds = layoutKinds(data);
+    seedKinds.forEach((d, i) => {
+      const a = (i / seedKinds.length) * Math.PI * 2;
+      const b = Math.acos(1 - (2 * (i + 0.5)) / seedKinds.length);
       centers[d] = {
         x: SEED_R * Math.sin(b) * Math.cos(a),
         y: SEED_R * Math.cos(b) * 0.7,
@@ -331,7 +347,7 @@ function searchRankOf(node) {
       if (!n || n.id == null) continue;
       const id = String(n.id);
       if (byId.has(id)) continue;
-      const c = centers[n.domain] || { x: 0, y: 0, z: 0 };
+      const c = centers[kindOf(n)] || { x: 0, y: 0, z: 0 };
       // Gravity: the core's pull. High-gravity nodes start near the center so
       // the mesh visibly settles around the mind; low-gravity drifts outward.
       // Subtle and stable: initial bias only, the force sim does the rest.
@@ -344,7 +360,7 @@ function searchRankOf(node) {
         name: String(n.label == null ? id : n.label),
         val: Math.max(1, Number(n.size) || 1) * (1 + 0.6 * grav), // marginally larger when heavy; never a bubble
         gravity: grav,
-        color: DOMAIN_COLORS[n.domain] || FALLBACK_NODE,
+        color: kindColor(n),
         domain: String(n.domain || ''),
         node: String(n.node || ''), // host node page id (4D lifecycle lookup)
         status: String(n.status || ''),
@@ -406,10 +422,20 @@ function searchRankOf(node) {
     return { nodes, byId, edges, adj, coreId, coreFacts };
   }
 
+  // Kinds to lay out / list: registry kinds in slot order, then graph kinds the registry lacks (alphabetical).
+  function layoutKinds(data) {
+    const extra = new Set();
+    for (const n of Array.isArray(data && data.nodes) ? data.nodes : []) {
+      const k = kindOf(n);
+      if (k && !(KIND_HEX && KIND_HEX.has(k))) extra.add(k);
+    }
+    return [...KIND_ORDER, ...[...extra].sort()];
+  }
+
   // Which nodes/links are on screen given filters + isolation.
   function computeVisible() {
     const { nodes, edges, byId } = S.data;
-    let vNodes = nodes.filter((n) => S.domains.has(n.domain) || !DOMAIN_COLORS[n.domain]);
+    let vNodes = nodes.filter((n) => !S.hiddenKinds.has(kindOf(n)));
     let ids = new Set(vNodes.map((n) => n.id));
     let vEdges = edges.filter((e) => S.types.has(e.type) && ids.has(e.source) && ids.has(e.target));
     if (S.isolated && ids.has(S.isolated)) {
@@ -693,7 +719,7 @@ function searchRankOf(node) {
     const b = h('button', 'u-neighbor');
     b.type = 'button';
     const dot = h('i', 'u-dot');
-    dot.style.background = n ? (DOMAIN_COLORS[n.domain] || FALLBACK_NODE) : FALLBACK_NODE;
+    dot.style.background = n ? kindColor(n) : UNASSIGNED_COLOR;
     b.append(dot, h('span', 'u-neighbor-label', label));
     if (extra) b.append(h('small', 'u-neighbor-dir', extra));
     if (n && S.visible.has(id)) {
@@ -718,7 +744,7 @@ function searchRankOf(node) {
     S.panel.append(h('h2', 'u-title', node.name));
 
     const chips = h('div', 'u-chips');
-    if (node.domain) chips.append(chip(node.domain, DOMAIN_COLORS[node.domain]));
+    if (node.domain) chips.append(chip(node.domain, kindColor(node)));
     if (node.status) chips.append(chip(node.status));
     if (node.date) chips.append(chip(node.date));
     S.panel.append(chips);
@@ -879,7 +905,7 @@ function searchRankOf(node) {
       const b = h('button', 'u-suggest-item');
       b.type = 'button';
       const dot = h('i', 'u-dot');
-      dot.style.background = DOMAIN_COLORS[n.domain] || FALLBACK_NODE;
+      dot.style.background = kindColor(n);
       b.append(dot, h('span', 'u-neighbor-label', n.name), h('small', 'u-neighbor-dir', n.id));
       b.addEventListener('click', () => pickSearch(n));
       li.append(b);
@@ -902,17 +928,19 @@ function searchRankOf(node) {
     S.graph.d3ReheatSimulation();
   }
 
-  function legendRow(kind, key, color, count) {
-    const set = kind === 'domain' ? S.domains : S.types;
+  function legendRow(kind, key, color, count, label) {
+    const isKind = kind === 'domain';
+    const set = isKind ? null : S.types;
     const b = h('button', 'u-legend-row');
     b.type = 'button';
     b.setAttribute('aria-pressed', 'true');
     const sw = h('i', 'u-swatch' + (kind === 'type' ? ' u-swatch-line' : ''));
     sw.style.background = color;
-    b.append(sw, h('span', 'u-legend-name', key), h('small', 'u-legend-count', String(count)));
+    b.append(sw, h('span', 'u-legend-name', label || key), h('small', 'u-legend-count', String(count)));
     b.addEventListener('click', () => {
-      const on = !set.has(key);
-      if (on) set.add(key); else set.delete(key);
+      const on = isKind ? S.hiddenKinds.has(key) : !set.has(key);
+      if (isKind) { if (on) S.hiddenKinds.delete(key); else S.hiddenKinds.add(key); }
+      else if (on) set.add(key); else set.delete(key);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
       b.classList.toggle('u-off', !on);
       onFilterChange();
@@ -922,8 +950,9 @@ function searchRankOf(node) {
 
   function buildLegend() {
     const box = h('div', 'u-legend');
+    // Kinds: registry rows (stored hex) + one "unassigned: <name>" row per graph kind the registry lacks.
     const dCount = new Map();
-    for (const n of S.data.nodes) dCount.set(n.domain, (dCount.get(n.domain) || 0) + 1);
+    for (const n of S.data.nodes) { const k = kindOf(n); if (k && n.node !== 'domain-hub') dCount.set(k, (dCount.get(k) || 0) + 1); }
     const tCount = new Map();
     for (const e of S.data.edges) tCount.set(e.type, (tCount.get(e.type) || 0) + 1);
 
@@ -950,9 +979,11 @@ function searchRankOf(node) {
       return sec;
     }
 
-    const dRows = DOMAINS.map((d) => legendRow('domain', d, DOMAIN_COLORS[d], dCount.get(d) || 0));
+    const dRows = layoutKinds(S.data).map((d) => (KIND_HEX && KIND_HEX.has(d))
+      ? legendRow('domain', d, KIND_HEX.get(d), dCount.get(d) || 0)
+      : legendRow('domain', d, UNASSIGNED_COLOR, dCount.get(d) || 0, 'unassigned: ' + d));
     const tRows = TYPES.map((t) => legendRow('type', t, TYPE_COLORS[t], tCount.get(t) || 0));
-    box.append(collapsibleSection('Domains', dRows));
+    box.append(collapsibleSection('Kinds', dRows));
     box.append(collapsibleSection('Relations', tRows));
     return box;
   }
@@ -1182,10 +1213,11 @@ function searchRankOf(node) {
       return;
     }
     if (S) destroy();
+    setRegistry(api && api.kindRegistry);
 
     S = {
       container, api: api || {}, data: prepare(graphData),
-      domains: new Set(DOMAINS), types: new Set(TYPES),
+      hiddenKinds: new Set(), types: new Set(TYPES),
       visible: new Set(), isolated: null, selected: null,
       clickTimer: null, clickNode: null, lastBgClick: 0,
       focusDepth: 1, focusSet: null, visAdj: new Map(), panelNode: null,

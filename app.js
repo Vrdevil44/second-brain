@@ -121,13 +121,14 @@ function expandQueryVariants(q, groups) {
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json, census.json, mfa.json, live-state.json and knowledge-base.json, only GET.
+      // Same origin: only graph.json, census.json, kind-slots.json, mfa.json, live-state.json and knowledge-base.json, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
       const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
       const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
       const isKb = u.pathname.endsWith('/knowledge-base.json') || u.pathname === '/knowledge-base.json';
       const isCensus = u.pathname.endsWith('/census.json') || u.pathname === '/census.json';
-      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      const isKindSlots = u.pathname.endsWith('/kind-slots.json') || u.pathname === '/kind-slots.json';
+      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus || isKindSlots) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       // R3: aliases.json (public subset) is also readable, GET only.
       const isAliases = u.pathname.endsWith('/aliases.json') || u.pathname === '/aliases.json';
       if (m === 'GET' && isAliases) return;
@@ -692,14 +693,15 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=a006269');
-        await loadScriptOnce('universe.js?v=a006269');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0ce064d');
+        await loadScriptOnce('universe.js?v=0ce064d');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
         window.BrainUniverse.init(box, graphData, {
           onMeta: (text) => { $('#graph-meta').textContent = text; },
           loadLiveState: loadLiveStateLive, // live tailnet API first, baked fallback
+          kindRegistry: kindSlots, // null -> every kind renders unassigned
           onBeatUpdates: (st) => appendBeatUpdates(st),
         });
         $('#demo-badge').hidden = !graphData.demo;
@@ -784,6 +786,48 @@ function expandQueryVariants(q, groups) {
     return { nodes: nodes.slice(0, 20), rels: rels.slice(0, 20) };
   }
 
+  // ---- Kind registry (kind-slots.json, design §3.4) --------------------------
+  // Ships beside graph.json. The only source of graph-node colours. Any failure leaves it
+  // null and every kind renders unassigned (--text-3) — never a guessed colour.
+  const CORE_COLOR = '#f1f4fa'; // --text-1: core is not a kind slot
+  const UNASSIGNED_COLOR = '#8d99b3'; // --text-3
+  let kindSlots = null; // ordered [{kind, hex}] or null
+  let kindHex = null; // Map kind -> hex or null
+  const normKind = (k) => String(k == null ? '' : k).trim().toLowerCase();
+
+  async function loadKindRegistry() {
+    kindSlots = null; kindHex = null;
+    try {
+      const res = await guardedFetch('kind-slots.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const raw = await res.json();
+      const list = Array.isArray(raw) ? raw : raw && raw.slots;
+      if (!Array.isArray(list)) throw new Error('bad registry');
+      const slots = [];
+      const map = new Map();
+      for (const e of list) {
+        const k = e && normKind(e.kind);
+        if (k && typeof e.hex === 'string' && /^#[0-9a-f]{6}$/i.test(e.hex) && !map.has(k)) { map.set(k, e.hex); slots.push({ kind: k, hex: e.hex }); }
+      }
+      kindSlots = slots; kindHex = map;
+    } catch {
+      kindSlots = null; kindHex = null;
+    }
+  }
+
+  // Shared kind rule (same as universe.js): core -> no slot; hub -> id minus 'domain-'; else node.domain.
+  function kindOfNode(n) {
+    if (!n || String(n.id) === 'core') return null;
+    if (n.node === 'domain-hub') return normKind(String(n.id).replace(/^domain-/, '')) || null;
+    const d = normKind(n.domain);
+    return d && d !== 'core' ? d : null;
+  }
+  function kindHexOfNode(n) {
+    if (n && String(n.id) === 'core') return CORE_COLOR;
+    const k = kindOfNode(n);
+    return (k && kindHex && kindHex.get(k)) || UNASSIGNED_COLOR;
+  }
+
   // ---- Load + sanitize graph.json -------------------------------------------
   async function loadGraph() {
     const status = $('#graph-status');
@@ -805,6 +849,7 @@ function expandQueryVariants(q, groups) {
       // Decrypted payload is the graph file text; re-serialize it the way build-graph wrote it.
       if (data !== body) hashText = JSON.stringify(data, null, 2) + '\n';
       graphData = data; // decrypted graph stays in memory only
+      await loadKindRegistry(); // before first paint: both renderers colour from it
       $('#open-kb').hidden = false; // KB entry point: only after a full unlock
       await renderView();
       loadCensus(hashText); // after first paint; same failure discipline: any failure -> no census
@@ -1308,8 +1353,13 @@ function expandQueryVariants(q, groups) {
       const type = NODE_TYPES.includes(rawType) ? rawType : 'unknown';
       const size = clamp(Number(n.size) || 1, 1, 1000);
       const label = String(n.label == null ? id : n.label).slice(0, 120);
+      // Kind colour comes from the registry (kind-slots.json), not from the type taxonomy.
+      const kind = kindOfNode(n);
+      const hex = kindHexOfNode(n);
       const node = {
         id, label, type, size,
+        kind, hex, rgb: hexToRgb(hex),
+        isHub: n.node === 'domain-hub',
         r: radiusFor(type, size),
         x: 0, y: 0, vx: 0, vy: 0, fx: null, fy: null,
         degree: 0,
@@ -1482,13 +1532,15 @@ function expandQueryVariants(q, groups) {
     if (!rafId) rafId = requestAnimationFrame(frame);
   }
 
-  // Filter 2D graph by hidden node types (from mobile legend).
+  // Filter 2D graph by hidden kinds (from the legend).
   window.apply2dTypeFilter = function() {
-    if (!window._hiddenTypes) window._hiddenTypes = new Set();
+    if (!window._hiddenKinds) window._hiddenKinds = new Set();
     // The 2D renderer checks node visibility in the draw loop.
     // Store the filter and trigger a re-render.
     requestRender();
   };
+
+  const isKindHidden = (n) => !!(window._hiddenKinds && n.kind && window._hiddenKinds.has(n.kind));
 
   function frame(t) {
     rafId = 0;
@@ -1519,8 +1571,6 @@ function expandQueryVariants(q, groups) {
     const n = parseInt(hex.slice(1), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
-  const RGB = Object.fromEntries(Object.entries(TYPE_COLORS).map(([k, v]) => [k, hexToRgb(v)]));
-  RGB.unknown = hexToRgb(UNKNOWN_COLOR);
   const rgba = (rgb, a) => `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;
 
   function draw() {
@@ -1550,7 +1600,8 @@ function expandQueryVariants(q, groups) {
       const cx = (a.x + b.x) / 2 - dy * bend;
       const cy = (a.y + b.y) / 2 + dx * bend;
 
-      const ca = RGB[a.type], cb = RGB[b.type];
+      if (isKindHidden(a) || isKindHidden(b)) continue;
+      const ca = a.rgb, cb = b.rgb;
       const baseAlpha = dim ? 0.05 : inFocus ? 0.85 : 0.14 + 0.36 * e.strength;
       const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
       grad.addColorStop(0, rgba(ca, baseAlpha));
@@ -1565,9 +1616,9 @@ function expandQueryVariants(q, groups) {
 
     // Nodes: glow halo + core
     for (const n of graph.nodes) {
-      // Skip hidden types (mobile legend filter).
-      if (window._hiddenTypes && window._hiddenTypes.has(n.type)) continue;
-      const rgb = RGB[n.type];
+      // Skip hidden kinds (legend filter).
+      if (isKindHidden(n)) continue;
+      const rgb = n.rgb;
       const dim = focus && !focusSet.has(n.id);
       const isFocus = n === focus;
       const glowR = n.r * (n.type === 'cluster' ? 3.4 : 3.0) * (isFocus ? 1.25 : 1);
@@ -1611,6 +1662,7 @@ function expandQueryVariants(q, groups) {
     ctx.textBaseline = 'top';
     ctx.lineJoin = 'round';
     for (const n of graph.nodes) {
+      if (isKindHidden(n)) continue;
       const inFocus = focusSet.has(n.id);
       const show = n.type === 'cluster' || k > 1.05 || inFocus;
       if (!show) continue;
@@ -1718,6 +1770,7 @@ function expandQueryVariants(q, groups) {
     const slop = 6 / view.k;
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
+      if (isKindHidden(n)) continue;
       const dx = n.x - p.x, dy = n.y - p.y;
       const r = n.r + slop;
       if (dx * dx + dy * dy <= r * r) return n;
@@ -1885,6 +1938,14 @@ function expandQueryVariants(q, groups) {
   $('#zoom-out').addEventListener('click', () => zoomAt(view.w / 2, view.h / 2, 1 / 1.3));
   $('#zoom-fit').addEventListener('click', () => fitView(true));
 
+  // Panel dot in the node's registry colour (overrides the per-type CSS colour).
+  function kindDot(n) {
+    const d = el('i', { class: 'dot dot-' + n.type });
+    d.style.background = n.hex || UNASSIGNED_COLOR;
+    d.style.boxShadow = '0 0 10px ' + (n.hex || UNASSIGNED_COLOR);
+    return d;
+  }
+
   // ---- Node details panel -----------------------------------------------------
   function selectNode(n) {
     selected = n;
@@ -1892,10 +1953,10 @@ function expandQueryVariants(q, groups) {
     const panel = $('#node-panel');
     if (!n) { panel.hidden = true; return; }
 
-    const color = TYPE_COLORS[n.type] || UNKNOWN_COLOR;
+    const color = n.hex || UNASSIGNED_COLOR;
     const typeEl = $('#node-type');
     typeEl.textContent = '';
-    typeEl.append(el('i', { class: 'dot dot-' + n.type }), n.type);
+    typeEl.append(kindDot(n), n.type);
     $('#node-title').textContent = n.label;
     $('#node-count').textContent = nf.format(n.size);
     $('#node-degree').textContent = nf.format(n.degree);
@@ -1912,7 +1973,7 @@ function expandQueryVariants(q, groups) {
         title: 'String strength ' + Math.round(strength * 100) + '%',
         onclick: () => { selectNode(m); centerOn(m); },
       },
-        el('i', { class: 'dot dot-' + m.type }),
+        kindDot(m),
         el('span', { class: 'n-label' }, m.label, el('small', { text: m.type })),
         el('span', { class: 'strength', 'aria-label': 'strength ' + Math.round(strength * 100) + '%' }, bar),
       );
@@ -3539,43 +3600,36 @@ function expandQueryVariants(q, groups) {
       }
     }
 
-    // Fallback for 2D view: build legend from node types.
+    // Fallback for 2D view: build the legend from the kind registry (design §3.4).
     if (typeof graphData !== 'undefined' && graphData && graphData.nodes) {
-      const TYPE_COLORS_2D = {
-        cluster: '#8b7cff', idea: '#38d6c4', target: '#ffb547',
-        person: '#ff7eb6', project: '#6aa7ff', topic: '#9be564',
-      };
-      const domainToType = { people: 'person', projects: 'project', topics: 'topic', places: 'target', patterns: 'idea', library: 'cluster' };
-      domainToType.conversations = 'conversation'; // Births 2: conversations domain -> its own type (never 'cluster')
-      domainToType.skills = 'skill'; // Births 1: skills domain -> its own type (not 'cluster': clusters anchor the 2D layout)
-      TYPE_COLORS_2D.skill = TYPE_COLORS.skill;
-      TYPE_COLORS_2D.conversation = TYPE_COLORS.conversation;
-      const tCount = new Map();
+      const kCount = new Map();
       for (const n of graphData.nodes) {
-        const t = n.type || domainToType[n.domain] || 'unknown';
-        tCount.set(t, (tCount.get(t) || 0) + 1);
+        const k = kindOfNode(n);
+        if (k && n.node !== 'domain-hub') kCount.set(k, (kCount.get(k) || 0) + 1);
       }
+      const registered = kindSlots ? kindSlots.map((e) => e.kind) : [];
+      const extra = [...kCount.keys()].filter((k) => !(kindHex && kindHex.has(k))).sort();
       const box = document.createElement('div');
       box.className = 'u-legend';
       const title = document.createElement('h3');
       title.className = 'u-legend-title';
-      title.textContent = 'Types';
+      title.textContent = 'Kinds';
       box.appendChild(title);
-      // Track hidden types.
-      if (!window._hiddenTypes) window._hiddenTypes = new Set();
-      for (const [type, color] of Object.entries(TYPE_COLORS_2D)) {
-        const count = tCount.get(type) || 0;
-        if (count === 0) continue;
+      // Track hidden kinds.
+      if (!window._hiddenKinds) window._hiddenKinds = new Set();
+      for (const kind of [...registered, ...extra]) {
+        const known = !!(kindHex && kindHex.has(kind));
+        const count = kCount.get(kind) || 0;
         const btn = document.createElement('button');
-        btn.className = 'u-legend-row' + (window._hiddenTypes.has(type) ? ' u-off' : '');
+        btn.className = 'u-legend-row' + (window._hiddenKinds.has(kind) ? ' u-off' : '');
         btn.type = 'button';
-        btn.setAttribute('aria-pressed', window._hiddenTypes.has(type) ? 'false' : 'true');
+        btn.setAttribute('aria-pressed', window._hiddenKinds.has(kind) ? 'false' : 'true');
         const sw = document.createElement('i');
         sw.className = 'u-swatch';
-        sw.style.background = color;
+        sw.style.background = known ? kindHex.get(kind) : UNASSIGNED_COLOR;
         const name = document.createElement('span');
         name.className = 'u-legend-name';
-        name.textContent = type;
+        name.textContent = known ? kind : 'unassigned: ' + kind;
         const cnt = document.createElement('small');
         cnt.className = 'u-legend-count';
         cnt.textContent = count;
@@ -3583,8 +3637,8 @@ function expandQueryVariants(q, groups) {
         btn.addEventListener('click', () => {
           const isOff = btn.classList.toggle('u-off');
           btn.setAttribute('aria-pressed', isOff ? 'false' : 'true');
-          if (isOff) window._hiddenTypes.add(type);
-          else window._hiddenTypes.delete(type);
+          if (isOff) window._hiddenKinds.add(kind);
+          else window._hiddenKinds.delete(kind);
           if (typeof apply2dTypeFilter === 'function') apply2dTypeFilter();
         });
         box.appendChild(btn);

@@ -1,0 +1,37 @@
+{
+  "v": 1,
+  "slots": [
+    {
+      "kind": "people",
+      "hex": "#43d5dc"
+    },
+    {
+      "kind": "projects",
+      "hex": "#f3ad66"
+    },
+    {
+      "kind": "topics",
+      "hex": "#bdb0ff"
+    },
+    {
+      "kind": "places",
+      "hex": "#c2c564"
+    },
+    {
+      "kind": "skills",
+      "hex": "#eea0dc"
+    },
+    {
+      "kind": "patterns",
+      "hex": "#78c6ff"
+    },
+    {
+      "kind": "library",
+      "hex": "#7ad59c"
+    },
+    {
+      "kind": "systems",
+      "hex": "#8fa3b8"
+    }
+  ]
+}
