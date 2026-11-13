@@ -1658,3 +1658,11 @@ body:not(.view-3d) .onebar-toggle { bottom: 172px; right: 18px; }
 .record-card dl > div { display: flex; justify-content: space-between; gap: 16px; }
 .record-card dt { margin: 0; }
 .record-card dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* god thread: quote-reply */
+.askbar-quote { display: flex; align-items: center; gap: 8px; padding: 4px 10px; margin-bottom: 6px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border-strong); font-size: 0.85em; }
+.askbar-quote[hidden] { display: none; }
+.askbar-quote-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.askbar-quote-clear, .askbar-quote-btn { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; opacity: 0.75; }
+.askbar-quote-btn { font-size: 0.8em; padding: 2px 0; text-decoration: underline; }
+.askbar-turn-quote { margin: 0 0 2px; font-size: 0.8em; opacity: 0.7; }

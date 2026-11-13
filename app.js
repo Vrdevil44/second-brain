@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=3aaefe2');
-        await loadScriptOnce('universe.js?v=3aaefe2');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=e89c12f');
+        await loadScriptOnce('universe.js?v=e89c12f');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4188,7 +4188,8 @@ function expandQueryVariants(q, groups) {
     if (!question) { askBar.showWords(ASK_REFUSAL_WORDS.empty_question); return; }
     askBar.busy = true;
     askBar.refresh();
-    askBar.beginTurn(question);
+    const sentQuote = askBar.quote ? { question: askBar.quote.question, answer: askBar.quote.answer } : null;
+    askBar.beginTurn(question, sentQuote);
     askBar.openPanel();
     askBar.setCaption('thinking…', true);
     askBar.progressStart();
@@ -4201,7 +4202,7 @@ function expandQueryVariants(q, groups) {
       const res = await fetch(liveApiBase() + '/api/portal-ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: question }),
+        body: JSON.stringify({ question: question, quote: sentQuote }),
         credentials: 'omit',
         cache: 'no-store',
         signal: ctl.signal,
@@ -4235,6 +4236,7 @@ function expandQueryVariants(q, groups) {
       askBar.lastAnswer = body;
       askBar.renderAnswer(body, plan);
       askBar.completeTurn({ kind: 'ask', answer: body.answer, thinker: ASK_THINKER_WORDS, body: body, plan: plan });
+      askBar.clearQuote();
     } else {
       askBar.showWords(askBar.refusalWords(body));
       askBar.completeTurn({ kind: 'refusal' });
@@ -4258,16 +4260,103 @@ function expandQueryVariants(q, groups) {
     $('#askbar-mic').disabled = askBar.busy;
   };
 
-  // ---- thread: session memory only, newest turn lives in the panel's live block
+  // ---- thread: the one permanent thread. Records live in askBar.thread and are
+  // mirrored to localStorage on this device/browser (key below); the newest turn
+  // lives in the panel's live block until the next turn archives it.
+  // Honest scope: this is permanence on THIS device only. The cross-device home
+  // is the box backend (the data-layer split); that sync is a later increment.
+  const GOD_THREAD_KEY = 'brain.godthread.v1';
+  const GOD_THREAD_MAX = 500;
+  const QUOTE_TEXT_MAX = 300;
+  const QUOTE_CHIP_MAX = 120;
   askBar.thread = [];
   askBar.pendingTurn = null;
+  askBar.quote = null;
+
+  askBar.snippet = function (text, max) {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    return t.length > max ? t.slice(0, max - 1) + '…' : t;
+  };
+
+  // Storage failure (quota, privacy mode) degrades to session-only; never throws.
+  askBar.saveThread = function () {
+    try {
+      localStorage.setItem(GOD_THREAD_KEY, JSON.stringify(askBar.thread.slice(-GOD_THREAD_MAX)));
+    } catch (e) { /* session-only from here */ }
+  };
+
+  // Returns a clean record or null. Only known fields survive.
+  askBar.validRecord = function (r) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+    if (typeof r.question !== 'string' || typeof r.answer !== 'string') return null;
+    if (!r.question && !r.answer) return null;
+    const out = {
+      kind: r.kind === 'filed' || r.kind === 'refusal' ? r.kind : 'ask',
+      question: r.question,
+      caption: typeof r.caption === 'string' ? r.caption : '',
+      answer: r.answer,
+      thinker: typeof r.thinker === 'string' ? r.thinker : '',
+      warnings: Array.isArray(r.warnings) ? r.warnings.filter((w) => typeof w === 'string') : [],
+      cites: [],
+      archived: true,
+    };
+    if (Array.isArray(r.cites)) {
+      r.cites.forEach((c) => {
+        if (c && typeof c === 'object' && typeof c.fid === 'string') out.cites.push({ fid: c.fid, lit: c.lit === true, snippet: typeof c.snippet === 'string' ? c.snippet : '' });
+      });
+    }
+    const q = r.quote;
+    if (q && typeof q === 'object' && typeof q.question === 'string' && typeof q.answer === 'string') {
+      out.quote = { question: q.question.slice(0, QUOTE_TEXT_MAX), answer: q.answer.slice(0, QUOTE_TEXT_MAX) };
+    }
+    if (typeof r.commitHref === 'string' && /^https:\/\/github\.com\//.test(r.commitHref)) {
+      out.commitHref = r.commitHref;
+      out.commitLabel = typeof r.commitLabel === 'string' ? r.commitLabel : 'View commit on GitHub';
+    }
+    return out;
+  };
+
+  // Corrupt or missing storage = start empty, no throw. Every stored turn comes
+  // back archived, rendered through buildArchivedTurn.
+  askBar.restoreThread = function () {
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(GOD_THREAD_KEY) || 'null'); } catch (e) { raw = null; }
+    if (!Array.isArray(raw)) return;
+    const box = $('#askbar-thread');
+    raw.slice(-GOD_THREAD_MAX).forEach((r) => {
+      const rec = askBar.validRecord(r);
+      if (!rec) return;
+      askBar.thread.push(rec);
+      box.appendChild(askBar.buildArchivedTurn(rec));
+    });
+  };
+
+  // ---- quote-reply: pick up any earlier turn and ask in its context
+  askBar.setQuote = function (rec) {
+    askBar.quote = {
+      question: String(rec.question || '').slice(0, QUOTE_TEXT_MAX),
+      answer: String(rec.answer || '').slice(0, QUOTE_TEXT_MAX),
+    };
+    const chip = $('#askbar-quote');
+    if (chip) {
+      $('#askbar-quote-text').textContent = 'Replying to: ' + askBar.snippet(askBar.quote.question || askBar.quote.answer, QUOTE_CHIP_MAX);
+      chip.hidden = false;
+    }
+    const input = $('#askbar-input');
+    if (input) input.focus();
+  };
+  askBar.clearQuote = function () {
+    askBar.quote = null;
+    const chip = $('#askbar-quote');
+    if (chip) { chip.hidden = true; $('#askbar-quote-text').textContent = ''; }
+  };
 
   // Called by submit before anything renders: the previous completed turn moves
   // into the thread, the live block is emptied, the new question is stashed.
-  askBar.beginTurn = function (question) {
+  askBar.beginTurn = function (question, quote) {
     if (askBar.micStop) askBar.micStop();
     askBar.archiveLive();
-    askBar.pendingTurn = { question: String(question || '') };
+    askBar.pendingTurn = { question: String(question || ''), quote: quote || null };
     const q = $('#askbar-question');
     q.textContent = askBar.pendingTurn.question;
     q.hidden = !askBar.pendingTurn.question;
@@ -4278,6 +4367,7 @@ function expandQueryVariants(q, groups) {
     if (last && !last.archived) {
       last.archived = true;
       $('#askbar-thread').appendChild(askBar.buildArchivedTurn(last));
+      askBar.saveThread();
     }
     $('#askbar-question').textContent = '';
     $('#askbar-question').hidden = true;
@@ -4311,7 +4401,9 @@ function expandQueryVariants(q, groups) {
         rec.cites.push({ fid: fid, lit: !!(x.plan && x.plan.lit.indexOf(fid) !== -1), snippet: (c && c.snippet) ? String(c.snippet) : '' });
       });
     }
+    if (pending.quote) rec.quote = pending.quote;
     askBar.thread.push(rec);
+    askBar.saveThread();
     return rec;
   };
 
@@ -4327,11 +4419,22 @@ function expandQueryVariants(q, groups) {
       turn.appendChild(n);
       return n;
     };
+    const addQuoteBtn = () => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'askbar-quote-btn';
+      b.appendChild(document.createTextNode('Reply'));
+      b.setAttribute('aria-label', 'Reply to this turn');
+      b.addEventListener('click', () => { askBar.setQuote(rec); });
+      turn.appendChild(b);
+    };
+    if (rec.quote) add('p', 'askbar-turn-quote', '↳ ' + askBar.snippet(rec.quote.question || rec.quote.answer, QUOTE_CHIP_MAX));
     if (rec.question) add('p', 'askbar-turn-q', rec.question);
     if (rec.caption) add('p', 'askbar-turn-caption', rec.caption);
     if (rec.kind === 'filed') {
       const line = add('p', 'askbar-turn-answer', '');
       askBar.fillFiledLine(line, rec);
+      addQuoteBtn();
       return turn;
     }
     if (rec.answer) add('p', 'askbar-turn-answer', rec.answer);
@@ -4362,6 +4465,7 @@ function expandQueryVariants(q, groups) {
       });
       turn.appendChild(cl);
     }
+    addQuoteBtn();
     return turn;
   };
 
@@ -4369,6 +4473,7 @@ function expandQueryVariants(q, groups) {
     askBar.thread = [];
     askBar.pendingTurn = null;
     $('#askbar-thread').textContent = '';
+    try { localStorage.removeItem(GOD_THREAD_KEY); } catch (e) { /* storage unavailable */ }
     askBar.archiveLive();
     askBar.closePanel();
   };
@@ -4606,6 +4711,7 @@ function expandQueryVariants(q, groups) {
     if (commit && commit.html_url && /^https:\/\/github\.com\//.test(commit.html_url)) {
       rec.commitHref = commit.html_url;
       rec.commitLabel = commit.sha ? 'View commit ' + String(commit.sha).slice(0, 7) + ' on GitHub' : 'View commit on GitHub';
+      askBar.saveThread();
     }
     askBar.setCaption(rec.caption, false);
     const ans = $('#askbar-answer');
@@ -4699,6 +4805,8 @@ function expandQueryVariants(q, groups) {
     $('#askbar-go').addEventListener('click', () => { askBar.submit(); });
     $('#askbar-close').addEventListener('click', () => { askBar.closePanel(); input.focus(); });
     $('#askbar-clear').addEventListener('click', () => { askBar.clearThread(); });
+    $('#askbar-quote-clear').addEventListener('click', () => { askBar.clearQuote(); });
+    askBar.restoreThread();
     $('#askbar-attach').addEventListener('click', () => { fileInput.click(); });
     fileInput.addEventListener('change', () => {
       askBar.addAttachments(fileInput.files);
