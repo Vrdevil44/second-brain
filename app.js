@@ -692,8 +692,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=d21bfd1');
-        await loadScriptOnce('universe.js?v=d21bfd1');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=a006269');
+        await loadScriptOnce('universe.js?v=a006269');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1284,7 +1284,7 @@ function expandQueryVariants(q, groups) {
     }
     // Keep-the-max: an older payload (e.g. the baked snapshot) never regresses the floor.
     liveStateFloor = fresherLiveState(liveStateFloor, st);
-    return withCensusFacts(liveStateFloor || st);
+    return liveStateFloor || st;
   }
 
   function buildGraph(data) {
