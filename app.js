@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0146948');
-        await loadScriptOnce('universe.js?v=0146948');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=09ff188');
+        await loadScriptOnce('universe.js?v=09ff188');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1013,6 +1013,11 @@ function expandQueryVariants(q, groups) {
   function liveAuthFail() {
     if (!portalToken && !graphData) return;
     portalToken = null;
+    // GATE_OFF window (owner decision 2026-11-13): the baked payloads are
+    // published plain and there is no envelope to re-lock against — lockNow()
+    // would reload-loop. Drop the token only; the gate returns when the
+    // flag goes back to false and the payloads are envelopes again.
+    if (window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true) return;
     lockNow();
   }
   // The live-state, stream, history and portal-ask calls stay as they are; they
