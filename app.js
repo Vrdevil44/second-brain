@@ -698,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7565f52');
-        await loadScriptOnce('universe.js?v=7565f52');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f19d92a');
+        await loadScriptOnce('universe.js?v=f19d92a');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1494,6 +1494,12 @@ function expandQueryVariants(q, groups) {
       if (s > 1) s = s / 10; // tolerate 0..10 scales
       s = clamp(s, 0.05, 1);
       const edge = { source: a, target: b, strength: s, bend: hashSign(key) };
+      // Node rgb/hex are build-time constants (buildGraph is the only edge creator and
+      // nothing mutates them later), so these cached strings cannot go stale.
+      edge.cNorm = rgba(a.rgb, 0.14 + 0.36 * s);
+      edge.cDim = rgba(a.rgb, 0.05);
+      edge.cFocusA = rgba(a.rgb, 0.85);
+      edge.cFocusB = rgba(b.rgb, 0.85);
       graph.edges.push(edge);
       graph.adj.get(a.id).push({ node: b, strength: s });
       graph.adj.get(b.id).push({ node: a, strength: s });
@@ -1730,22 +1736,32 @@ function expandQueryVariants(q, groups) {
 
     // Strings
     ctx.lineCap = 'round';
+    const vx0 = -tx / k, vx1 = (view.w - tx) / k, vy0 = -ty / k, vy1 = (view.h - ty) / k;
+    const pad = 3 / Math.sqrt(Math.max(k, 0.3)) + 2;
     for (const e of graph.edges) {
       const a = e.source, b = e.target;
       const inFocus = focus && (a === focus || b === focus);
       const dim = focus && !inFocus;
+
+      if (isKindHidden(a) || isKindHidden(b)) continue;
       const dx = b.x - a.x, dy = b.y - a.y;
       const bend = 0.1 * e.bend;
       const cx = (a.x + b.x) / 2 - dy * bend;
       const cy = (a.y + b.y) / 2 + dx * bend;
 
-      if (isKindHidden(a) || isKindHidden(b)) continue;
-      const ca = a.rgb, cb = b.rgb;
-      const baseAlpha = dim ? 0.05 : inFocus ? 0.85 : 0.14 + 0.36 * e.strength;
-      const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-      grad.addColorStop(0, rgba(ca, baseAlpha));
-      grad.addColorStop(1, rgba(cb, baseAlpha));
-      ctx.strokeStyle = grad;
+      if (!inFocus) {
+        const minX = Math.min(a.x, b.x, cx), maxX = Math.max(a.x, b.x, cx);
+        const minY = Math.min(a.y, b.y, cy), maxY = Math.max(a.y, b.y, cy);
+        if (maxX < vx0 - pad || minX > vx1 + pad || maxY < vy0 - pad || minY > vy1 + pad) continue;
+      }
+      if (inFocus) {
+        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+        grad.addColorStop(0, e.cFocusA);
+        grad.addColorStop(1, e.cFocusB);
+        ctx.strokeStyle = grad;
+      } else {
+        ctx.strokeStyle = dim ? e.cDim : e.cNorm;
+      }
       ctx.lineWidth = (0.6 + 2.2 * e.strength) * (inFocus ? 1.4 : 1) / Math.sqrt(Math.max(k, 0.3));
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
