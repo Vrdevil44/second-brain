@@ -467,7 +467,7 @@ function expandQueryVariants(q, groups) {
     const expiresAt = createdAt + SESSION_MS;
     const fingerprint = await createFingerprint();
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const body = new TextEncoder().encode(JSON.stringify({ deviceId, createdAt, expiresAt, fingerprint }));
+    const body = new TextEncoder().encode(JSON.stringify({ deviceId, createdAt, expiresAt, fingerprint, deviceToken: portalDeviceToken || null }));
     const ct = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv, additionalData: sealAad(deviceId, createdAt, expiresAt) }, key, body);
     localStorage.setItem(DEVICE_KEY, deviceId);
@@ -520,6 +520,11 @@ function expandQueryVariants(q, groups) {
       }
       sessionExpiresAt = rec.expiresAt;
       sessionDataKey = rec.key;
+      sessionFromRemembered = true;
+      if (typeof sealed.deviceToken === 'string' && sealed.deviceToken) {
+        portalDeviceToken = sealed.deviceToken;
+        await exchangeDeviceToken();
+      }
       return { data };
     } catch {
       return fail('Couldn\'t restore the remembered session. Please unlock again.');
@@ -653,7 +658,7 @@ function expandQueryVariants(q, groups) {
     const key = await deriveDataKey(envelope, password);
     const data = await decryptWithKey(envelope, key);
     sessionDataKey = key;
-    await acquirePortalToken(password);
+    await acquirePortalToken(password, remember);
     password = ''; // dropped from our variables; JS can't guarantee the string is wiped
     lock.hidden = true;
     if (remember) {
@@ -693,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=09ff188');
-        await loadScriptOnce('universe.js?v=09ff188');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=cf1f313');
+        await loadScriptOnce('universe.js?v=cf1f313');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1004,6 +1009,37 @@ function expandQueryVariants(q, groups) {
   // (never localStorage/sessionStorage); a reload drops it and the lock screen
   // asks for the password again.
   let portalToken = null;
+  let portalDeviceToken = null; // memory only; sealed into the remembered record
+  let sessionFromRemembered = false;
+  let deviceExchange = null;    // shared in-flight exchange promise
+  function exchangeDeviceToken() {
+    if (deviceExchange) return deviceExchange;
+    const base = liveApiBase();
+    if (!portalDeviceToken || !base || typeof fetch !== 'function') return Promise.resolve(false);
+    deviceExchange = (async () => {
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 5000);
+        const res = await fetch(base + '/api/auth/device', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device_token: portalDeviceToken }),
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: ctl.signal,
+        });
+        clearTimeout(timer);
+        const body = res.ok ? await res.json() : null;
+        if (!body || typeof body.token !== 'string') return false;
+        portalToken = body.token;
+        if (window.askBar && askBar.syncThread) askBar.syncThread();
+        refreshWaitingGate();
+        scheduleBrainInitiate();
+        return true;
+      } catch (e) { return false; }
+    })().finally(() => { deviceExchange = null; });
+    return deviceExchange;
+  }
   function liveAuthHeaders(h) {
     const out = Object.assign({}, h || {});
     if (portalToken) out['Authorization'] = 'Bearer ' + portalToken;
@@ -1011,14 +1047,49 @@ function expandQueryVariants(q, groups) {
   }
   // Any 401 from a live route: forget the token and go back to the gate.
   function liveAuthFail() {
-    if (!portalToken && !graphData) return;
+    if (!portalToken && !graphData) return Promise.resolve(false);
     portalToken = null;
     // GATE_OFF window (owner decision 2026-11-13): the baked payloads are
     // published plain and there is no envelope to re-lock against — lockNow()
     // would reload-loop. Drop the token only; the gate returns when the
     // flag goes back to false and the payloads are envelopes again.
-    if (window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true) return;
-    lockNow();
+    if (window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true) return Promise.resolve(false);
+    if (!sessionFromRemembered) { lockNow(); return Promise.resolve(false); }
+    // Remembered session: never lock; try the sealed device token instead.
+    if (!portalDeviceToken) return Promise.resolve(false);
+    const held = portalDeviceToken;
+    return exchangeDeviceToken().then(async (ok) => {
+      if (ok) {
+        if (liveSseEs) {
+          try { liveSseEs.close(); } catch (e) {}
+          liveSseEs = null;
+          liveSseOpen = false;
+          liveSseRetryAt = 0;
+          ensureLiveStream();
+        }
+        return true;
+      }
+      if (portalDeviceToken === held) {
+        portalDeviceToken = null;
+        await clearSealedDeviceToken();
+      }
+      return false;
+    }).catch(() => false);
+  }
+  // Drops a dead device token from the sealed IDB record (same seal AAD).
+  async function clearSealedDeviceToken() {
+    try {
+      const rec = await idbGet();
+      if (!rec || !rec.key || !rec.seal) return;
+      const aad = sealAad(rec.deviceId, rec.createdAt, rec.expiresAt);
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.seal.iv, additionalData: aad }, rec.key, rec.seal.ct);
+      const old = JSON.parse(new TextDecoder().decode(pt));
+      const body = { deviceId: old.deviceId, createdAt: old.createdAt, expiresAt: old.expiresAt, fingerprint: old.fingerprint };
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad }, rec.key,
+        new TextEncoder().encode(JSON.stringify(body)));
+      await idbPut(Object.assign({}, rec, { seal: { iv, ct } }));
+    } catch (e) { /* swallow */ }
   }
   // The live-state, stream, history and portal-ask calls stay as they are; they
   // are authenticated here, in one place. Only requests to the live API's gated
@@ -1037,8 +1108,16 @@ function expandQueryVariants(q, groups) {
       if (!liveGatedPath(url)) return plainFetch(input, init);
       const next = Object.assign({}, init || {});
       next.headers = liveAuthHeaders(next.headers);
-      return plainFetch(input, next).then((res) => {
-        if (res && res.status === 401) liveAuthFail();
+      return plainFetch(input, next).then(async (res) => {
+        if (!res || res.status !== 401) return res;
+        const fresh = await liveAuthFail();
+        const method = String(next.method || 'GET').toUpperCase();
+        const replayable = method === 'GET' || (method === 'POST' && typeof next.body === 'string');
+        if (fresh === true && portalToken && replayable) {
+          const retry = Object.assign({}, next);
+          retry.headers = liveAuthHeaders(next.headers);
+          return plainFetch(input, retry);
+        }
         return res;
       });
     };
@@ -1054,7 +1133,7 @@ function expandQueryVariants(q, groups) {
   }
   // Called once after a full unlock with the password just typed. Failure is
   // silent: without a token the live routes simply stay behind the gate.
-  async function acquirePortalToken(password) {
+  async function acquirePortalToken(password, wantDevice) {
     const base = liveApiBase();
     portalToken = null;
     if (!base || typeof fetch !== 'function') return;
@@ -1064,7 +1143,7 @@ function expandQueryVariants(q, groups) {
       const res = await fetch(base + '/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: password }),
+        body: JSON.stringify(wantDevice ? { password: password, device: true } : { password: password }),
         credentials: 'omit',
         cache: 'no-store',
         signal: ctl.signal,
@@ -1072,6 +1151,7 @@ function expandQueryVariants(q, groups) {
       clearTimeout(timer);
       const body = res.ok ? await res.json() : null;
       if (body && typeof body.token === 'string') portalToken = body.token;
+      if (body && wantDevice && typeof body.device_token === 'string') portalDeviceToken = body.device_token;
       if (portalToken && window.askBar && askBar.syncThread) askBar.syncThread();
       if (portalToken) refreshWaitingGate();
       if (portalToken) scheduleBrainInitiate();
@@ -4765,7 +4845,7 @@ function expandQueryVariants(q, groups) {
       turn.appendChild(cl);
     }
     addQuoteBtn();
-    if (rec.kind === 'ask' && rec.quote) {
+    if (rec.kind === 'ask') {
       const fb = document.createElement('button');
       fb.type = 'button';
       fb.className = 'askbar-filethis-btn';
