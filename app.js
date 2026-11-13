@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=8c3568e');
-        await loadScriptOnce('universe.js?v=8c3568e');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ed3f1bb');
+        await loadScriptOnce('universe.js?v=ed3f1bb');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4173,10 +4173,42 @@ function expandQueryVariants(q, groups) {
     return false;
   };
 
-  askBar.setCaption = function (text, withDot) {
+  askBar.STAGE_ICONS = {
+    reading: 'M11 5a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM15.5 15.5 21 21',
+    thinking: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2.5V5M12 19v2.5M2.5 12H5M19 12h2.5M5.2 5.2 7 7M17 17l1.8 1.8M18.8 5.2 17 7M7 17l-1.8 1.8',
+    checking: 'M12 3l7 2.8V11c0 4.6-3 7.9-7 9.5-4-1.6-7-4.9-7-9.5V5.8zM9.2 11.8l2 2 3.8-3.8',
+    filing: 'M12 13V4M8.8 7.2 12 4l3.2 3.2M4.5 16.5v2.7a.8.8 0 0 0 .8.8h13.4a.8.8 0 0 0 .8-.8v-2.7',
+    working: 'M12 4a8 8 0 1 1-8 8',
+  };
+  askBar.stageKey = function (text) {
+    const t = String(text || '').toLowerCase();
+    if (t.indexOf('checking the answer') !== -1) return 'checking';
+    if (t.indexOf('thinking') !== -1) return 'thinking';
+    if (t.indexOf('looking through the notes') !== -1) return 'reading';
+    if (t.indexOf('filing') !== -1) return 'filing';
+    return 'working';
+  };
+  // The ticker names its stage explicitly (same boundaries as progressWords),
+  // so the main path never depends on matching caption copy.
+  askBar.progressStage = function (elapsedMs) {
+    const ms = Math.max(0, Number(elapsedMs) || 0);
+    if (ms >= 30000) return 'checking';
+    if (ms >= 4000) return 'thinking';
+    return 'reading';
+  };
+
+  askBar.setCaption = function (text, withDot, stageKey) {
     const cap = $('#askbar-caption');
     cap.textContent = '';
-    if (withDot) { const d = document.createElement('span'); d.className = 'askbar-dot'; d.setAttribute('aria-hidden', 'true'); cap.appendChild(d); }
+    if (withDot) {
+      const key = stageKey || askBar.stageKey(text);
+      const wrap = document.createElement('span');
+      wrap.className = 'askbar-stage-icon';
+      wrap.setAttribute('data-stage', key);
+      wrap.setAttribute('aria-hidden', 'true');
+      if (typeof svgIcon === 'function') wrap.appendChild(svgIcon(askBar.STAGE_ICONS[key] || askBar.STAGE_ICONS.working));
+      cap.appendChild(wrap);
+    }
     cap.appendChild(document.createTextNode(text));
   };
 
@@ -4683,7 +4715,10 @@ function expandQueryVariants(q, groups) {
   askBar.progressStart = function () {
     askBar.progressStop();
     const t0 = Date.now();
-    askBar.progressTimer = setInterval(() => { askBar.setCaption(askBar.progressWords(Date.now() - t0), true); }, 500);
+    askBar.progressTimer = setInterval(() => {
+      const elapsed = Date.now() - t0;
+      askBar.setCaption(askBar.progressWords(elapsed), true, askBar.progressStage(elapsed));
+    }, 500);
   };
 
   // ---- attachments: the Dump panel's validator and limits, reused as they are
