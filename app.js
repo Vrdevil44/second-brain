@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=5fc4366');
-        await loadScriptOnce('universe.js?v=5fc4366');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=743cf64');
+        await loadScriptOnce('universe.js?v=743cf64');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1068,6 +1068,7 @@ function expandQueryVariants(q, groups) {
       const body = res.ok ? await res.json() : null;
       if (body && typeof body.token === 'string') portalToken = body.token;
       if (portalToken && window.askBar && askBar.syncThread) askBar.syncThread();
+      if (portalToken) refreshWaitingGate();
     } catch (e) { portalToken = null; }
   }
 
@@ -3151,53 +3152,9 @@ function expandQueryVariants(q, groups) {
       renderWindowSwitch();
     }
   }
-  async function readGateQueue() {
-    const list = $('#gate-queue-list');
-    if (!list) return;
-    const empty = (msg) => {
-      list.textContent = '';
-      list.append(el('li', { class: 'muted' }, msg));
-    };
-    try {
-      const ctl = new AbortController();
-      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 3000);
-      const res = await liveApi('/api/gate-queue', { cache: 'no-store', signal: ctl.signal });
-      clearTimeout(timer);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const body = await res.json();
-      const items = (body && body.items) || [];
-      if (!items.length) { empty('Nothing is waiting at the gate.'); return; }
-      list.textContent = '';
-      for (const it of items.slice(0, 12)) {
-        list.append(el('li', {},
-          el('span', {}, String((it && it.title) || 'untitled').slice(0, 120)),
-          ' ',
-          el('small', { class: 'muted' }, String((it && it.status) || '').slice(0, 80))));
-      }
-    } catch (err) {
-      empty('Needs live connection to see the gate queue.');
-    }
-  }
-  async function readNeedsYou() {
-    const list = $('#needs-you-list');
-    if (!list) return;
-    list.textContent = '';
-    let st = null;
-    try { st = await loadLiveStateLive(); } catch (err) { /* fall through to honest empty */ }
-    const top = (st && st.demands_top) || [];
-    if (!top.length) {
-      list.append(el('li', { class: 'muted' }, st ? 'Nothing needs you right now.' : 'Needs live connection to see demands.'));
-      return;
-    }
-    for (const d of top.slice(0, 5)) {
-      list.append(el('li', {}, String(d).slice(0, 140)));
-    }
-  }
   function refreshBrainControls() {
     renderWindowSwitch();
     readWindowFlag(); // D5: re-read GET on every modal open, so another device's flip shows up
-    readGateQueue();
-    readNeedsYou();
   }
   $('#window-switch').addEventListener('click', flipWindow);
 
@@ -3465,12 +3422,67 @@ function expandQueryVariants(q, groups) {
   tickSyncDialLive();
   setInterval(tickSyncDialLive, 30000);
 
+  // Item Q: the waiting-for-you surface lives in the Updates tile. Demands are
+  // buttons — clicking one attaches it to the god-thread bar as quote context
+  // and he answers there. Gate items are filing work, not questions, so they
+  // are listed as plain rows alongside (never dressed up as a reply).
+  let waitingGateItems = null; // null = never loaded; an array after the first good fetch
+  let waitingDemandsSig = '';
+  function attachDemand(text) {
+    if (!window.askBar || !askBar.setQuote) return;
+    askBar.setQuote({ question: String(text || ''), answer: '' });
+    askBar.openPanel();
+  }
+  function renderWaitingYou(st) {
+    const block = $('#waiting-you');
+    const list = $('#waiting-you-list');
+    if (!block || !list) return;
+    const src = st || freshState;
+    const demands = (src && Array.isArray(src.demands_top)) ? src.demands_top.filter(Boolean).slice(0, 5) : [];
+    const open = (src && typeof src.demands_open === 'number') ? src.demands_open : demands.length;
+    list.textContent = '';
+    demands.forEach((d) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'waiting-demand';
+      b.textContent = String(d);
+      b.setAttribute('aria-label', 'Answer this in the chat bar');
+      b.addEventListener('click', () => attachDemand(String(d)));
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    (waitingGateItems || []).slice(0, 12).forEach((it) => {
+      const li = document.createElement('li');
+      li.className = 'waiting-gate muted';
+      li.textContent = String((it && it.title) || 'untitled').slice(0, 120);
+      list.appendChild(li);
+    });
+    const count = $('#waiting-you-count');
+    if (count) count.textContent = open > demands.length ? ' · ' + open + ' open' : '';
+    block.hidden = !(demands.length || (waitingGateItems && waitingGateItems.length));
+  }
+  async function refreshWaitingGate() {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 3000);
+      const res = await liveApi('/api/gate-queue', { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(timer);
+      if (!res.ok) return; // a failed fetch keeps the last good list
+      const body = await res.json();
+      waitingGateItems = (body && Array.isArray(body.items)) ? body.items : [];
+      renderWaitingYou();
+    } catch (e) { /* a failed fetch keeps the last good list */ }
+  }
+
   function appendBeatUpdates(st) {
     const list = $('#updates-list');
     if (!list || !st) return;
     updateBeatPill(st);
     freshState = st;
     renderFreshness();
+    const waitingSig = ((st.demands_top || []).join('\n')) + '|' + (st.demands_open || 0);
+    if (waitingSig !== waitingDemandsSig) { waitingDemandsSig = waitingSig; renderWaitingYou(st); }
     const demands = Array.isArray(st.demands) ? st.demands.filter(Boolean).slice(0, 5) : [];
     if (!demands.length) return; // silence holds: quiet beats add nothing
     // Drop the Loading/token placeholder once real entries exist.
@@ -3533,13 +3545,18 @@ function expandQueryVariants(q, groups) {
     btn.addEventListener('click', () => {
       const open = stack.classList.toggle('updates-open');
       btn.setAttribute('aria-expanded', String(open));
-      if (open) scrollUpdatesToBottom();
+      if (open) { scrollUpdatesToBottom(); refreshWaitingGate(); }
     });
     document.addEventListener('click', (e) => {
       if (stack.classList.contains('updates-open') && !(e.target && e.target.closest && e.target.closest('#bottom-stack'))) {
         stack.classList.remove('updates-open');
         btn.setAttribute('aria-expanded', 'false');
       }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      const log = document.getElementById('updates-log');
+      if (stack.classList.contains('updates-open') || (log && log.classList.contains('expanded'))) refreshWaitingGate();
     });
   }
 
@@ -3584,6 +3601,7 @@ function expandQueryVariants(q, groups) {
           // Fresh open lands on the newest entry.
           updatesAutoScroll = true;
           scrollUpdatesToBottom();
+          refreshWaitingGate();
         }
       });
       // Close when tapping outside (but not when tapping the beat panel/pill).

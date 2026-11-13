@@ -260,6 +260,41 @@ a:hover { color: #b0a6ff; }
 .updates-log .u-time { color: var(--text-3); font-size: 11px; }
 .updates-log .muted { color: var(--text-3); }
 
+/* Item Q: waiting-for-you block at the top of the Updates tile. */
+#waiting-you {
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.waiting-you-title {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-3);
+}
+.waiting-you-title #waiting-you-count {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.waiting-demand {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.waiting-demand:hover, .waiting-demand:focus-visible { background: var(--surface-2); border-color: var(--border-strong); outline: none; }
+.waiting-gate { color: var(--text-3); }
+
 /* Bottom-anchored stack: beat bar (HUD) + latest updates (his call 2026-10-13).
    The beat bar sits directly above the updates panel; nothing overlaps the
    header or search. Compact by design — it must not eat the 3D universe. */
