@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=6b3b15e');
-        await loadScriptOnce('universe.js?v=6b3b15e');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=8c3568e');
+        await loadScriptOnce('universe.js?v=8c3568e');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4399,6 +4399,7 @@ function expandQueryVariants(q, groups) {
     if (typeof r.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(r.id)) out.id = r.id;
     if (typeof r.ts === 'number' && isFinite(r.ts) && r.ts > 0) out.ts = r.ts;
     if (typeof r.source === 'string' && r.source) out.source = r.source.slice(0, 40);
+    if (r.filedThis === true) out.filedThis = true;
     return out;
   };
 
@@ -4456,8 +4457,10 @@ function expandQueryVariants(q, groups) {
         const prev = byId[rec.id];
         if (prev) {
           const archived = !!(prev.archived || rec.archived);
+          const filedThis = !!(prev.filedThis || rec.filedThis);
           byId[rec.id] = rec;
           rec.archived = archived;
+          if (filedThis) rec.filedThis = true;
         } else { byId[rec.id] = rec; order.push(rec.id); }
       });
     };
@@ -4633,6 +4636,19 @@ function expandQueryVariants(q, groups) {
       turn.appendChild(cl);
     }
     addQuoteBtn();
+    if (rec.kind === 'ask' && rec.quote) {
+      const fb = document.createElement('button');
+      fb.type = 'button';
+      fb.className = 'askbar-filethis-btn';
+      if (rec.filedThis) {
+        fb.disabled = true;
+        fb.appendChild(document.createTextNode('Filed'));
+      } else {
+        fb.appendChild(document.createTextNode('File this'));
+        fb.addEventListener('click', () => { askBar.fileThis(rec, fb); });
+      }
+      turn.appendChild(fb);
+    }
     return turn;
   };
 
@@ -4674,6 +4690,46 @@ function expandQueryVariants(q, groups) {
   const FILE_TOKEN_WORDS = 'Filing needs your GitHub token — add it in Settings. Asking works without it.';
   askBar.attachments = [];
   askBar.fileSession = null;
+  askBar.filingThis = {};
+  // Returns a promise; the async body lives in an IIFE.
+  askBar.fileThis = function (rec, btn) {
+    return (async () => {
+      if (!rec || !rec.id || rec.filedThis || askBar.filingThis[rec.id]) return;
+      const gate = (words) => { askBar.openPanel(); askBar.setCaption(words, false); };
+      const token = getToken();
+      if (!token) { gate(FILE_TOKEN_WORDS); return; }
+      const fmt = tokenFormatError(token);
+      if (fmt) { gate('Saved token is invalid: ' + fmt); return; }
+      askBar.filingThis[rec.id] = true;
+      if (btn) { btn.disabled = true; btn.textContent = 'Filing…'; }
+      const q = (s) => String(s || '').split('\n').map((l) => '> ' + l).join('\n');
+      const parts = ['<!-- dumped via second-brain portal at ' + new Date().toISOString() + ' -->\n\n# Conversation filing (file-this)\n\nTurn at ' + new Date(rec.ts || Date.now()).toISOString() + '\n'];
+      if (rec.quote && (rec.quote.question || rec.quote.answer)) {
+        parts.push('\n## Context (quoted)\n\n' + q([rec.quote.question, rec.quote.answer].filter(Boolean).join('\n')) + '\n');
+      }
+      if (rec.question) parts.push('\n## His words\n\n' + q(rec.question) + '\n');
+      if (rec.answer) parts.push('\n## The brain replied (not his assertion)\n\n' + q(rec.answer) + '\n');
+      const when = new Date(rec.ts || Date.now());
+      const folder = CONFIG.dumpDir + '/' + timestamp(when) + '-file-this-' + rec.id;
+      try {
+        await putWithRetry(token, folder + '/note.md', utf8ToBase64(parts.join('')), 'dump: file-this ' + rec.id);
+        rec.filedThis = true;
+        askBar.saveThread();
+        if (btn) btn.textContent = 'Filed';
+      } catch (e) {
+        if (e && e.status === 422) {
+          // The deterministic folder already holds this turn's note: it was filed.
+          rec.filedThis = true;
+          askBar.saveThread();
+          if (btn) btn.textContent = 'Filed';
+        } else {
+          if (btn) { btn.disabled = false; btn.textContent = 'File this'; }
+          gate('Filing did not happen — ' + ((e && e.message) || 'please try again.'));
+        }
+      }
+      delete askBar.filingThis[rec.id];
+    })();
+  };
 
   askBar.extOf = function (name) {
     const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ''));
