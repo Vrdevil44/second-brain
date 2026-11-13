@@ -1270,7 +1270,7 @@ function searchRankOf(node) {
         if (!n) return 4;
         if (n.id === 'core') return 8;
         if (n.id && String(n.id).startsWith('domain-')) return 6;
-        return (n.size || 4);
+        return (n.val || 4);
       })
       .nodeColor('color')
       // Node variety (his call): seeded size jitter so the brain looks organic,
@@ -2613,7 +2613,7 @@ function searchRankOf(node) {
     barGlow.clear();
   }
   function lightCitationNodes(fids, looked) {
-    if (!S || !S.live || !S.live.on || !S.graph) return false;
+    if (typeof S === 'undefined' || !S || !S.live || !S.live.on || !S.graph) return false;
     clearBarGlow();
     const resolve = (xs) => (Array.isArray(xs) ? xs : []).map(String).filter((id) => !!nodeById(id));
     const litIds = resolve(fids);

@@ -1301,19 +1301,29 @@ body.view-3d .node-panel { display: none; }
   color: var(--text);
   font: inherit;
   font-size: 16px; /* 16px stops iPhone Safari zooming the page on focus */
+  line-height: 1.4;
+  resize: none;
+  max-height: 120px;
 }
 .askbar-input::placeholder { color: var(--text-3); }
 .askbar-input:focus-visible,
 .askbar-go:focus-visible,
+.askbar-clear:focus-visible,
+.askbar-tool:focus-visible,
+.askbar-chip-remove:focus-visible,
 .askbar-close:focus-visible,
 .askbar-cite-btn:focus-visible {
   outline: 2px solid var(--accent-glow);
   outline-offset: 2px;
 }
 .askbar-input:disabled,
+.askbar-tool:disabled,
+.askbar-chip-remove:disabled,
 .askbar-go:disabled { opacity: 0.5; cursor: not-allowed; }
 .askbar-go,
 .askbar-close,
+.askbar-clear,
+.askbar-tool,
 .askbar-cite-btn {
   appearance: none;
   cursor: pointer;
@@ -1329,6 +1339,12 @@ body.view-3d .node-panel { display: none; }
 .askbar-go:focus-visible { background: var(--accent); }
 .askbar-close:hover,
 .askbar-close:focus-visible,
+.askbar-clear:hover,
+.askbar-clear:focus-visible,
+.askbar-tool:hover,
+.askbar-tool:focus-visible,
+.askbar-chip-remove:hover,
+.askbar-chip-remove:focus-visible,
 .askbar-cite-btn:hover,
 .askbar-cite-btn:focus-visible { border-color: var(--accent-glow); }
 .askbar-panel {
@@ -1373,6 +1389,34 @@ body.view-3d .node-panel { display: none; }
   font-size: 13px;
   text-align: center;
 }
+.askbar-clear { padding: 4px 10px; font-size: 12px; margin-left: auto; }
+.askbar-tool { display: inline-flex; align-items: center; justify-content: center; align-self: flex-end; padding: 8px 10px; }
+.askbar-tool svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#askbar-mic[aria-pressed="true"] { color: var(--accent-glow); border-color: var(--accent-glow); }
+.askbar-go { align-self: flex-end; }
+.askbar-thread { max-height: 38vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.askbar-thread:empty { display: none; }
+.askbar-turn { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.askbar-turn-q,
+.askbar-question { margin: 0 0 4px; color: var(--text); font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
+.askbar-turn-caption { margin: 0 0 4px; color: var(--text-3); font-size: 12px; }
+.askbar-turn-answer { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.askbar-turn-cites { display: flex; flex-wrap: wrap; gap: 6px; }
+.askbar-commit { color: var(--accent-glow); }
+.askbar-count { align-self: flex-end; color: var(--text-3); font-size: 12px; }
+.askbar-attach-errors,
+.askbar-attach-list { margin: 0; padding: 0; list-style: none; }
+.askbar-attach-errors:empty,
+.askbar-attach-list:empty { display: none; }
+.askbar-attach-errors { color: var(--warn); font-size: 12px; }
+.askbar-attach-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.askbar-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 4px 6px 4px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; color: var(--text); }
+.askbar-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.askbar-chip-status { color: var(--text-3); }
+.askbar-chip.failed .askbar-chip-status { color: var(--warn); }
+.askbar-chip.done .askbar-chip-status { color: var(--accent-glow); }
+.askbar-chip-remove { appearance: none; cursor: pointer; border: 0; background: transparent; color: var(--text-2); font: inherit; border-radius: 50%; width: 22px; height: 22px; line-height: 1; padding: 0; }
+.askbar.askbar-dragover .askbar-row { outline: 2px dashed var(--accent-glow); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .askbar-caption .askbar-dot { animation: none; opacity: 1; }
 }
@@ -1531,7 +1575,6 @@ body.view-3d .node-panel { display: none; }
 /* ==== UI iteration 3: growth-timeline tray behind topbar clock button (owner call 2026-10-26) ==== */
 body:not(.time-open) #s5-slider-wrap { display: none; }
 body.time-open #s5-slider-wrap { left: auto; right: max(18px, env(safe-area-inset-right)); top: calc(max(14px, env(safe-area-inset-top)) + 52px); bottom: auto; transform: none; width: min(360px, calc(100vw - 24px)); }
-#s5-slider-wrap .s5-replay, #s5-slider-wrap .s5-replay-label { display: none; }
 @media (max-width: 640px) {
   body.time-open #s5-slider-wrap { right: max(12px, env(safe-area-inset-right)); top: calc(max(14px, env(safe-area-inset-top)) + 48px); }
 }

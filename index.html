@@ -17,7 +17,7 @@
   <meta name="theme-color" content="#07080d">
   <title>Second Brain</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2307080d'/%3E%3Ccircle cx='10' cy='12' r='4' fill='%238b7cff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%2338d6c4'/%3E%3Ccircle cx='17' cy='22' r='3.5' fill='%23ffb547'/%3E%3Cpath d='M10 12L22 11M10 12L17 22M22 11L17 22' stroke='%23ffffff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=3024fd9">
+  <link rel="stylesheet" href="styles.css?v=003a86a">
 </head>
 <body>
   <!-- Password gate: the published graph.json is AES-256-GCM encrypted.
@@ -275,7 +275,7 @@
       <ul class="note-list small muted">
         <li>Dumping requires the token. The graph works without it.</li>
         <li>Stored only in this browser's localStorage (so it doesn't follow you to another browser) and sent only to <code>api.github.com</code>.</li>
-        <li>Use a fine-grained token limited to <code>Vrdevil44/about-vibhu</code> with <em>Contents: Read and write</em> and a 1-year expiry.</li>
+        <li>Use a fine-grained token limited to <code>Vrdevil44/dream-brain</code> with <em>Contents: Read and write</em> and a 1-year expiry.</li>
       </ul>
 
       <div class="callout callout-warn" id="storage-warning" role="alert" hidden>This browser won't remember the token (storage blocked).</div>
@@ -350,8 +350,11 @@
         <!-- S6:begin -->
         <button class="askbar-speak" id="askbar-speak" type="button" aria-live="off" disabled>Speak</button>
         <!-- S6:end -->
+        <button class="askbar-clear" id="askbar-clear" type="button" title="Clears this view only — the brain keeps its own conversation notes.">Clear thread</button>
         <button class="askbar-close" id="askbar-close" type="button" aria-label="Close answer">Close</button>
       </div>
+      <div class="askbar-thread" id="askbar-thread"></div>
+      <p class="askbar-question" id="askbar-question" hidden></p>
       <p class="askbar-answer" id="askbar-answer"></p>
       <p class="askbar-thinker" id="askbar-thinker"></p>
       <ul class="askbar-warnings" id="askbar-warnings"></ul>
@@ -359,9 +362,20 @@
     </div>
     <p class="askbar-asleep" id="askbar-asleep" role="status" hidden>brain asleep — asking works on your home network</p>
     <div class="askbar-row">
-      <input class="askbar-input" id="askbar-input" type="text" maxlength="500" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" placeholder="Ask the brain" aria-label="Ask the brain a question">
+      <button class="askbar-tool" id="askbar-attach" type="button" title="Attach files to file into the brain" aria-label="Attach files to file into the brain">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l9-9a3.3 3.3 0 0 1 4.7 4.7l-9 9a1.7 1.7 0 0 1-2.4-2.4l8-8"/></svg>
+      </button>
+      <textarea class="askbar-input" id="askbar-input" rows="1" maxlength="2000" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" placeholder="Ask the brain" aria-label="Ask the brain a question"></textarea>
+      <button class="askbar-tool" id="askbar-mic" type="button" title="Voice input" aria-label="Voice input" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
       <button class="askbar-go" id="askbar-go" type="button">Ask</button>
     </div>
+    <span class="askbar-count" id="askbar-count" hidden></span>
+    <ul class="askbar-attach-errors" id="askbar-attach-errors" role="alert"></ul>
+    <ul class="askbar-attach-list" id="askbar-attach-list"></ul>
+    <input type="file" id="askbar-file-input" multiple hidden
+           accept=".jpg,.jpeg,.png,.gif,.webp,.svg,.mp4,.webm,.mov,.mp3,.wav,.m4a,.ogg,.pdf,.txt,.md,.markdown,.doc,.docx,.csv,.zip">
     <!-- S6:begin -->
     <p class="askbar-hint" id="askbar-hint">Tip: if your keyboard has a mic key, you can dictate here — then tap Ask.</p>
     <!-- S6:end -->
@@ -386,8 +400,8 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="config.js?v=3024fd9" defer></script>
-  <script src="app.js?v=3024fd9" defer></script>
-  <script src="vitals.js?v=3024fd9" defer></script>
+  <script src="config.js?v=003a86a" defer></script>
+  <script src="app.js?v=003a86a" defer></script>
+  <script src="vitals.js?v=003a86a" defer></script>
 </body>
 </html>

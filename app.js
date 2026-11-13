@@ -15,7 +15,7 @@
  * The only network requests this page is allowed to make are:
  *   1. GET  graph.json                         (same origin, sanitized data)
  *   2. GET  https://api.github.com/user        (settings: test connection)
- *   3. PUT  https://api.github.com/repos/Vrdevil44/about-vibhu/contents/daily-dump/...
+ *   3. PUT  https://api.github.com/repos/Vrdevil44/dream-brain/contents/daily-dump/...
  *                                              (write-only dump uploads)
  *   4. GET  aliases.json                       (same origin, public alias subset:
  *                                              generic family words only)
@@ -691,8 +691,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=3024fd9');
-        await loadScriptOnce('universe.js?v=3024fd9');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=003a86a');
+        await loadScriptOnce('universe.js?v=003a86a');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -2300,10 +2300,10 @@ function expandQueryVariants(q, groups) {
     if (status === 401) return 'GitHub rejected this token — it expired or was revoked. Paste a new one.';
     if (status === 403) {
       if (/rate limit/i.test(msg)) return 'GitHub rate limit hit. Wait a few minutes and retry.';
-      if (status === 403 && opts && opts.test) return 'GitHub refused the token (403): rate limit, or it is missing a permission. Check it has Contents: Read and write on about-vibhu.';
-      return 'The token doesn\'t have write access (403). It needs Contents: Read and write on about-vibhu.';
+      if (status === 403 && opts && opts.test) return 'GitHub refused the token (403): rate limit, or it is missing a permission. Check it has Contents: Read and write on dream-brain.';
+      return 'The token doesn\'t have write access (403). It needs Contents: Read and write on dream-brain.';
     }
-    if (status === 404) return 'Repo not found (404). The token can\'t see Vrdevil44/about-vibhu.';
+    if (status === 404) return 'Repo not found (404). The token can\'t see Vrdevil44/dream-brain.';
     if (status === 409) return 'GitHub reported a conflict (409). Try again in a moment.';
     if (status === 413) return 'The file is too large for the GitHub API.';
     if (status === 422) return 'GitHub refused the file (422)' + (msg ? ': ' + msg : '.');
@@ -3849,7 +3849,7 @@ function expandQueryVariants(q, groups) {
   };
 
   askBar.openPanel = function () { $('#askbar-panel').hidden = false; };
-  askBar.closePanel = function () { $('#askbar-panel').hidden = true; };
+  askBar.closePanel = function () { $('#askbar-panel').hidden = true; if (askBar.micStop) askBar.micStop(); };
 
   // Panel for a refusal or failure: plain words, no answer text, no citations.
   askBar.showWords = function (words) {
@@ -3865,7 +3865,8 @@ function expandQueryVariants(q, groups) {
     askBar.openPanel();
     const hitRows = (body.retrieval_debug && Array.isArray(body.retrieval_debug.hits)) ? body.retrieval_debug.hits : [];
     const hitSet = new Set(hitRows.map((h) => h && h.fid));
-    askBar.setCaption('looked at ' + hitRows.length + ' notes', false);
+    const earlier = Number(body.retrieval_debug && body.retrieval_debug.history_turns) || 0;
+    askBar.setCaption('looked at ' + hitRows.length + ' notes' + (earlier > 0 ? ' · answered with ' + earlier + ' earlier turn' + (earlier === 1 ? '' : 's') + ' in mind' : ''), false);
     $('#askbar-answer').textContent = body.answer;
     $('#askbar-thinker').textContent = ASK_THINKER_WORDS;
     const warnList = $('#askbar-warnings');
@@ -3927,14 +3928,17 @@ function expandQueryVariants(q, groups) {
   // The one place the bar asks. Asleep returns early with no request at all.
   askBar.submit = async function () {
     if (askBar.busy) return;
+    if (askBar.attachments.length) { await askBar.fileDump(); return; }
     if (askBar.isAsleep()) { askBar.refresh(); return; }
     const input = $('#askbar-input');
     const question = String(input.value || '').trim();
     if (!question) { askBar.showWords(ASK_REFUSAL_WORDS.empty_question); return; }
     askBar.busy = true;
     askBar.refresh();
+    askBar.beginTurn(question);
     askBar.openPanel();
     askBar.setCaption('thinking…', true);
+    askBar.progressStart();
     const ctl = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; try { ctl.abort(); } catch (e) { /* already done */ } }, ASK_TIMEOUT_MS);
@@ -3954,6 +3958,7 @@ function expandQueryVariants(q, groups) {
       clearTimeout(timer);
     } catch (e) {
       clearTimeout(timer);
+      askBar.progressStop();
       // A network failure keeps whatever was last confirmed; nothing is invented.
       if (timedOut) askBar.setCaption(ASK_SLOW_WORDS, false);
       else askBar.setCaption(ASK_ASLEEP_WORDS, false);
@@ -3961,6 +3966,7 @@ function expandQueryVariants(q, groups) {
       askBar.refresh();
       return;
     }
+    askBar.progressStop();
     askBar.busy = false;
     askBar.refresh();
     askBar.onResponse(ok, body);
@@ -3975,8 +3981,10 @@ function expandQueryVariants(q, groups) {
     if (answered) {
       askBar.lastAnswer = body;
       askBar.renderAnswer(body, plan);
+      askBar.completeTurn({ kind: 'ask', answer: body.answer, thinker: ASK_THINKER_WORDS, body: body, plan: plan });
     } else {
       askBar.showWords(askBar.refusalWords(body));
+      askBar.completeTurn({ kind: 'refusal' });
     }
     if (window.BrainUniverse && window.BrainUniverse.lightCitationNodes) window.BrainUniverse.lightCitationNodes(plan.lit, plan.pulse);
   };
@@ -3987,20 +3995,482 @@ function expandQueryVariants(q, groups) {
     const v = (() => { try { return window.__brainVitals && window.__brainVitals.read(); } catch (e) { return null; } })();
     bar.hidden = !(v && v.unlocked);
     const asleep = askBar.isAsleep();
+    const filing = askBar.attachments.length > 0;
     $('#askbar-asleep').hidden = !asleep;
-    $('#askbar-input').disabled = asleep || askBar.busy;
-    $('#askbar-go').disabled = asleep || askBar.busy;
+    // Filing goes to GitHub, not the brain: being asleep only stops asking.
+    $('#askbar-input').disabled = (asleep && !filing) || askBar.busy;
+    $('#askbar-go').disabled = (asleep && !filing) || askBar.busy;
+    $('#askbar-go').textContent = filing ? 'File it' : 'Ask';
+    $('#askbar-attach').disabled = askBar.busy;
+    $('#askbar-mic').disabled = askBar.busy;
+  };
+
+  // ---- thread: session memory only, newest turn lives in the panel's live block
+  askBar.thread = [];
+  askBar.pendingTurn = null;
+
+  // Called by submit before anything renders: the previous completed turn moves
+  // into the thread, the live block is emptied, the new question is stashed.
+  askBar.beginTurn = function (question) {
+    if (askBar.micStop) askBar.micStop();
+    askBar.archiveLive();
+    askBar.pendingTurn = { question: String(question || '') };
+    const q = $('#askbar-question');
+    q.textContent = askBar.pendingTurn.question;
+    q.hidden = !askBar.pendingTurn.question;
+  };
+
+  askBar.archiveLive = function () {
+    const last = askBar.thread[askBar.thread.length - 1];
+    if (last && !last.archived) {
+      last.archived = true;
+      $('#askbar-thread').appendChild(askBar.buildArchivedTurn(last));
+    }
+    $('#askbar-question').textContent = '';
+    $('#askbar-question').hidden = true;
+    $('#askbar-answer').textContent = '';
+    $('#askbar-thinker').textContent = '';
+    $('#askbar-warnings').textContent = '';
+    $('#askbar-cites').textContent = '';
+    askBar.setCaption('', false);
+  };
+
+  // Finish the stashed record from what the live block now shows.
+  askBar.completeTurn = function (extra) {
+    const pending = askBar.pendingTurn || { question: '' };
+    askBar.pendingTurn = null;
+    const rec = {
+      kind: 'ask',
+      question: pending.question,
+      caption: $('#askbar-caption').textContent,
+      answer: '',
+      thinker: '',
+      warnings: [],
+      cites: [],
+      archived: false,
+    };
+    const x = extra || {};
+    Object.keys(x).forEach((k) => { if (k !== 'body' && k !== 'plan') rec[k] = x[k]; });
+    if (x.body) {
+      (Array.isArray(x.body.warnings) ? x.body.warnings : []).forEach((w) => { rec.warnings.push(askBar.warningWords(w)); });
+      (Array.isArray(x.body.citations) ? x.body.citations : []).forEach((c) => {
+        const fid = String((c && c.fid) || '');
+        rec.cites.push({ fid: fid, lit: !!(x.plan && x.plan.lit.indexOf(fid) !== -1), snippet: (c && c.snippet) ? String(c.snippet) : '' });
+      });
+    }
+    askBar.thread.push(rec);
+    return rec;
+  };
+
+  // One archived turn, built from the record with text nodes only. Citation
+  // buttons only focus the node; archives never change the lighting.
+  askBar.buildArchivedTurn = function (rec) {
+    const turn = document.createElement('div');
+    turn.className = 'askbar-turn';
+    const add = (tag, cls, text) => {
+      const n = document.createElement(tag);
+      n.className = cls;
+      n.appendChild(document.createTextNode(text));
+      turn.appendChild(n);
+      return n;
+    };
+    if (rec.question) add('p', 'askbar-turn-q', rec.question);
+    if (rec.caption) add('p', 'askbar-turn-caption', rec.caption);
+    if (rec.kind === 'filed') {
+      const line = add('p', 'askbar-turn-answer', '');
+      askBar.fillFiledLine(line, rec);
+      return turn;
+    }
+    if (rec.answer) add('p', 'askbar-turn-answer', rec.answer);
+    if (rec.warnings && rec.warnings.length) {
+      const wl = document.createElement('ul');
+      wl.className = 'askbar-warnings';
+      rec.warnings.forEach((w) => { const li = document.createElement('li'); li.appendChild(document.createTextNode(w)); wl.appendChild(li); });
+      turn.appendChild(wl);
+    }
+    if (rec.cites && rec.cites.length) {
+      const cl = document.createElement('div');
+      cl.className = 'askbar-turn-cites';
+      rec.cites.forEach((c) => {
+        if (c.lit) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'askbar-cite-btn';
+          b.appendChild(document.createTextNode(c.fid));
+          b.setAttribute('aria-label', 'Show ' + c.fid + ' in the graph');
+          b.addEventListener('click', () => { askBar.focusFid(c.fid); });
+          cl.appendChild(b);
+        } else {
+          const sp = document.createElement('span');
+          sp.className = 'askbar-cite-meta';
+          sp.appendChild(document.createTextNode(c.fid));
+          cl.appendChild(sp);
+        }
+      });
+      turn.appendChild(cl);
+    }
+    return turn;
+  };
+
+  askBar.clearThread = function () {
+    askBar.thread = [];
+    askBar.pendingTurn = null;
+    $('#askbar-thread').textContent = '';
+    askBar.archiveLive();
+    askBar.closePanel();
+  };
+
+  // ---- staged progress: words follow the real pipeline order, the stage boundaries
+  // are elapsed-time guesses, not signals from the brain.
+  askBar.progressWords = function (elapsedMs) {
+    const ms = Math.max(0, Number(elapsedMs) || 0);
+    let words = 'Now working — looking through the notes…';
+    if (ms >= 30000) words = 'Now working — checking the answer against the notes…';
+    else if (ms >= 4000) words = 'Now working — the small local model is thinking…';
+    if (ms >= 6000) words += ' · ' + Math.floor(ms / 1000) + 's';
+    return words;
+  };
+
+  askBar.progressTimer = null;
+  askBar.progressStop = function () {
+    if (askBar.progressTimer !== null) { clearInterval(askBar.progressTimer); askBar.progressTimer = null; }
+  };
+  askBar.progressStart = function () {
+    askBar.progressStop();
+    const t0 = Date.now();
+    askBar.progressTimer = setInterval(() => { askBar.setCaption(askBar.progressWords(Date.now() - t0), true); }, 500);
+  };
+
+  // ---- attachments: the Dump panel's validator and limits, reused as they are
+  const FILE_TOKEN_WORDS = 'Filing needs your GitHub token — add it in Settings. Asking works without it.';
+  askBar.attachments = [];
+  askBar.fileSession = null;
+
+  askBar.extOf = function (name) {
+    const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ''));
+    return m ? m[1].toLowerCase() : '';
+  };
+
+  askBar.sizeWords = function (n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  // A pasted clipboard file often has no name or no extension: name it from its type.
+  askBar.pastedName = function (file) {
+    const type = String(file.type || '').toLowerCase();
+    if (type === 'image/png') return 'pasted-image.png';
+    if (type === 'image/jpeg') return 'pasted-image.jpg';
+    const sub = (type.split('/')[1] || '').split(/[;+]/)[0].replace(/[^a-z0-9]/g, '');
+    return 'pasted-file.' + (sub || 'bin');
+  };
+
+  askBar.invalidateFileSession = function () {
+    if (askBar.busy) return;
+    askBar.fileSession = null;
+    askBar.attachments.forEach((a) => { if (a.status !== 'ready') { a.status = 'ready'; a.progress = 0; a.error = ''; } });
+  };
+
+  askBar.addAttachments = function (fileList, opts) {
+    if (askBar.busy) return;
+    const fromClipboard = !!(opts && opts.clipboard);
+    const errors = [];
+    const skipped = [];
+    Array.prototype.slice.call(fileList || []).forEach((file) => {
+      let shown = String(file.name || '');
+      if (fromClipboard && !askBar.extOf(shown)) shown = askBar.pastedName(file);
+      const err = validateFile({ name: shown, size: file.size, type: file.type });
+      if (err) { errors.push(err); return; }
+      const dup = askBar.attachments.some((a) => a.file === file || (file.name && a.file.name === file.name && a.file.size === file.size && a.file.lastModified === file.lastModified));
+      if (dup) { errors.push(shown + ' is already added.'); return; }
+      if (askBar.attachments.length >= MAX_FILES) { skipped.push(shown); return; }
+      askBar.attachments.push({ file: file, name: sanitizeFilename(shown), kind: EXT_KIND[askBar.extOf(shown)], status: 'ready', progress: 0, error: '' });
+    });
+    if (skipped.length) errors.push('You can add up to ' + MAX_FILES + ' files at a time. Skipped: ' + skipped.join(', ') + '.');
+    // File names stay unique inside the folder and never clash with the notes.
+    const used = { 'note.md': true, 'comment.md': true };
+    askBar.attachments.forEach((a) => {
+      const dot = a.name.lastIndexOf('.');
+      const base = dot > 0 ? a.name.slice(0, dot) : a.name;
+      const ext = dot > 0 ? a.name.slice(dot) : '';
+      let name = a.name;
+      let i = 2;
+      while (used[name.toLowerCase()]) name = base + '-' + (i++) + ext;
+      a.name = name;
+      used[name.toLowerCase()] = true;
+    });
+    askBar.invalidateFileSession();
+    askBar.renderAttachErrors(errors);
+    askBar.renderAttachments();
+    askBar.refresh();
+  };
+
+  askBar.renderAttachErrors = function (errors) {
+    const ul = $('#askbar-attach-errors');
+    ul.textContent = '';
+    errors.forEach((msg) => { const li = document.createElement('li'); li.appendChild(document.createTextNode(msg)); ul.appendChild(li); });
+  };
+
+  askBar.renderAttachments = function () {
+    const ul = $('#askbar-attach-list');
+    ul.textContent = '';
+    askBar.attachments.forEach((a) => {
+      let sub = askBar.sizeWords(a.file.size);
+      if (a.status === 'encoding') sub = 'Preparing…';
+      if (a.status === 'uploading') sub = 'Uploading ' + Math.round(a.progress * 100) + '%';
+      if (a.status === 'done') sub = 'Filed';
+      if (a.status === 'failed') sub = a.error || 'Upload failed';
+      if (a.status === 'skipped') sub = 'Not sent';
+      const li = document.createElement('li');
+      li.className = 'askbar-chip ' + a.status;
+      const nm = document.createElement('span');
+      nm.className = 'askbar-chip-name';
+      nm.appendChild(document.createTextNode(a.name));
+      const st = document.createElement('span');
+      st.className = 'askbar-chip-status';
+      st.appendChild(document.createTextNode(sub));
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'askbar-chip-remove';
+      rm.setAttribute('aria-label', 'Remove ' + a.name);
+      rm.appendChild(document.createTextNode('×'));
+      rm.disabled = askBar.busy || a.status === 'done';
+      rm.addEventListener('click', () => {
+        if (askBar.busy) return;
+        askBar.attachments = askBar.attachments.filter((x) => x !== a);
+        askBar.invalidateFileSession();
+        askBar.renderAttachments();
+        askBar.refresh();
+      });
+      li.appendChild(nm);
+      li.appendChild(st);
+      li.appendChild(rm);
+      ul.appendChild(li);
+    });
+  };
+
+  // The line a filed turn shows: where it went, plus the commit when it checks out.
+  askBar.fillFiledLine = function (node, rec) {
+    node.appendChild(document.createTextNode(rec.answer));
+    if (rec.commitHref) {
+      node.appendChild(document.createTextNode(' '));
+      const a = document.createElement('a');
+      a.className = 'askbar-commit';
+      a.setAttribute('href', rec.commitHref);
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+      a.appendChild(document.createTextNode(rec.commitLabel));
+      node.appendChild(a);
+    }
+  };
+
+  // Files the text and attachments into the daily-dump folder, exactly the way
+  // the Dump panel does, through the same upload helpers.
+  askBar.fileDump = async function () {
+    if (askBar.busy) return;
+    if (askBar.micStop) askBar.micStop();
+    const input = $('#askbar-input');
+    const gate = (words) => { askBar.openPanel(); askBar.setCaption(words, false); };
+    const token = getToken();
+    if (!token) { gate(FILE_TOKEN_WORDS); return; }
+    const fmt = tokenFormatError(token);
+    if (fmt) { gate('Saved token is invalid: ' + fmt); return; }
+    const text = String(input.value || '');
+    const files = askBar.attachments;
+    if (files.length > MAX_FILES) { gate('Too many files. The limit is ' + MAX_FILES + '.'); return; }
+    for (let i = 0; i < files.length; i++) {
+      const err = validateFile(files[i].file);
+      if (err) { gate(err); return; }
+    }
+    if (!askBar.fileSession) {
+      const now = new Date();
+      const slug = slugify(text.trim() ? text : (files[0] && files[0].name.replace(/\.[^.]+$/, '')));
+      askBar.fileSession = { folder: CONFIG.dumpDir + '/' + timestamp(now) + '-' + slug, slug: slug, created: now, noteDone: false, lastCommit: null };
+    }
+    const session = askBar.fileSession;
+    askBar.busy = true;
+    askBar.refresh();
+    askBar.beginTurn(text.trim() || ('Filed ' + files.length + ' item(s)'));
+    askBar.openPanel();
+    askBar.setCaption('Filing to the brain…', true);
+    let failed = null;
+    try {
+      if (text.trim() && !session.noteDone) {
+        const header = '<!-- dumped via second-brain portal at ' + session.created.toISOString() + ' -->\n\n';
+        const res = await putWithRetry(token, session.folder + '/note.md', utf8ToBase64(header + text + '\n'), 'dump: ' + session.slug + ' (note)');
+        session.noteDone = true;
+        session.lastCommit = res && res.commit;
+        if (files.length) {
+          await putWithRetry(token, session.folder + '/comment.md', utf8ToBase64(text + '\n'), 'dump: ' + session.slug + ' (comment)');
+        }
+      }
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (f.status === 'done') continue;
+        f.status = 'encoding';
+        f.progress = 0;
+        f.error = '';
+        askBar.renderAttachments();
+        try {
+          const b64 = await fileToBase64(f.file);
+          f.status = 'uploading';
+          askBar.renderAttachments();
+          const res = await putWithRetry(token, session.folder + '/' + f.name, b64, 'dump: ' + session.slug + ' (' + f.name + ')', (p) => {
+            f.progress = Math.min(p, 0.99);
+            askBar.renderAttachments();
+          });
+          f.status = 'done';
+          f.progress = 1;
+          session.lastCommit = res && res.commit;
+          askBar.renderAttachments();
+        } catch (bad) {
+          f.status = 'failed';
+          f.error = bad.message;
+          failed = bad;
+          askBar.renderAttachments();
+          break;
+        }
+      }
+    } catch (bad) {
+      failed = bad;
+    }
+    askBar.busy = false;
+    if (failed) {
+      files.forEach((f) => { if (f.status === 'ready') f.status = 'skipped'; });
+      askBar.renderAttachments();
+      askBar.refresh();
+      const sent = (session.noteDone ? 1 : 0) + files.filter((f) => f.status === 'done').length;
+      askBar.setCaption(failed.message + (sent ? ' ' + sent + ' item(s) were saved already; press File it again to send only the rest into the same folder.' : ''), false);
+      return;
+    }
+    const commit = session.lastCommit;
+    const rec = askBar.completeTurn({
+      kind: 'filed',
+      caption: 'Filed to the brain',
+      answer: 'Filed to ' + session.folder + '/ — the nightly organizer will sort it into the graph.',
+    });
+    if (commit && commit.html_url && /^https:\/\/github\.com\//.test(commit.html_url)) {
+      rec.commitHref = commit.html_url;
+      rec.commitLabel = commit.sha ? 'View commit ' + String(commit.sha).slice(0, 7) + ' on GitHub' : 'View commit on GitHub';
+    }
+    askBar.setCaption(rec.caption, false);
+    const ans = $('#askbar-answer');
+    ans.textContent = '';
+    askBar.fillFiledLine(ans, rec);
+    askBar.attachments = [];
+    askBar.fileSession = null;
+    input.value = '';
+    askBar.renderAttachments();
+    askBar.renderAttachErrors([]);
+    askBar.onInput();
+    askBar.refresh();
+  };
+
+  // ---- input: auto-grow, character count, and anything that edits the note
+  askBar.onInput = function () {
+    const ta = $('#askbar-input');
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    const len = String(ta.value || '').length;
+    const count = $('#askbar-count');
+    count.hidden = len <= 1600;
+    count.textContent = len > 1600 ? len.toLocaleString('en-US') + ' / 2,000' : '';
+  };
+
+  // ---- voice input: where the browser can listen, and only there
+  askBar.rec = null;
+  askBar.setMicPressed = function (on) {
+    try {
+      const mic = $('#askbar-mic');
+      mic.setAttribute('aria-pressed', on ? 'true' : 'false');
+      mic.classList.toggle('listening', !!on);
+    } catch (e) { /* no mic button here */ }
+  };
+  askBar.micStop = function () {
+    const rec = askBar.rec;
+    askBar.rec = null;
+    askBar.setMicPressed(false);
+    if (rec) { try { rec.stop(); } catch (e) { /* already stopped */ } }
+  };
+  askBar.initMic = function () {
+    const mic = $('#askbar-mic');
+    if (!mic) return;
+    let SR = null;
+    try { SR = window.SpeechRecognition || window.webkitSpeechRecognition || null; } catch (e) { SR = null; }
+    if (!SR) { mic.hidden = true; return; }
+    mic.hidden = false;
+    mic.addEventListener('click', () => {
+      if (askBar.rec) { askBar.micStop(); return; }
+      try {
+        const input = $('#askbar-input');
+        const base = String(input.value || '');
+        const rec = new SR();
+        rec.lang = (typeof navigator !== 'undefined' && navigator && navigator.language) || 'en-US';
+        rec.interimResults = true;
+        rec.continuous = false;
+        rec.onresult = (ev) => {
+          let fin = '';
+          let interim = '';
+          for (let i = 0; i < ev.results.length; i++) {
+            const r = ev.results[i];
+            const t = (r && r[0] && r[0].transcript) || '';
+            if (r && r.isFinal) fin += t; else interim += t;
+          }
+          const gap = base && !/\s$/.test(base) ? ' ' : '';
+          input.value = (base + gap + fin + interim).slice(0, 2000);
+          askBar.onInput();
+          askBar.invalidateFileSession();
+        };
+        rec.onend = () => { if (askBar.rec === rec) askBar.rec = null; askBar.setMicPressed(false); };
+        rec.onerror = (ev) => {
+          if (ev && ev.error === 'not-allowed') { askBar.openPanel(); askBar.setCaption('The mic is blocked — allow microphone access in the browser, or just type.', false); }
+          if (askBar.rec === rec) askBar.rec = null;
+          askBar.setMicPressed(false);
+        };
+        askBar.rec = rec;
+        askBar.setMicPressed(true);
+        rec.start();
+      } catch (e) {
+        askBar.rec = null;
+        askBar.setMicPressed(false);
+      }
+    });
   };
 
   (function initAskBar() {
     const bar = $('#askbar');
     if (!bar) return;
+    const input = $('#askbar-input');
+    const fileInput = $('#askbar-file-input');
     $('#askbar-go').addEventListener('click', () => { askBar.submit(); });
-    $('#askbar-close').addEventListener('click', () => { askBar.closePanel(); $('#askbar-input').focus(); });
+    $('#askbar-close').addEventListener('click', () => { askBar.closePanel(); input.focus(); });
+    $('#askbar-clear').addEventListener('click', () => { askBar.clearThread(); });
+    $('#askbar-attach').addEventListener('click', () => { fileInput.click(); });
+    fileInput.addEventListener('change', () => {
+      askBar.addAttachments(fileInput.files);
+      fileInput.value = '';
+    });
+    input.addEventListener('input', () => { askBar.onInput(); askBar.invalidateFileSession(); });
+    input.addEventListener('paste', (e) => {
+      const files = e.clipboardData && e.clipboardData.files;
+      if (files && files.length) { e.preventDefault(); askBar.addAttachments(files, { clipboard: true }); }
+    });
+    let dragDepth = 0;
+    bar.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; bar.classList.add('askbar-dragover'); });
+    bar.addEventListener('dragover', (e) => { e.preventDefault(); bar.classList.add('askbar-dragover'); });
+    bar.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) bar.classList.remove('askbar-dragover'); });
+    bar.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragDepth = 0;
+      bar.classList.remove('askbar-dragover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) askBar.addAttachments(e.dataTransfer.files);
+    });
     bar.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !$('#askbar-panel').hidden) { e.preventDefault(); askBar.closePanel(); return; }
-      if (e.key === 'Enter' && e.target === $('#askbar-input') && !e.isComposing) { e.preventDefault(); askBar.submit(); }
+      if (e.key === 'Enter' && e.target === input && !e.shiftKey && !e.isComposing) { e.preventDefault(); askBar.submit(); }
     });
+    askBar.initMic();
     askBar.refresh();
     setInterval(askBar.refresh, 1000);
   })();
@@ -4181,9 +4651,11 @@ function expandQueryVariants(q, groups) {
     for (const r of rows) {
       for (const id of r.born_nodes) vis.add(id);
       for (const id of r.died_nodes) vis.delete(id);
-      if (vis.size !== r.counts.nodes) return { state: 'invalid', missing: 0 };
+      if (vis.size !== r.counts.nodes) return { state: 'invalid', missing: 0, why: 'rowcount', ghosts: 0 };
     }
-    for (const id of vis) if (!graphIds.has(id)) return { state: 'invalid', missing: 0 };
+    let ghosts = 0;
+    for (const id of vis) if (!graphIds.has(id)) ghosts++;
+    if (ghosts > 0) return { state: 'invalid', missing: 0, why: 'ghosts', ghosts };
     let missing = 0;
     for (const id of graphIds) if (!vis.has(id)) missing++;
     return { state: missing === 0 ? 'ready' : 'catching-up', missing };
@@ -4214,6 +4686,20 @@ function expandQueryVariants(q, groups) {
     return { nodes, edges: plan.visibleEdges.length };
   };
 
+  // Plain words for why the slider is off; states only what load() observed.
+  sliderSleep.unavailableWords = function () {
+    const tail = ', so the slider stays off rather than guess.';
+    switch (sliderSleep.unavailableReason) {
+      case 'rowcount': return S5_UNAVAILABLE_WORDS + ' \u2014 the saved history\'s own counts do not agree' + tail;
+      case 'ghosts': return S5_UNAVAILABLE_WORDS + ' \u2014 the saved history names ' + sliderSleep.unavailableGhosts
+        + ' nodes that are no longer in this graph' + tail;
+      case 'graphmismatch': return S5_UNAVAILABLE_WORDS + ' \u2014 the saved history does not line up with this graph' + tail;
+      case 'malformed': return S5_UNAVAILABLE_WORDS + ' \u2014 the saved history could not be read.';
+      case 'unreachable': return S5_UNAVAILABLE_WORDS + ' \u2014 no history could be loaded.';
+      default: return '';
+    }
+  };
+
   sliderSleep.render = function () {
     const slider = sliderSleep.dom('s5-slider');
     const rowEl = sliderSleep.dom('s5-row-label');
@@ -4226,7 +4712,7 @@ function expandQueryVariants(q, groups) {
       btn.disabled = true;
       btn.textContent = 'Replay sleep';
       rowEl.textContent = sliderSleep.status === 'loading' ? 'Beat history' : S5_UNAVAILABLE_WORDS;
-      countsEl.textContent = '';
+      countsEl.textContent = sliderSleep.status === 'loading' ? '' : sliderSleep.unavailableWords();
       slider.removeAttribute('aria-valuetext');
       note.hidden = true;
       return;
@@ -4298,28 +4784,56 @@ function expandQueryVariants(q, groups) {
     sliderSleep.pending = null;
   };
 
-  // One plain same-origin GET of the history file. Absent (public site) or bad
-  // history leaves the slider disabled; no other request is made here.
+  // The slice's single network wrapper: one plain GET, response text or null.
+  sliderSleep.fetchText = async function (url) {
+    try {
+      const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin' });
+      return res.ok ? await res.text() : null;
+    } catch (e) { return null; }
+  };
+
+  // Tries the live history first, then the baked file; keeps whichever validates.
+  // Absent or bad history leaves the slider disabled and says why in plain words.
   sliderSleep.load = async function (session) {
     sliderSleep.rows = null;
     sliderSleep.status = 'loading';
+    sliderSleep.unavailableReason = '';
+    sliderSleep.unavailableGhosts = 0;
     sliderSleep.render();
-    let rows = null;
-    try {
-      const res = await fetch(historyLiveUrl() || S5_HISTORY_URL, { cache: 'no-store', credentials: 'same-origin' });
-      if (res.ok) rows = sliderSleep.parseHistory(await res.text());
-    } catch (e) { rows = null; }
-    if (sliderSleep.session !== session) return; // locked or reloaded meanwhile
+    const urls = [];
+    for (const u of [historyLiveUrl(), S5_HISTORY_URL]) if (u && urls.indexOf(u) === -1) urls.push(u);
     const facts = sliderSleep.graphFacts(session);
+    let rows = null;
     let state = 'unavailable';
-    if (rows) {
-      const a = sliderSleep.assessHistory(rows, facts.ids);
-      if (a.state === 'invalid') rows = null;
-      else { state = a.state; sliderSleep.missing = a.missing; }
+    let reason = '';
+    let ghosts = 0;
+    let answered = false;
+    for (const u of urls) {
+      const text = await sliderSleep.fetchText(u); // one source at a time; a validating live source never requests the baked file
+      if (sliderSleep.session !== session) return; // locked or reloaded meanwhile
+      if (text === null) continue;
+      answered = true;
+      const parsed = sliderSleep.parseHistory(text);
+      if (!parsed) { if (!reason) reason = 'malformed'; continue; }
+      const a = sliderSleep.assessHistory(parsed, facts.ids);
+      if (a.state === 'invalid') {
+        if (!reason) { reason = a.why; ghosts = a.ghosts; }
+        continue;
+      }
+      // The strict equality check only governs an exact ('ready') history.
+      if (a.state !== 'catching-up' && !sliderSleep.checkRows(parsed, facts.ids)) {
+        if (!reason) reason = 'graphmismatch';
+        continue;
+      }
+      rows = parsed;
+      state = a.state;
+      sliderSleep.missing = a.missing;
+      reason = '';
+      break;
     }
-    // The strict equality check only governs an exact ('ready') history.
-    if (state !== 'catching-up')
-    if (rows && !sliderSleep.checkRows(rows, facts.ids)) rows = null;
+    if (!rows && !answered) reason = 'unreachable';
+    sliderSleep.unavailableReason = reason;
+    sliderSleep.unavailableGhosts = rows ? 0 : ghosts;
     sliderSleep.graph = facts;
     sliderSleep.rows = rows;
     // U2 sparks: the latest row's born edges earn a birth-glow weight (universe.js reads this Set).
