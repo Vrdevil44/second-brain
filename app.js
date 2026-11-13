@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=743cf64');
-        await loadScriptOnce('universe.js?v=743cf64');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=6b3b15e');
+        await loadScriptOnce('universe.js?v=6b3b15e');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1069,6 +1069,7 @@ function expandQueryVariants(q, groups) {
       if (body && typeof body.token === 'string') portalToken = body.token;
       if (portalToken && window.askBar && askBar.syncThread) askBar.syncThread();
       if (portalToken) refreshWaitingGate();
+      if (portalToken) scheduleBrainInitiate();
     } catch (e) { portalToken = null; }
   }
 
@@ -3422,6 +3423,48 @@ function expandQueryVariants(q, groups) {
   tickSyncDialLive();
   setInterval(tickSyncDialLive, 30000);
 
+  // Item R: the brain may speak first — genuinely only. The one message it can
+  // send without inventing words is a real open demand, verbatim. At most one
+  // per session and one per 24h (derived from the thread itself, so it holds
+  // across devices); never over a live turn; never from stale state; never
+  // before the thread's first box sync has completed (dedup needs the full
+  // history). No demands = silence.
+  let brainInitiateDone = false;
+  function scheduleBrainInitiate() {
+    setTimeout(maybeBrainInitiate, 12000);
+  }
+  function maybeBrainInitiate() {
+    if (brainInitiateDone) return;
+    if (!portalToken) return;
+    if (document.visibilityState !== 'visible') return;
+    if (!window.askBar || !askBar.thread || !askBar.threadSynced) return;
+    if (askBar.busy || askBar.pendingTurn) return;
+    const input = $('#askbar-input');
+    if (input && String(input.value || '').trim()) return; // he is already writing
+    const last = askBar.thread[askBar.thread.length - 1];
+    if (last && !last.archived) return; // never speak over a live turn
+    const st = freshState;
+    if (!st || !st.ts) return;
+    if (Date.now() - Date.parse(st.ts) > 30 * 60 * 1000) return; // stale state sends nothing
+    const demands = Array.isArray(st.demands_top) ? st.demands_top.filter(Boolean) : [];
+    if (!demands.length) return;
+    const brainRecs = askBar.thread.filter((r) => r.kind === 'brain');
+    const lastBrainTs = brainRecs.reduce((m, r) => Math.max(m, r.ts || 0), 0);
+    if (lastBrainTs && Date.now() - lastBrainTs < 24 * 3600 * 1000) return; // one per 24h
+    const raised = {};
+    brainRecs.forEach((r) => { raised[r.answer] = true; });
+    // dedup: an existing brain record with answer === text means this demand was raised
+    const text = demands.map(String).find((d) => !raised[d]);
+    if (!text) return; // everything open was already raised
+    const rec = askBar.validRecord({ kind: 'brain', question: '', answer: text, caption: '', thinker: '', warnings: [], cites: [], archived: true, id: askBar.newThreadId(), ts: Date.now(), source: 'demands_top' });
+    if (!rec) return;
+    brainInitiateDone = true;
+    askBar.thread.push(rec);
+    const box = $('#askbar-thread');
+    if (box) box.appendChild(askBar.buildArchivedTurn(rec));
+    askBar.saveThread();
+  }
+
   // Item Q: the waiting-for-you surface lives in the Updates tile. Demands are
   // buttons — clicking one attaches it to the god-thread bar as quote context
   // and he answers there. Gate items are filing work, not questions, so they
@@ -4331,7 +4374,7 @@ function expandQueryVariants(q, groups) {
     if (typeof r.question !== 'string' || typeof r.answer !== 'string') return null;
     if (!r.question && !r.answer) return null;
     const out = {
-      kind: r.kind === 'filed' || r.kind === 'refusal' ? r.kind : 'ask',
+      kind: r.kind === 'filed' || r.kind === 'refusal' || r.kind === 'brain' ? r.kind : 'ask',
       question: r.question,
       caption: typeof r.caption === 'string' ? r.caption : '',
       answer: r.answer,
@@ -4355,6 +4398,7 @@ function expandQueryVariants(q, groups) {
     }
     if (typeof r.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(r.id)) out.id = r.id;
     if (typeof r.ts === 'number' && isFinite(r.ts) && r.ts > 0) out.ts = r.ts;
+    if (typeof r.source === 'string' && r.source) out.source = r.source.slice(0, 40);
     return out;
   };
 
@@ -4391,6 +4435,7 @@ function expandQueryVariants(q, groups) {
   };
 
   askBar.pushTimer = null;
+  askBar.threadSynced = false;
   askBar.schedulePush = function () {
     if (typeof threadBox !== 'function') return;
     if (askBar.pushTimer) clearTimeout(askBar.pushTimer);
@@ -4430,6 +4475,7 @@ function expandQueryVariants(q, groups) {
       if (!res || !res.ok) return;
       let body = null;
       try { body = await res.json(); } catch (e) { return; }
+      askBar.threadSynced = true;
       const remote = (body && Array.isArray(body.records)) ? body.records.map((r) => askBar.validRecord(r)).filter(Boolean) : [];
       const clearedAt = (body && typeof body.cleared_at === 'number') ? body.cleared_at : 0;
       let local = askBar.thread;
@@ -4549,6 +4595,7 @@ function expandQueryVariants(q, groups) {
       turn.appendChild(b);
     };
     if (rec.quote) add('p', 'askbar-turn-quote', '↳ ' + askBar.snippet(rec.quote.question || rec.quote.answer, QUOTE_CHIP_MAX));
+    if (rec.kind === 'brain') add('p', 'askbar-turn-brain', 'Demand from the brain');
     if (rec.question) add('p', 'askbar-turn-q', rec.question);
     if (rec.caption) add('p', 'askbar-turn-caption', rec.caption);
     if (rec.kind === 'filed') {

@@ -1429,6 +1429,7 @@ body.view-3d .node-panel { display: none; }
 .askbar-turn-q,
 .askbar-question { margin: 0 0 4px; color: var(--text); font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
 .askbar-turn-caption { margin: 0 0 4px; color: var(--text-3); font-size: 12px; }
+.askbar-turn-brain { margin: 0 0 4px; color: var(--text-3); font-size: 12px; }
 .askbar-turn-answer { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .askbar-turn-cites { display: flex; flex-wrap: wrap; gap: 6px; }
 .askbar-commit { color: var(--accent-glow); }
