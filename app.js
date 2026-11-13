@@ -249,7 +249,7 @@ function expandQueryVariants(q, groups) {
     adj: new Map(), // id -> [{node, strength}]
   };
 
-  const view = { k: 1, tx: 0, ty: 0, w: 0, h: 0, dpr: 1 };
+  const view = { k: 1, fitK: 1, tx: 0, ty: 0, w: 0, h: 0, dpr: 1 };
   const sim = { alpha: 1, alphaTarget: 0, running: false };
   let hovered = null;
   let selected = null;
@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0ce064d');
-        await loadScriptOnce('universe.js?v=0ce064d');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=1d4f693');
+        await loadScriptOnce('universe.js?v=1d4f693');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1360,7 +1360,11 @@ function expandQueryVariants(q, groups) {
         id, label, type, size,
         kind, hex, rgb: hexToRgb(hex),
         isHub: n.node === 'domain-hub',
-        r: radiusFor(type, size),
+        tierHint: n.tier,
+        gravity: clamp(Number(n.gravity) || 0.10, 0, 1),
+        tier: 'end', vr: 3, // visual tier + radius (design §3.2): set once degrees are known, below
+        lblOn: false, lblA: 0, lblW: -1, // label state: zoom-gate (hysteresis), fade alpha, cached width
+        r: radiusFor(type, size), // layout-anchor radius only (force collision/springs); visuals use vr
         x: 0, y: 0, vx: 0, vy: 0, fx: null, fy: null,
         degree: 0,
       };
@@ -1390,6 +1394,11 @@ function expandQueryVariants(q, groups) {
       b.degree++;
     }
 
+    for (const n of graph.nodes) {
+      n.tier = tierOf(n);
+      n.vr = tierRadius(n);
+    }
+
     // Meta line in the top bar.
     const parts = [
       nf.format(graph.nodes.length) + ' nodes',
@@ -1410,6 +1419,27 @@ function expandQueryVariants(q, groups) {
     sim.alpha = reducedMotion ? 0 : 0.25;
     fitView(false);
     startSim();
+  }
+
+  // ---- Tier geometry (design §3.2; twin of tierOf in universe.js, same rule) ----
+  // core / domain hub / orphan (degree 0) / end from graph data; an optional `tier` field
+  // ('sub-domain' | 'cluster') wins over end/orphan, never over core/domain.
+  const TIER_RANK = { core: 0, domain: 1, 'sub-domain': 2, cluster: 3, end: 4, orphan: 5 };
+  function tierOf(n) {
+    if (n.id === 'core') return 'core';
+    if (n.isHub) return 'domain';
+    if (n.tierHint === 'sub-domain' || n.tierHint === 'cluster') return n.tierHint;
+    return n.degree === 0 ? 'orphan' : 'end';
+  }
+  function tierRadius(n) {
+    switch (n.tier) {
+      case 'core': return 10;
+      case 'domain': return 7;
+      case 'sub-domain': return 5.5;
+      case 'cluster': return 4.5;
+      case 'end': return 2.5 + n.gravity; // 2.5-3.5 by gravity, linear
+      default: return 3; // orphan
+    }
   }
 
   function radiusFor(type, size) {
@@ -1537,6 +1567,7 @@ function expandQueryVariants(q, groups) {
     if (!window._hiddenKinds) window._hiddenKinds = new Set();
     // The 2D renderer checks node visibility in the draw loop.
     // Store the filter and trigger a re-render.
+    if (hovered && isKindHidden(hovered)) hovered = null;
     requestRender();
   };
 
@@ -1564,6 +1595,7 @@ function expandQueryVariants(q, groups) {
     view.h = window.innerHeight;
     canvas.width = Math.round(view.w * view.dpr);
     canvas.height = Math.round(view.h * view.dpr);
+    if (graph.nodes.length) view.fitK = computeFit().fitK;
     requestRender();
   }
 
@@ -1614,74 +1646,171 @@ function expandQueryVariants(q, groups) {
       ctx.stroke();
     }
 
-    // Nodes: glow halo + core
+    // Nodes + labels in screen space: tier geometry is exact px at every zoom (design §3.2).
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const now = performance.now();
     for (const n of graph.nodes) {
-      // Skip hidden kinds (legend filter).
       if (isKindHidden(n)) continue;
-      const rgb = n.rgb;
+      const sx = n.x * k + tx, sy = n.y * k + ty;
+      if (sx < -20 || sx > view.w + 20 || sy < -20 || sy > view.h + 20) continue;
       const dim = focus && !focusSet.has(n.id);
-      const isFocus = n === focus;
-      const glowR = n.r * (n.type === 'cluster' ? 3.4 : 3.0) * (isFocus ? 1.25 : 1);
+      drawTierNode(n, sx, sy, dim ? 0.35 : 1);
+      // States (§3.5). Precedence selected > hover; hover over a selected node adds label only.
+      if (n === selected) ring(sx, sy, n.vr + 2, 2, STATE_TEXT1, 1);
+      else if (n === hovered) ring(sx, sy, n.vr + 2, 1, STATE_TEXT2, 1);
+    }
+    drawLabels(focus, focusSet, now);
+  }
 
-      const halo = ctx.createRadialGradient(n.x, n.y, n.r * 0.5, n.x, n.y, glowR);
-      halo.addColorStop(0, rgba(rgb, dim ? 0.05 : isFocus ? 0.45 : 0.22));
-      halo.addColorStop(1, rgba(rgb, 0));
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
-      ctx.fill();
+  // ---- Tier shapes ---------------------------------------------------------------
+  const STATE_TEXT1 = '#f1f4fa'; // --text-1
+  const STATE_TEXT2 = '#d5dbe8'; // --text-2
 
-      const core = ctx.createRadialGradient(n.x - n.r * 0.35, n.y - n.r * 0.35, n.r * 0.1, n.x, n.y, n.r);
-      const lighter = rgb.map((c) => Math.min(255, c + 70));
-      core.addColorStop(0, rgba(lighter, dim ? 0.25 : 1));
-      core.addColorStop(1, rgba(rgb, dim ? 0.2 : 0.95));
-      ctx.fillStyle = core;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-      ctx.fill();
+  function ring(x, y, r, w, color, alpha) {
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 
-      if (n === selected) {
-        // Hover wins over the pin: keep the pinned ring, but subtle when outside the hover ego set.
-        ctx.strokeStyle = focusSet.has(n.id) ? 'rgba(110,231,255,0.9)' : 'rgba(110,231,255,0.35)';
-        ctx.lineWidth = 2 / k;
+  function drawTierNode(n, x, y, a) {
+    const r = n.vr, hex = n.hex;
+    ctx.fillStyle = hex;
+    ctx.strokeStyle = hex;
+    switch (n.tier) {
+      case 'core':
+        ctx.globalAlpha = a;
+        ctx.fillStyle = CORE_COLOR;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        ring(x, y, r + 3, 1, CORE_COLOR, a);
+        ring(x, y, r + 6, 1, CORE_COLOR, a);
+        break;
+      case 'domain': // diamond: a square rotated 45deg, r = half-diagonal
+        ctx.globalAlpha = a;
+        ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill();
+        ring(x, y, r + 3, 1, hex, a);
+        break;
+      case 'sub-domain': { // rounded square, 2px corner
+        ctx.globalAlpha = 0.95 * a;
+        const c = 2, l = x - r, t = y - r, w = r * 2;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + 5 / k, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (n === hovered) {
-        ctx.strokeStyle = 'rgba(110,231,255,0.45)';
-        ctx.lineWidth = 1.5 / k;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r + 3 / k, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.moveTo(l + c, t); ctx.lineTo(l + w - c, t); ctx.arcTo(l + w, t, l + w, t + c, c);
+        ctx.lineTo(l + w, t + w - c); ctx.arcTo(l + w, t + w, l + w - c, t + w, c);
+        ctx.lineTo(l + c, t + w); ctx.arcTo(l, t + w, l, t + w - c, c);
+        ctx.lineTo(l, t + c); ctx.arcTo(l, t, l + c, t, c);
+        ctx.closePath(); ctx.fill();
+        break;
+      }
+      case 'cluster': // triangle, point up
+        ctx.globalAlpha = 0.85 * a;
+        ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r * 0.866, y + r * 0.5); ctx.lineTo(x - r * 0.866, y + r * 0.5); ctx.closePath(); ctx.fill();
+        break;
+      case 'end':
+        ctx.globalAlpha = 0.75 * a;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        break;
+      default: // orphan: hollow, 1px kind stroke
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.6 * a;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---- Labels (design §9) ----------------------------------------------------------
+  // Zoom factor kz = 1.0 at fit-to-view. Gates: sub-domain 1.5, cluster 2.5, end 4; core/domain always;
+  // orphan, hovered, selected only on interaction. 10% hysteresis (show at k, hide at 0.9k), 150ms fade,
+  // cap 40 on screen by tier then gravity, collisions through a spatial grid (no pairwise loop).
+  const LABEL_CAP = 40;
+  const LABEL_FADE_MS = 150;
+  const LABEL_CELL = 48;
+  let labelT = 0;
+
+  function labelFont(n) {
+    const big = n.tier === 'core' || n.tier === 'domain';
+    return `${big ? 650 : 500} ${big ? 13.5 : 11.5}px ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif`;
+  }
+
+  function drawLabels(focus, focusSet, now) {
+    const { k, tx, ty, fitK } = view;
+    const kz = k / (fitK || 1);
+    const dt = labelT ? Math.min(100, now - labelT) : 0;
+    labelT = now;
+    const cands = [];
+    for (const n of graph.nodes) {
+      if (isKindHidden(n)) { n.lblOn = false; n.lblA = 0; continue; }
+      const forced = n === hovered || n === selected;
+      let on = false; // orphan: forced only
+      if (n.tier === 'core' || n.tier === 'domain') on = true;
+      else if (n.tier === 'sub-domain') on = n.lblOn ? kz >= 0.9 * 1.5 : kz >= 1.5;
+      else if (n.tier === 'cluster') on = n.lblOn ? kz >= 0.9 * 2.5 : kz >= 2.5;
+      else if (n.tier === 'end') on = n.lblOn ? kz >= 0.9 * 4 : kz >= 4;
+      n.lblOn = on; // gate state carried between frames: this is the hysteresis
+      if (on || forced) {
+        const sx = n.x * k + tx, sy = n.y * k + ty;
+        if (sx >= -100 && sx <= view.w + 100 && sy >= -20 && sy <= view.h + 20) cands.push(n);
       }
     }
+    // Forced labels first, then tier priority, then gravity.
+    cands.sort((a, b) => ((b === hovered || b === selected) - (a === hovered || a === selected))
+      || TIER_RANK[a.tier] - TIER_RANK[b.tier] || b.gravity - a.gravity);
 
-    // Labels in screen space (crisp at any zoom)
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const grid = new Map();
+    const placed = new Set();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.lineJoin = 'round';
-    for (const n of graph.nodes) {
-      if (isKindHidden(n)) continue;
-      const inFocus = focusSet.has(n.id);
-      const show = n.type === 'cluster' || k > 1.05 || inFocus;
-      if (!show) continue;
-      if (focus && !inFocus && n.type !== 'cluster') continue;
-      const sx = n.x * k + tx;
-      const sy = n.y * k + ty;
-      if (sx < -200 || sx > view.w + 200 || sy < -50 || sy > view.h + 50) continue;
-      const isCluster = n.type === 'cluster';
-      const size = isCluster ? 13.5 : 11.5;
-      ctx.font = `${isCluster ? 650 : 500} ${size}px ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif`;
-      const dim = focus && !inFocus;
+    for (const n of cands) {
+      if (placed.size >= LABEL_CAP) break;
+      ctx.font = labelFont(n);
       const label = n.label.length > 42 ? n.label.slice(0, 40) + '…' : n.label;
-      const y = sy + n.r * k + 6;
+      if (n.lblW < 0 || n.lblFont !== ctx.font) { n.lblW = ctx.measureText(label).width; n.lblFont = ctx.font; }
+      const sx = n.x * k + tx, y = n.y * k + ty + n.vr + 6;
+      const x0 = sx - n.lblW / 2, x1 = sx + n.lblW / 2, y0 = y, y1 = y + 15;
+      const cx0 = Math.floor(x0 / LABEL_CELL), cx1 = Math.floor(x1 / LABEL_CELL);
+      const cy0 = Math.floor(y0 / LABEL_CELL), cy1 = Math.floor(y1 / LABEL_CELL);
+      let hit = false;
+      for (let cx = cx0; cx <= cx1 && !hit; cx++) {
+        for (let cy = cy0; cy <= cy1 && !hit; cy++) {
+          const cell = grid.get(cx * 100003 + cy);
+          if (cell) for (const r of cell) if (x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]) { hit = true; break; }
+        }
+      }
+      if (hit && n !== hovered && n !== selected) continue;
+      const rect = [x0, y0, x1, y1];
+      for (let cx = cx0; cx <= cx1; cx++) for (let cy = cy0; cy <= cy1; cy++) {
+        const key = cx * 100003 + cy;
+        const cell = grid.get(key);
+        if (cell) cell.push(rect); else grid.set(key, [rect]);
+      }
+      placed.add(n);
+    }
+
+    let fading = false;
+    for (const n of graph.nodes) {
+      const target = placed.has(n) ? 1 : 0;
+      if (reducedMotion || !dt) n.lblA = target;
+      else if (n.lblA < target) n.lblA = Math.min(target, n.lblA + dt / LABEL_FADE_MS);
+      else if (n.lblA > target) n.lblA = Math.max(target, n.lblA - dt / LABEL_FADE_MS);
+      if (n.lblA <= 0) continue;
+      if (n.lblA !== target) fading = true;
+      const dim = focus && !focusSet.has(n.id);
+      const big = n.tier === 'core' || n.tier === 'domain';
+      ctx.font = labelFont(n);
+      const label = n.label.length > 42 ? n.label.slice(0, 40) + '…' : n.label;
+      const sx = n.x * k + tx, y = n.y * k + ty + n.vr + 6;
+      ctx.globalAlpha = n.lblA * (dim ? 0.35 : 1);
       ctx.lineWidth = 4;
       ctx.strokeStyle = 'rgba(7,8,13,0.85)';
       ctx.strokeText(label, sx, y);
-      ctx.fillStyle = dim ? 'rgba(233,234,242,0.3)' : isCluster ? 'rgba(244,244,250,0.96)' : 'rgba(200,203,220,0.9)';
+      ctx.fillStyle = big ? 'rgba(244,244,250,0.96)' : 'rgba(200,203,220,0.9)';
       ctx.fillText(label, sx, y);
     }
+    ctx.globalAlpha = 1;
+    if (fading) { needsDraw = true; requestRender(); }
   }
 
   // Faint dot grid in world space gives a sense of pan/zoom.
@@ -1709,7 +1838,7 @@ function expandQueryVariants(q, groups) {
   }
 
   function zoomAt(sx, sy, factor) {
-    const k2 = clamp(view.k * factor, MIN_K, MAX_K);
+    const k2 = clamp(view.k * factor, MIN_K, Math.max(MAX_K, view.fitK * 5)); // end labels (kz 4) must stay reachable
     const f = k2 / view.k;
     view.tx = sx - (sx - view.tx) * f;
     view.ty = sy - (sy - view.ty) * f;
@@ -1730,7 +1859,7 @@ function expandQueryVariants(q, groups) {
     const ah = Math.max(100, view.h - padTop - padBottom);
     const k = clamp(Math.min(aw / (maxX - minX || 1), ah / (maxY - minY || 1)), MIN_K, 1.6);
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-    return { k, tx: view.w / 2 - cx * k, ty: padTop + ah / 2 - cy * k };
+    return { k, fitK: k, tx: view.w / 2 - cx * k, ty: padTop + ah / 2 - cy * k };
   }
 
   function fitView(animate = true) {
@@ -1738,6 +1867,7 @@ function expandQueryVariants(q, groups) {
   }
 
   function animateViewTo(target, animate = true) {
+    if (target.fitK) view.fitK = target.fitK; // label zoom factor kz = k / fitK (1.0 at fit-to-view)
     if (!animate || reducedMotion) {
       Object.assign(view, target);
       viewAnim = null;
@@ -1766,13 +1896,12 @@ function expandQueryVariants(q, groups) {
   }
 
   function nodeAt(sx, sy) {
-    const p = screenToWorld(sx, sy);
-    const slop = 6 / view.k;
+    // Screen-space tier radius + slop; hidden kinds are not hit-testable (same set the draw path honours).
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
       if (isKindHidden(n)) continue;
-      const dx = n.x - p.x, dy = n.y - p.y;
-      const r = n.r + slop;
+      const dx = n.x * view.k + view.tx - sx, dy = n.y * view.k + view.ty - sy;
+      const r = n.vr + 6;
       if (dx * dx + dy * dy <= r * r) return n;
     }
     return null;
@@ -1940,9 +2069,8 @@ function expandQueryVariants(q, groups) {
 
   // Panel dot in the node's registry colour (overrides the per-type CSS colour).
   function kindDot(n) {
-    const d = el('i', { class: 'dot dot-' + n.type });
-    d.style.background = n.hex || UNASSIGNED_COLOR;
-    d.style.boxShadow = '0 0 10px ' + (n.hex || UNASSIGNED_COLOR);
+    const d = el('i', { class: 'dot' });
+    d.style.setProperty('--dot-color', n.hex || UNASSIGNED_COLOR);
     return d;
   }
 
@@ -3625,7 +3753,7 @@ function expandQueryVariants(q, groups) {
         btn.type = 'button';
         btn.setAttribute('aria-pressed', window._hiddenKinds.has(kind) ? 'false' : 'true');
         const sw = document.createElement('i');
-        sw.className = 'u-swatch';
+        sw.className = 'u-swatch u-swatch-diamond'; // domain-tier shape = the kind's mark (design §9)
         sw.style.background = known ? kindHex.get(kind) : UNASSIGNED_COLOR;
         const name = document.createElement('span');
         name.className = 'u-legend-name';

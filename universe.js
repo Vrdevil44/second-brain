@@ -22,12 +22,29 @@ function searchRankOf(node) {
 (function () {
   'use strict';
 
+  // ---- Tier ladder (design §3.2; twin of tierOf in app.js, same rule) --------
+  // Tier is derived from graph data: core / domain hub / orphan (degree 0) / end. An optional
+  // `tier` on the node ('sub-domain' | 'cluster') wins over end/orphan, never over core/domain.
+  // 3D size is the ladder only: the graph's `size` field is not a size input.
+  const TIER_VAL = { core: 24, domain: 14, 'sub-domain': 10, cluster: 7, orphan: 3 };
+  function tierOf(n, degree) {
+    if (String(n.id) === 'core') return 'core';
+    if (n.node === 'domain-hub') return 'domain';
+    if (n.tierHint === 'sub-domain' || n.tierHint === 'cluster') return n.tierHint;
+    return degree === 0 ? 'orphan' : 'end';
+  }
+  function tierVal(n) {
+    if (!n) return TIER_VAL.orphan;
+    if (n.tier === 'end') return 3 + Math.min(1, Math.max(0, +n.gravity || 0)); // 3-4 by gravity
+    return TIER_VAL[n.tier] || TIER_VAL.orphan;
+  }
+
   // ---- Fresh nodes (new/updated in last 60s) -----------------------------------
   // Nodes that just arrived via sync glow brightly for 60 seconds so they're
   // unmissable, regardless of when you logged in.
   const freshNodes = new Map(); // id -> timestamp
   const FRESH_MS = 60 * 1000;
-  const FRESH_COLOR = '#ffffff';
+  const FRESH_COLOR = '#f1f4fa'; // --text-1 (design §3.5 token)
 
   function markFresh(ids) {
     const now = Date.now();
@@ -358,7 +375,8 @@ function searchRankOf(node) {
       const node = {
         id,
         name: String(n.label == null ? id : n.label),
-        val: Math.max(1, Number(n.size) || 1) * (1 + 0.6 * grav), // marginally larger when heavy; never a bubble
+        val: 3, // placeholder: the tier ladder sets it once degrees are known (below)
+        tierHint: n.tier,
         gravity: grav,
         color: kindColor(n),
         domain: String(n.domain || ''),
@@ -399,6 +417,10 @@ function searchRankOf(node) {
     for (const e of edges) {
       adj.get(e.source).push({ edge: e, other: e.target, dir: 'out' });
       if (e.target !== e.source) adj.get(e.target).push({ edge: e, other: e.source, dir: 'in' });
+    }
+    for (const n of nodes) {
+      n.tier = tierOf(n, (adj.get(n.id) || []).length);
+      n.val = tierVal(n);
     }
     // The "core" is the mesh's centre of gravity — the heaviest node,
     // where each beat's pulse originates and which breathes when idle.
@@ -934,7 +956,8 @@ function searchRankOf(node) {
     const b = h('button', 'u-legend-row');
     b.type = 'button';
     b.setAttribute('aria-pressed', 'true');
-    const sw = h('i', 'u-swatch' + (kind === 'type' ? ' u-swatch-line' : ''));
+    // Kind rows carry the domain-tier shape (diamond) in the kind colour; relation rows stay line marks.
+    const sw = h('i', 'u-swatch' + (kind === 'type' ? ' u-swatch-line' : ' u-swatch-diamond'));
     sw.style.background = color;
     b.append(sw, h('span', 'u-legend-name', label || key), h('small', 'u-legend-count', String(count)));
     b.addEventListener('click', () => {
@@ -1297,13 +1320,7 @@ function searchRankOf(node) {
       .backgroundColor('rgba(0,0,0,0)') // transparent: deep-space background shows through
       .showNavInfo(false)
       .nodeId('id')
-      .nodeVal((n) => {
-        // His call 2026-10-17: core largest, domain hubs medium, end nodes smallest.
-        if (!n) return 4;
-        if (n.id === 'core') return 8;
-        if (n.id && String(n.id).startsWith('domain-')) return 6;
-        return (n.val || 4);
-      })
+      .nodeVal(tierVal) // tier ladder (design §3.2); 'val'/'size' fields are not inputs
       .nodeColor('color')
       // Node variety (his call): seeded size jitter so the brain looks organic,
       // not uniform. Opacity stays full — nodes must glow like stars, never faint.
