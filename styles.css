@@ -266,6 +266,25 @@ a:hover { color: #b0a6ff; }
   padding: 0 0 8px;
   border-bottom: 1px solid var(--border);
 }
+#processes,
+#system-health {
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+#processes-list li,
+#health-list li { list-style: none; }
+.proc-kind {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-3);
+}
+.health-k {
+  display: inline-block;
+  min-width: 92px;
+  color: var(--text-3);
+}
 .waiting-you-title {
   margin: 0 0 6px;
   font-size: 10px;

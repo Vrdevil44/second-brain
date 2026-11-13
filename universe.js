@@ -2375,6 +2375,14 @@ function searchRankOf(node) {
         sweepRing();
         break;
       }
+      case 'birth': {
+        // A new fact lands: light its nodes; the companion merge event sweeps.
+        const bUntil = Date.now() + 60000;
+        liveIds.forEach((id, i) => setTimeout(() => {
+          if (S && S.live && S.live.on) { S.live.glow.set(String(id), { kind: 'fresh', until: bUntil }); updateFocus(); }
+        }, i * 150));
+        break;
+      }
       // 'beat': the beat already pulses via onBeat — no extra motion.
       // 'demand_resolved': resolution is the absence of demands — nothing to add.
     }

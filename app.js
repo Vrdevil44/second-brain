@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ed3f1bb');
-        await loadScriptOnce('universe.js?v=ed3f1bb');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=808b64a');
+        await loadScriptOnce('universe.js?v=808b64a');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3518,6 +3518,97 @@ function expandQueryVariants(q, groups) {
     } catch (e) { /* a failed fetch keeps the last good list */ }
   }
 
+  const PROC_KINDS = ['merge', 'training', 'arrival', 'birth', 'pipeline'];
+  let healthFloor = null; // newest health object seen on any live payload
+  let procHealthSig = '';
+  function renderProcessesHealth(st) {
+    const procList = $('#processes-list');
+    const healthList = $('#health-list');
+    if (!procList || !healthList || !st) return;
+    if (st.health && typeof st.health === 'object') healthFloor = st.health;
+    const health = st.health || healthFloor;
+    const procs = (Array.isArray(st.activity) ? st.activity : [])
+      .filter((a) => a && PROC_KINDS.includes(a.kind)).slice(-8);
+    const sig = JSON.stringify([
+      procs.map((p) => [p.t, p.kind, p.label]),
+      health && [health.at, health.services, health.ci && health.ci.conclusion,
+        health.training && health.training.stamp, health.heartbeat && health.heartbeat.beat],
+    ]);
+    if (sig === procHealthSig) return;
+    procHealthSig = sig;
+
+    procList.innerHTML = '';
+    procs.forEach((p) => {
+      const li = document.createElement('li');
+      const main = document.createElement('div');
+      const kind = document.createElement('span');
+      kind.className = 'proc-kind';
+      kind.textContent = p.kind;
+      main.appendChild(kind);
+      main.appendChild(document.createTextNode(' ' + String(p.label == null ? '' : p.label)));
+      const when = document.createElement('div');
+      when.className = 'u-time';
+      when.textContent = new Date(p.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      li.appendChild(main);
+      li.appendChild(when);
+      procList.appendChild(li);
+    });
+    $('#processes').hidden = procs.length === 0;
+
+    healthList.innerHTML = '';
+    let healthRows = 0;
+    const addRow = (label, value) => {
+      const li = document.createElement('li');
+      const k = document.createElement('span');
+      k.className = 'health-k';
+      k.textContent = String(label);
+      li.appendChild(k);
+      li.appendChild(document.createTextNode(String(value)));
+      healthList.appendChild(li);
+      healthRows++;
+    };
+    if (health && typeof health === 'object') {
+      const b = health.box;
+      if (b && typeof b === 'object') {
+        const parts = [];
+        if (Number.isFinite(b.load1)) parts.push('load ' + b.load1);
+        if (Number.isFinite(b.mem_free_mb) && Number.isFinite(b.mem_total_mb)) {
+          parts.push('memory ' + b.mem_free_mb + ' MB free of ' + Math.round(b.mem_total_mb / 102.4) / 10 + ' GB');
+        }
+        if (Number.isFinite(b.disk_free_gb)) parts.push('disk ' + b.disk_free_gb + ' GB free');
+        if (parts.length) addRow('Box', parts.join(' · '));
+      }
+      if (Number.isFinite(health.backend_uptime_s)) {
+        addRow('Backend', 'up ' + fmtFreshAge(health.backend_uptime_s * 1000).replace(/ old$/, ''));
+      }
+      const hb = health.heartbeat;
+      if (hb && typeof hb === 'object') {
+        addRow('Heartbeat', 'beat ' + hb.beat + (hb.age_s != null ? ' · ' + fmtFreshAge(hb.age_s * 1000) : ''));
+      }
+      Object.entries(health.services || {}).forEach(([name, word]) => {
+        if (word == null) return; // a failed probe is not a service state
+        addRow(name, word);
+      });
+      const ts = health.tailscale;
+      if (ts && ts.ok) addRow('Tailscale', 'watchdog ok' + (ts.age_s != null ? ' · checked ' + fmtFreshAge(ts.age_s * 1000) : ''));
+      const ci = health.ci;
+      if (ci && typeof ci === 'object') {
+        addRow('GitHub checks', (ci.workflow ? ci.workflow + ' — ' : 'Latest run — ') + (ci.conclusion || ci.status || '')
+          + (ci.at ? ' · ' + fmtFreshAge(Date.now() - Date.parse(ci.at)) : ''));
+      }
+      const tr = health.training;
+      if (tr && typeof tr === 'object') {
+        addRow('GPU training', 'last run ' + tr.stamp
+          + (tr.gate ? ' · gate ' + tr.gate + (tr.wired ? ' · wired live' : tr.gate === 'pass' ? '' : ' · incumbent kept') : '')
+          + ' · runs again at 50 new facts or 7 days');
+      }
+      if (health.sync_age_s !== undefined) {
+        addRow('Sync', health.sync_age_s == null ? 'no relay contact yet' : 'last relay ' + fmtFreshAge(health.sync_age_s * 1000));
+      }
+    }
+    $('#system-health').hidden = healthRows === 0;
+  }
+
   function appendBeatUpdates(st) {
     const list = $('#updates-list');
     if (!list || !st) return;
@@ -3526,7 +3617,8 @@ function expandQueryVariants(q, groups) {
     renderFreshness();
     const waitingSig = ((st.demands_top || []).join('\n')) + '|' + (st.demands_open || 0);
     if (waitingSig !== waitingDemandsSig) { waitingDemandsSig = waitingSig; renderWaitingYou(st); }
-    const demands = Array.isArray(st.demands) ? st.demands.filter(Boolean).slice(0, 5) : [];
+    renderProcessesHealth(st);
+    const demands = Array.isArray(st.demands)? st.demands.filter(Boolean).slice(0, 5) : [];
     if (!demands.length) return; // silence holds: quiet beats add nothing
     // Drop the Loading/token placeholder once real entries exist.
     if (!list.querySelector('li:not(.muted)')) {
