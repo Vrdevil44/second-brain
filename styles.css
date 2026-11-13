@@ -1723,3 +1723,9 @@ body:not(.view-3d) .onebar-toggle { bottom: 172px; right: 18px; }
    universal rule so no region can grow a visible bar back.) */
 * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { display: none; }
+
+/* ---------- Mode chip: LIVE / FALLBACK / BAKED beside the graph meta ---------- */
+.mode-chip { display: inline-block; margin-top: 4px; padding: 1px 8px; font-size: 10px; letter-spacing: 0.14em; border-radius: 999px; color: #9aa7bd; border: 1px solid rgba(154, 167, 189, 0.35); }
+.mode-chip[hidden] { display: none; }
+.mode-chip[data-mode="LIVE"] { color: var(--success); border-color: currentColor; }
+.mode-chip[data-mode="FALLBACK"] { color: var(--warn); border-color: rgba(255, 181, 71, 0.4); }

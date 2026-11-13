@@ -698,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ad26bcf');
-        await loadScriptOnce('universe.js?v=ad26bcf');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=9f1a300');
+        await loadScriptOnce('universe.js?v=9f1a300');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1012,6 +1012,12 @@ function expandQueryVariants(q, groups) {
   // (never localStorage/sessionStorage); a reload drops it and the lock screen
   // asks for the password again.
   let portalToken = null;
+  let windowBrokenFlag = false;
+  let windowMintFailures = 0;
+  function noteWindowFailure() {
+    windowMintFailures += 1;
+    if (windowMintFailures >= 3) windowBrokenFlag = true;
+  }
   let portalDeviceToken = null; // memory only; sealed into the remembered record
   let sessionFromRemembered = false;
   let deviceExchange = null;    // shared in-flight exchange promise
@@ -1035,6 +1041,12 @@ function expandQueryVariants(q, groups) {
         const body = res.ok ? await res.json() : null;
         if (!body || typeof body.token !== 'string') return false;
         portalToken = body.token;
+        if (liveSseEs) { try { liveSseEs.close(); } catch (e) {} liveSseEs = null; }
+        liveSseOpen = false;
+        liveSseRetryAt = 0;
+        ensureLiveStream();
+        fetchLiveState();
+        if (window.askBar && askBar.refresh) askBar.refresh();
         if (window.askBar && askBar.syncThread) askBar.syncThread();
         refreshWaitingGate();
         scheduleBrainInitiate();
@@ -1047,12 +1059,12 @@ function expandQueryVariants(q, groups) {
   // persisted) and run it through the ordinary device exchange.
   let windowMint = null;
   let lastWindowMintAt = 0;
-  function windowSession() {
+  function windowSession(opts) {
     if (windowMint) return windowMint;
     const base = liveApiBase();
     if (!(window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true) || !base || typeof fetch !== 'function') return Promise.resolve(false);
     const now = Date.now();
-    if (now - lastWindowMintAt < 30000) return Promise.resolve(false);
+    if (!(opts && opts.force) && now - lastWindowMintAt < 30000) return Promise.resolve(false);
     lastWindowMintAt = now;
     windowMint = (async () => {
       try {
@@ -1067,11 +1079,20 @@ function expandQueryVariants(q, groups) {
           signal: ctl.signal,
         });
         clearTimeout(timer);
-        const body = res.ok ? await res.json() : null;
-        if (!body || typeof body.device_token !== 'string') return false;
+        if (!res.ok) {
+          if (res.status === 404 || res.status === 403) windowBrokenFlag = true;
+          else noteWindowFailure();
+          return false;
+        }
+        const body = await res.json().catch(() => null);
+        if (!body || typeof body.device_token !== 'string') { noteWindowFailure(); return false; }
+        windowBrokenFlag = false;
+        windowMintFailures = 0;
         portalDeviceToken = body.device_token;
-        return await exchangeDeviceToken();
-      } catch (e) { return false; }
+        const okExchange = await exchangeDeviceToken();
+        if (!okExchange) noteWindowFailure();
+        return okExchange;
+      } catch (e) { noteWindowFailure(); return false; }
     })().finally(() => { windowMint = null; });
     return windowMint;
   }
@@ -1143,6 +1164,7 @@ function expandQueryVariants(q, groups) {
     const rest = url.slice(base.length).split('?')[0];
     return LIVE_GATED_PATHS.indexOf(rest) !== -1 ? rest : '';
   }
+  function liveAuthFailApplies(sentToken, currentToken) { return !!sentToken && sentToken === currentToken; }
   if (typeof window.fetch === 'function') {
     const plainFetch = window.fetch.bind(window);
     window.fetch = function (input, init) {
@@ -1150,8 +1172,10 @@ function expandQueryVariants(q, groups) {
       if (!liveGatedPath(url)) return plainFetch(input, init);
       const next = Object.assign({}, init || {});
       next.headers = liveAuthHeaders(next.headers);
+      const sentToken = (next.headers && typeof next.headers.Authorization === 'string' && next.headers.Authorization.indexOf('Bearer ') === 0) ? next.headers.Authorization.slice(7) : null;
       return plainFetch(input, next).then(async (res) => {
         if (!res || res.status !== 401) return res;
+        if (!liveAuthFailApplies(sentToken, portalToken)) return res;
         const fresh = await liveAuthFail();
         const method = String(next.method || 'GET').toUpperCase();
         const replayable = method === 'GET' || (method === 'POST' && typeof next.body === 'string');
@@ -1255,6 +1279,14 @@ function expandQueryVariants(q, groups) {
   let convergeRetry = 0;
   const sseHealthy = () => !!(liveSseOpen && lastPingAt && Date.now() - lastPingAt <= 45000);
   const liveModeWord = () => (sseHealthy() ? 'LIVE' : ((!graphData || !liveApiBase()) ? 'BAKED' : 'FALLBACK'));
+  function renderModeChip() {
+    const chip = $('#mode-chip');
+    if (!chip) return;
+    const word = liveModeWord();
+    chip.textContent = word;
+    chip.dataset.mode = word;
+    chip.hidden = !graphData;
+  }
 
   function storeSseState(b) {
     if (b && typeof b.beat === 'number' && (!liveSseState || fresherLiveState(liveSseState.st, b) === b)) {
@@ -3240,7 +3272,8 @@ function expandQueryVariants(q, groups) {
       btn.setAttribute('aria-pressed', 'false');
       if (note) {
         const st = askBar.askState(askSnapshot());
-        note.textContent = st === 'gateoff' ? 'The portal gate is off, so live switch state is unavailable right now.'
+        const gateOffBuild = !!(window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF);
+        note.textContent = (gateOffBuild && (st === 'connecting' || st === 'unreachable')) ? 'The portal gate is off, so live switch state is unavailable right now.'
           : st === 'notoken' ? 'Unlock the portal to see the live switch state.'
           : 'The switch state could not be read just now.';
       }
@@ -3532,9 +3565,11 @@ function expandQueryVariants(q, groups) {
   }
   function renderFreshness() {
     const el = $('#data-freshness');
-    if (!el) return;
-    const t = (freshState && freshState.ts) ? Date.parse(freshState.ts) : NaN;
-    el.textContent = liveModeWord() + (Number.isFinite(t) ? ' · data ' + fmtFreshAge(Date.now() - t) : '');
+    if (el) {
+      const t = (freshState && freshState.ts) ? Date.parse(freshState.ts) : NaN;
+      el.textContent = liveModeWord() + (Number.isFinite(t) ? ' · data ' + fmtFreshAge(Date.now() - t) : '');
+    }
+    renderModeChip();
   }
   setInterval(renderFreshness, 30000);
   renderFreshness();
@@ -3762,6 +3797,7 @@ function expandQueryVariants(q, groups) {
     if (!list || !st) return;
     updateBeatPill(st);
     freshState = st;
+    renderModeChip();
     renderFreshness();
     const waitingSig = ((st.demands_top || []).join('\n')) + '|' + (st.demands_open || 0);
     if (waitingSig !== waitingDemandsSig) { waitingDemandsSig = waitingSig; renderWaitingYou(st); }
@@ -4396,11 +4432,11 @@ function expandQueryVariants(q, groups) {
     return new Set(nodes.map((n) => String(n.id)));
   };
 
-  askBar.STATE_WORDS = { gateoff: 'Live asking is paused while the portal gate is off.', notoken: 'Unlock the portal to ask the brain.', unreachable: 'The brain is not reachable right now. Asking works again when it answers.', asleep: 'The brain is asleep right now. Try again in a minute.', live: '', nobase: 'Live asking is not configured on this door.' };
+  askBar.STATE_WORDS = { connecting: 'Connecting to the brain…', notoken: 'Unlock the portal to ask the brain.', unreachable: 'The brain is not reachable right now. Asking works again when it answers.', asleep: 'The brain is asleep right now. Try again in a minute.', live: '', nobase: 'Live asking is not configured on this door.' };
   askBar.askState = function (snap) {
     const s = snap || {};
     if (!s.hasBase) return 'nobase';
-    if (s.gateOff && !s.hasToken) return 'gateoff';
+    if (s.gateOff && !s.hasToken) return s.windowBroken ? 'unreachable' : 'connecting';
     if (!s.hasToken) return 'notoken';
     if (s.live && !s.sleeping) return 'live';
     if (s.sleeping) return 'asleep';
@@ -4419,6 +4455,7 @@ function expandQueryVariants(q, groups) {
       live: !!(v && v.live),
       sleeping: sleeping,
       hasBase: !!liveApiBase(),
+      windowBroken: (typeof windowBrokenFlag !== 'undefined' && !!windowBrokenFlag),
     };
   }
 
@@ -4549,8 +4586,25 @@ function expandQueryVariants(q, groups) {
   askBar.submit = async function () {
     if (askBar.busy) return;
     if (askBar.attachments.length) { await askBar.fileDump(); return; }
-    const gateState = askBar.askState(askSnapshot());
-    if (gateState === 'gateoff' || gateState === 'nobase' || gateState === 'notoken') {
+    let gateState = askBar.askState(askSnapshot());
+    if (gateState === 'connecting') {
+      askBar.busy = true;
+      askBar.refresh();
+      if (deviceExchange) { try { await deviceExchange; } catch (e) { /* fall through to a fresh mint */ } }
+      gateState = askBar.askState(askSnapshot());
+      if (gateState === 'connecting') {
+        try { await Promise.race([windowSession({ force: true }), new Promise((r) => setTimeout(r, 12000))]); } catch (e) { /* re-snapshot below decides */ }
+        gateState = askBar.askState(askSnapshot());
+      }
+      if (gateState === 'connecting' || gateState === 'notoken') {
+        askBar.busy = false;
+        askBar.showWords(askBar.STATE_WORDS.connecting);
+        askBar.refresh();
+        return;
+      }
+      // Session landed: fall through; busy is already set (the set below is idempotent).
+    }
+    if (gateState === 'nobase' || gateState === 'notoken') {
       askBar.showWords(askBar.STATE_WORDS[gateState]);
       askBar.refresh();
       return;
