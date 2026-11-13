@@ -1,0 +1,24 @@
+{
+  "generatedFrom": "45ca16605d96c921d409559753427b0986ff5f8b0b615a02111d41bb25d1f0a7",
+  "facts": {
+    "total": 1845,
+    "active": 1073,
+    "contested": 0,
+    "superseded": 546,
+    "dormant": 226,
+    "live": 1073
+  },
+  "graph": {
+    "nodes": 911,
+    "edges": 1227,
+    "hubs": 7,
+    "core": 1,
+    "coreFacts": 31,
+    "projected": {
+      "skills": 10,
+      "dictionaries": 3,
+      "questions": 0
+    },
+    "factsAsNodes": 890
+  }
+}

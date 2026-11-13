@@ -121,12 +121,13 @@ function expandQueryVariants(q, groups) {
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json, mfa.json, live-state.json and knowledge-base.json, only GET.
+      // Same origin: only graph.json, census.json, mfa.json, live-state.json and knowledge-base.json, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
       const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
       const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
       const isKb = u.pathname.endsWith('/knowledge-base.json') || u.pathname === '/knowledge-base.json';
-      if (m === 'GET' && (isGraph || isMfa || isLive || isKb) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      const isCensus = u.pathname.endsWith('/census.json') || u.pathname === '/census.json';
+      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       // R3: aliases.json (public subset) is also readable, GET only.
       const isAliases = u.pathname.endsWith('/aliases.json') || u.pathname === '/aliases.json';
       if (m === 'GET' && isAliases) return;
@@ -691,8 +692,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=a706b2c');
-        await loadScriptOnce('universe.js?v=a706b2c');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=d21bfd1');
+        await loadScriptOnce('universe.js?v=d21bfd1');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -790,18 +791,23 @@ function expandQueryVariants(q, groups) {
     try {
       const res = await guardedFetch(CONFIG.graphUrl, { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const body = await res.json();
+      const graphText = await res.text();
+      const body = JSON.parse(graphText);
       // Published site serves the encrypted envelope; a plain graph object
       // means local preview — load it directly.
       let data = body;
+      let hashText = graphText; // the exact text build-graph hashed (plain preview)
       if (isEnvelope(body)) {
         const r = await tryRememberedUnlock(body);
         data = r.data || await unlockWithPassword(body, r.notice);
         startLockWatch();
       }
+      // Decrypted payload is the graph file text; re-serialize it the way build-graph wrote it.
+      if (data !== body) hashText = JSON.stringify(data, null, 2) + '\n';
       graphData = data; // decrypted graph stays in memory only
       $('#open-kb').hidden = false; // KB entry point: only after a full unlock
       await renderView();
+      loadCensus(hashText); // after first paint; same failure discipline: any failure -> no census
       status.textContent = '';
       status.classList.remove('error');
       if (!Array.isArray(data && data.nodes) || !data.nodes.length) status.textContent = 'The graph is empty. Dump something and the nightly organizer will fill it in.';
@@ -811,6 +817,70 @@ function expandQueryVariants(q, groups) {
       status.textContent = 'Couldn\'t load graph.json (' + err.message + '). If you opened index.html straight from disk, serve the folder instead, for example: python3 -m http.server';
       $('#graph-meta').textContent = 'Graph unavailable';
     }
+  }
+
+  // ---- Census (scripts/counts.mjs via build-graph) --------------------------
+  // census.json is published beside graph.json. It is authoritative only when its
+  // generatedFrom equals the SHA-256 of the graph text this portal actually loaded.
+  // It is fetched only after the graph is unlocked (locked mode never reaches it) and
+  // any failure (missing file, bad JSON, no crypto.subtle, hash mismatch) leaves it null.
+  let pairedCensus = null;
+
+  async function loadCensus(graphText) {
+    pairedCensus = null;
+    try {
+      if (!(window.crypto && crypto.subtle)) throw new Error('unhashable');
+      const res = await guardedFetch('census.json', { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const c = await res.json();
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(graphText));
+      const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+      if (c && c.generatedFrom === hex && c.facts && Number.isFinite(c.facts.live)) pairedCensus = c;
+    } catch {
+      pairedCensus = null;
+    }
+    renderRecordCard();
+  }
+
+  // Shared live-state with the paired census's active facts stamped on, so the HUD can trust st.facts.
+  function withCensusFacts(st) {
+    if (!pairedCensus || !st || typeof st !== 'object') return st;
+    return Object.assign({}, st, { facts: pairedCensus.facts.live, facts_source: 'census' });
+  }
+
+  function loadedGraphCounts() {
+    const edges = graph2dBuilt ? graph.edges : (graphData && graphData.edges);
+    return {
+      nodes: graphData && Array.isArray(graphData.nodes) ? graphData.nodes.length : null,
+      edges: Array.isArray(edges) ? edges.length : null,
+    };
+  }
+
+  function renderRecordCard() {
+    const card = $('#record-card');
+    if (!card) return;
+    card.textContent = '';
+    if (!pairedCensus || !graphData) { card.hidden = true; return; }
+    const f = pairedCensus.facts;
+    const g = loadedGraphCounts();
+    const rows = [
+      ['Fact records', f.total], ['Live', f.live], ['Superseded', f.superseded], ['Dormant', f.dormant],
+      ['Nodes', g.nodes], ['Relations', g.edges],
+    ];
+    const title = document.createElement('h3');
+    title.textContent = 'The record';
+    const dl = document.createElement('dl');
+    for (const [label, v] of rows) {
+      const row = document.createElement('div');
+      const dt = document.createElement('dt');
+      const dd = document.createElement('dd');
+      dt.textContent = label;
+      dd.textContent = Number.isFinite(v) ? nf.format(v) : '—';
+      row.append(dt, dd);
+      dl.append(row);
+    }
+    card.append(title, dl);
+    card.hidden = false;
   }
 
   // ---- LIVE heartbeat state -------------------------------------------------
@@ -853,7 +923,8 @@ function expandQueryVariants(q, groups) {
       const unlocked = !!graphData || !!(graph.nodes && graph.nodes.length);
       const edges = graph2dBuilt ? graph.edges : (graphData && graphData.edges); // 3D never builds graph.edges
       return {
-        st: fresherLiveState(liveStateFloor, liveSseState && liveSseState.st),
+        st: withCensusFacts(fresherLiveState(liveStateFloor, liveSseState && liveSseState.st)),
+        census: pairedCensus,
         contactAt: contactAt,
         live: contactAt > 0,
         relations: (unlocked && Array.isArray(edges)) ? edges.length : null,
@@ -1213,7 +1284,7 @@ function expandQueryVariants(q, groups) {
     }
     // Keep-the-max: an older payload (e.g. the baked snapshot) never regresses the floor.
     liveStateFloor = fresherLiveState(liveStateFloor, st);
-    return liveStateFloor || st;
+    return withCensusFacts(liveStateFloor || st);
   }
 
   function buildGraph(data) {
@@ -1272,7 +1343,7 @@ function expandQueryVariants(q, groups) {
     // Meta line in the top bar.
     const parts = [
       nf.format(graph.nodes.length) + ' nodes',
-      nf.format(graph.edges.length) + ' strings',
+      nf.format(graph.edges.length) + ' relations',
     ];
     if (data && data.generated) {
       const d = new Date(data.generated);
