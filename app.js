@@ -693,8 +693,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=1d4f693');
-        await loadScriptOnce('universe.js?v=1d4f693');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=2918b6b');
+        await loadScriptOnce('universe.js?v=2918b6b');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1590,7 +1590,7 @@ function expandQueryVariants(q, groups) {
   }
 
   function resize() {
-    view.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    view.dpr = Math.min(window.devicePixelRatio || 1, window.innerWidth < 640 ? 2 : 2.5);
     view.w = window.innerWidth;
     view.h = window.innerHeight;
     canvas.width = Math.round(view.w * view.dpr);
@@ -4736,11 +4736,14 @@ function expandQueryVariants(q, groups) {
   // labelled replay of a verified row, never a live indicator. History carries
   // ids only; nothing here reads a label off a row.
   var sliderSleep = {};
-  const REPLAY_VERIFIED_BEATS = [765];
+  // Rows whose born ids equal a nightly consolidation report's merged ids exactly (how beat 765 earned its place).
+  // Derived by `brain graph-history --replay-verified` (graph-history.mjs replayVerifiedBeats); the history file
+  // cannot prove this by itself, so the list is baked here and kept honest by test/replay-verified.test.mjs.
+  const REPLAY_VERIFIED_BEATS = [208, 452, 564, 663, 765, 873, 939, 1345, 1461, 1493, 1533, 1629, 1725, 1917];
   const S5_UNAVAILABLE_WORDS = 'History unavailable';
   const S5_NO_RECORD_WORDS = 'No verified consolidation record for this row.';
   const S5_HISTORY_URL = 'graph-history.jsonl';
-  const S5_ID_RE = /^(F-\d+|C-\d+|core|domain-[a-z0-9-]+)$/;
+  const S5_ID_RE = /^(F-\d+|C-\d+|core|domain-[a-z0-9-]+|skill-[a-z0-9-]+|dict-[a-z0-9-]+)$/; // = graph-history.mjs ID_RE
 
   // Slider thumb value -> row index. Always a row, never a beat number.
   sliderSleep.inputToRow = function (value, n) {

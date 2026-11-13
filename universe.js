@@ -1020,6 +1020,7 @@ function searchRankOf(node) {
     if (!S) return;
     const d = size();
     S.graph.width(d.w).height(d.h);
+    applyPixelRatio3D(); // dpr can change with zoom/monitor moves
   }
 
   // Track the input in hand (mouse/pen/touch). Default (nothing seen yet) allows hover.
@@ -1411,6 +1412,10 @@ function searchRankOf(node) {
         }
       }); // end .onEngineStop chain
 
+    // Design §5.5: renderer pixel ratio capped at 2 (phones report 3x). Re-applied on resize.
+    applyPixelRatio3D();
+    motionStart();
+
     // ---- Force tuning: the living-brain layout (his vision 2026-10-16) ----
     // Stronger repulsion -> neurons disperse evenly, the 3D space feels full
     // (bhar bhar) instead of clumping. Confidence gravity -> each node's orbit
@@ -1556,6 +1561,7 @@ function searchRankOf(node) {
 
   function destroy() {
     if (!S) return;
+    motionStop();
     sparksStop(true);
     stopLiving(); // clears timers, fx meshes, ticker/HUD; S still set
     const s = S;
@@ -2115,7 +2121,7 @@ function searchRankOf(node) {
       const obj = n && n.__threeObj;
       if (!n || !obj || !S.visible.has(id)) continue; // not on screen yet: try next poll
       fxSession.born.add(id);
-      if (fxReduced() || !scene) continue; // instant settle: the node is already at scale 1
+      if (fxReduced() || arrivalFadeOff() || !scene) continue; // instant settle (reduced motion, phone budget, or frame guard): the node is already at scale 1
       if (!budgetTake()) continue; // fold: exact final state is scale 1, already applied
       const ring = liveMesh(STREAK_KNOWLEDGE, FX_RING_ALPHA);
       if (ring) scene.add(ring);
@@ -2790,6 +2796,92 @@ function searchRankOf(node) {
   }
   // ==== S5:end ====
 
+  // ==== A3:begin — mobile 3D motion budget + frame guard (design §5.5) ====
+  const FRAME_GUARD_MS = 24;          // median frame time above this sheds motion
+  const FRAME_GUARD_WINDOW_MS = 2000; // rolling window for the median
+  const MOBILE_PACKET_MAX = 6;        // effective packet cap at max-width: 640px (EVENT_PACKET_MAX stays 12)
+  const motion = {
+    mobile: false, mql: null, onMql: null,
+    shed: 0,          // 0 = full motion, 1 = packets off, 2 = packets + arrival fade off
+    raf: 0, last: 0, buf: [], head: 0, okSince: 0, shedAt: 0, checkAt: 0, onVis: null,
+  };
+
+  function applyPixelRatio3D() {
+    try {
+      const r = S && S.graph && typeof S.graph.renderer === 'function' ? S.graph.renderer() : null;
+      if (r && typeof r.setPixelRatio === 'function') r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    } catch (err) { console.error(err); }
+  }
+
+  function packetCap() {
+    return motion.mobile ? Math.min(EVENT_PACKET_MAX, MOBILE_PACKET_MAX) : EVENT_PACKET_MAX;
+  }
+  // Arrival fade/scale: off on phones and once the frame guard has shed stage 2.
+  function arrivalFadeOff() { return motion.mobile || motion.shed >= 2; }
+
+  function median(a) {
+    const b = a.slice().sort((x, y) => x - y);
+    const m = b.length >> 1;
+    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
+  }
+
+  // One rAF callback per frame: a push into a time-bounded array. The median (sort of
+  // <= ~150 samples) runs at most every 250 ms, not per frame.
+  function motionFrame(now) {
+    motion.raf = 0;
+    if (!S) return;
+    motion.raf = requestAnimationFrame(motionFrame);
+    if (motion.last) {
+      motion.buf.push({ t: now, d: now - motion.last });
+      while (motion.buf.length > motion.head && now - motion.buf[motion.head].t > FRAME_GUARD_WINDOW_MS) motion.head++;
+      if (motion.head > 256) { motion.buf = motion.buf.slice(motion.head); motion.head = 0; }
+    }
+    motion.last = now;
+    if (now < motion.checkAt) return;
+    motion.checkAt = now + 250;
+    const win = motion.buf.slice(motion.head);
+    // Need a (nearly) full window of samples before judging.
+    if (win.length < 10 || win[win.length - 1].t - win[0].t < FRAME_GUARD_WINDOW_MS * 0.9) return;
+    const med = median(win.map((f) => f.d));
+    if (med > FRAME_GUARD_MS) {
+      motion.okSince = 0;
+      if (motion.shed === 0) { motion.shed = 1; motion.shedAt = now; console.debug('frame guard: shed packets, median ' + med.toFixed(1) + ' ms'); }
+      else if (motion.shed === 1 && now - motion.shedAt >= FRAME_GUARD_WINDOW_MS) { motion.shed = 2; motion.shedAt = now; console.debug('frame guard: shed arrival fade, median ' + med.toFixed(1) + ' ms'); }
+    } else if (motion.shed) {
+      if (!motion.okSince) motion.okSince = now;
+      if (now - motion.okSince >= FRAME_GUARD_WINDOW_MS) { motion.shed = 0; motion.okSince = 0; console.debug('frame guard: motion restored, median ' + med.toFixed(1) + ' ms'); }
+    }
+  }
+
+  function motionResetWindow() { motion.last = 0; motion.buf = []; motion.head = 0; motion.okSince = 0; motion.checkAt = 0; }
+
+  function motionStart() {
+    motionStop();
+    motion.shed = 0;
+    motionResetWindow();
+    if (window.matchMedia) {
+      motion.mql = window.matchMedia('(max-width: 640px)');
+      motion.mobile = !!motion.mql.matches;
+      motion.onMql = (e) => { motion.mobile = !!e.matches; };
+      if (typeof motion.mql.addEventListener === 'function') motion.mql.addEventListener('change', motion.onMql);
+    }
+    // Hidden tab: rAF is paused; drop the window on both edges so the resume gap is never read as a slow frame.
+    motion.onVis = () => { motionResetWindow(); };
+    document.addEventListener('visibilitychange', motion.onVis);
+    motion.raf = requestAnimationFrame(motionFrame);
+  }
+
+  function motionStop() {
+    if (motion.raf) cancelAnimationFrame(motion.raf);
+    motion.raf = 0;
+    if (motion.mql && motion.onMql && typeof motion.mql.removeEventListener === 'function') motion.mql.removeEventListener('change', motion.onMql);
+    if (motion.onVis) document.removeEventListener('visibilitychange', motion.onVis);
+    motion.mql = motion.onMql = motion.onVis = null;
+    motion.shed = 0;
+    motion.mobile = false;
+  }
+  // ==== A3:end ====
+
   const eventPacketLastAt = new Map(); // edge key -> Date.now() of last event packet (survives re-init)
 
   // ==== U2-SPARKS:begin ====
@@ -3364,7 +3456,9 @@ function searchRankOf(node) {
     if (!s || !t) return false;
     const key = s + '|' + t + '|' + type;
     if (!SP.keys.has(key)) return false; // real rendered relation only
+    if (motion.shed >= 1) return false; // frame guard: packets stop spawning (feed/state unaffected)
     if (SP.strikeSparks.length >= EVENT_PACKET_MAX) return false; // calm cap
+    if (SP.strikeSparks.length >= packetCap()) return false; // tighter effective cap on phones (6)
     const now = Date.now();
     if (now - (eventPacketLastAt.get(key) || 0) < EVENT_PACKET_COOLDOWN_MS) return false;
     eventPacketLastAt.set(key, now);
