@@ -698,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=cf1f313');
-        await loadScriptOnce('universe.js?v=cf1f313');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=a3d9988');
+        await loadScriptOnce('universe.js?v=a3d9988');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -973,6 +973,8 @@ function expandQueryVariants(q, groups) {
       const unlocked = !!graphData || !!(graph.nodes && graph.nodes.length);
       const edges = graph2dBuilt ? graph.edges : (graphData && graphData.edges); // 3D never builds graph.edges
       return {
+        gateOff: !!(window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF),
+        hasToken: (typeof portalToken !== 'undefined' && !!portalToken),
         st: withCensusFacts(fresherLiveState(liveStateFloor, liveSseState && liveSseState.st)),
         census: pairedCensus,
         contactAt: contactAt,
@@ -3180,7 +3182,12 @@ function expandQueryVariants(q, groups) {
     if (brainCtl.window === null) {
       btn.textContent = 'needs live connection';
       btn.setAttribute('aria-pressed', 'false');
-      if (note) note.textContent = 'The brain is not reachable right now, so the switch shows nothing instead of a guess.';
+      if (note) {
+        const st = askBar.askState(askSnapshot());
+        note.textContent = st === 'gateoff' ? 'The portal gate is off, so live switch state is unavailable right now.'
+          : st === 'notoken' ? 'Unlock the portal to see the live switch state.'
+          : 'The switch state could not be read just now.';
+      }
     } else if (brainCtl.window) {
       btn.textContent = 'allowed';
       btn.setAttribute('aria-pressed', 'true');
@@ -4273,7 +4280,6 @@ function expandQueryVariants(q, groups) {
   const askBar = {};
   askBar.lastAnswer = null;
   askBar.busy = false;
-  const ASK_ASLEEP_WORDS = 'brain asleep — asking works on your home network';
   const ASK_SLOW_WORDS = 'brain is slow, try again';
   const ASK_FALLBACK_WORDS = 'the brain could not answer that — try again';
   const ASK_TIMEOUT_MS = 125000;
@@ -4334,14 +4340,31 @@ function expandQueryVariants(q, groups) {
     return new Set(nodes.map((n) => String(n.id)));
   };
 
-  // Asleep = no live contact with the brain (the same signal vitals.js reads).
-  askBar.isAsleep = function () {
-    if (!liveApiBase()) return true;
+  askBar.STATE_WORDS = { gateoff: 'Live asking is paused while the portal gate is off.', notoken: 'Unlock the portal to ask the brain.', unreachable: 'The brain is not reachable right now. Asking works again when it answers.', asleep: 'The brain is asleep right now. Try again in a minute.', live: '', nobase: 'Live asking is not configured on this door.' };
+  askBar.askState = function (snap) {
+    const s = snap || {};
+    if (!s.hasBase) return 'nobase';
+    if (s.gateOff) return 'gateoff';
+    if (!s.hasToken) return 'notoken';
+    if (s.live && !s.sleeping) return 'live';
+    if (s.sleeping) return 'asleep';
+    return 'unreachable';
+  };
+
+  // One way to compute the ask state: vitals read + live base + sleeping class.
+  function askSnapshot() {
     let v = null;
     try { v = window.__brainVitals && window.__brainVitals.read(); } catch (e) { v = null; }
-    const dimmed = document.querySelector('#universe.sleeping, #graph.sleeping');
-    return !v || !v.live || !!dimmed;
-  };
+    let sleeping = false;
+    if (v) { try { sleeping = !!document.querySelector('#universe.sleeping, #graph.sleeping'); } catch (e) { sleeping = false; } }
+    return {
+      gateOff: !!(v && v.gateOff),
+      hasToken: v && typeof v.hasToken === 'boolean' ? v.hasToken : (typeof portalToken !== 'undefined' && !!portalToken),
+      live: !!(v && v.live),
+      sleeping: sleeping,
+      hasBase: !!liveApiBase(),
+    };
+  }
 
   askBar.focusFid = function (fid) {
     if (viewMode === '3d' && window.BrainUniverse && window.BrainUniverse.focusNode) return window.BrainUniverse.focusNode(fid);
@@ -4470,7 +4493,12 @@ function expandQueryVariants(q, groups) {
   askBar.submit = async function () {
     if (askBar.busy) return;
     if (askBar.attachments.length) { await askBar.fileDump(); return; }
-    if (askBar.isAsleep()) { askBar.refresh(); return; }
+    const gateState = askBar.askState(askSnapshot());
+    if (gateState === 'gateoff' || gateState === 'nobase' || gateState === 'notoken') {
+      askBar.setCaption(askBar.STATE_WORDS[gateState], false);
+      askBar.refresh();
+      return;
+    }
     const input = $('#askbar-input');
     const question = String(input.value || '').trim();
     if (!question) { askBar.showWords(ASK_REFUSAL_WORDS.empty_question); return; }
@@ -4503,7 +4531,10 @@ function expandQueryVariants(q, groups) {
       askBar.progressStop();
       // A network failure keeps whatever was last confirmed; nothing is invented.
       if (timedOut) askBar.setCaption(ASK_SLOW_WORDS, false);
-      else askBar.setCaption(ASK_ASLEEP_WORDS, false);
+      else {
+        const failState = askBar.askState(askSnapshot());
+        askBar.setCaption(failState === 'live' ? 'The brain did not answer. Try again.' : askBar.STATE_WORDS[failState], false);
+      }
       askBar.busy = false;
       askBar.refresh();
       return;
@@ -4537,12 +4568,13 @@ function expandQueryVariants(q, groups) {
     if (!bar) return;
     const v = (() => { try { return window.__brainVitals && window.__brainVitals.read(); } catch (e) { return null; } })();
     bar.hidden = !(v && v.unlocked);
-    const asleep = askBar.isAsleep();
+    const state = askBar.askState(askSnapshot());
     const filing = askBar.attachments.length > 0;
-    $('#askbar-asleep').hidden = !asleep;
-    // Filing goes to GitHub, not the brain: being asleep only stops asking.
-    $('#askbar-input').disabled = (asleep && !filing) || askBar.busy;
-    $('#askbar-go').disabled = (asleep && !filing) || askBar.busy;
+    const banner = $('#askbar-asleep');
+    banner.hidden = state === 'live';
+    if (state !== 'live') banner.textContent = askBar.STATE_WORDS[state];
+    $('#askbar-input').disabled = askBar.busy;
+    $('#askbar-go').disabled = askBar.busy;
     $('#askbar-go').textContent = filing ? 'File it' : 'Ask';
     $('#askbar-attach').disabled = askBar.busy;
     $('#askbar-mic').disabled = askBar.busy;
