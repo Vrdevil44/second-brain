@@ -698,8 +698,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f19d92a');
-        await loadScriptOnce('universe.js?v=f19d92a');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ad26bcf');
+        await loadScriptOnce('universe.js?v=ad26bcf');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -857,6 +857,7 @@ function expandQueryVariants(q, groups) {
       await loadKindRegistry(); // before first paint: both renderers colour from it
       $('#open-kb').hidden = false; // KB entry point: only after a full unlock
       await renderView();
+      kickWindowSession();
       loadCensus(hashText); // after first paint; same failure discipline: any failure -> no census
       status.textContent = '';
       status.classList.remove('error');
@@ -1042,6 +1043,41 @@ function expandQueryVariants(q, groups) {
     })().finally(() => { deviceExchange = null; });
     return deviceExchange;
   }
+  // Gate-off window: mint a short-lived window token (memory only, never
+  // persisted) and run it through the ordinary device exchange.
+  let windowMint = null;
+  let lastWindowMintAt = 0;
+  function windowSession() {
+    if (windowMint) return windowMint;
+    const base = liveApiBase();
+    if (!(window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true) || !base || typeof fetch !== 'function') return Promise.resolve(false);
+    const now = Date.now();
+    if (now - lastWindowMintAt < 30000) return Promise.resolve(false);
+    lastWindowMintAt = now;
+    windowMint = (async () => {
+      try {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 5000);
+        const res = await fetch(base + '/api/window-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: ctl.signal,
+        });
+        clearTimeout(timer);
+        const body = res.ok ? await res.json() : null;
+        if (!body || typeof body.device_token !== 'string') return false;
+        portalDeviceToken = body.device_token;
+        return await exchangeDeviceToken();
+      } catch (e) { return false; }
+    })().finally(() => { windowMint = null; });
+    return windowMint;
+  }
+  function kickWindowSession() {
+    if (window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true && !portalToken && !portalDeviceToken) windowSession();
+  }
   function liveAuthHeaders(h) {
     const out = Object.assign({}, h || {});
     if (portalToken) out['Authorization'] = 'Bearer ' + portalToken;
@@ -1055,7 +1091,11 @@ function expandQueryVariants(q, groups) {
     // published plain and there is no envelope to re-lock against — lockNow()
     // would reload-loop. Drop the token only; the gate returns when the
     // flag goes back to false and the payloads are envelopes again.
-    if (window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true) return Promise.resolve(false);
+    if (window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF === true) {
+      portalDeviceToken = null;
+      windowSession(); // rate-guarded; an expired window session re-mints
+      return Promise.resolve(false);
+    }
     if (!sessionFromRemembered) { lockNow(); return Promise.resolve(false); }
     // Remembered session: never lock; try the sealed device token instead.
     if (!portalDeviceToken) return Promise.resolve(false);
@@ -4360,7 +4400,7 @@ function expandQueryVariants(q, groups) {
   askBar.askState = function (snap) {
     const s = snap || {};
     if (!s.hasBase) return 'nobase';
-    if (s.gateOff) return 'gateoff';
+    if (s.gateOff && !s.hasToken) return 'gateoff';
     if (!s.hasToken) return 'notoken';
     if (s.live && !s.sleeping) return 'live';
     if (s.sleeping) return 'asleep';
@@ -4511,7 +4551,7 @@ function expandQueryVariants(q, groups) {
     if (askBar.attachments.length) { await askBar.fileDump(); return; }
     const gateState = askBar.askState(askSnapshot());
     if (gateState === 'gateoff' || gateState === 'nobase' || gateState === 'notoken') {
-      askBar.setCaption(askBar.STATE_WORDS[gateState], false);
+      askBar.showWords(askBar.STATE_WORDS[gateState]);
       askBar.refresh();
       return;
     }
