@@ -1,6 +1,6 @@
 {
   "v": 2,
-  "at": "2026-11-13T12:38:38Z",
+  "at": "2026-11-13T16:23:26Z",
   "state": "idle",
   "words": "All synced \u2014 watching for new arrivals",
   "dial": {
@@ -13,7 +13,7 @@
     "peek": []
   },
   "last": {
-    "at": "2026-11-13T12:38:38Z",
+    "at": "2026-11-13T16:23:26Z",
     "captures": 0,
     "bytes": 0,
     "duration_s": 1
