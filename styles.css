@@ -1032,6 +1032,8 @@ body.view-3d .node-panel { display: none; }
 }
 .u-legend-row:hover { background: var(--surface-2); }
 .u-legend-row.u-off { opacity: .35; }
+.legend-row-static { cursor: default; }
+.legend-row-static:hover { background: transparent; }
 .u-legend-name { flex: 1; text-align: left; }
 .u-legend-count { color: var(--text-3); font-size: 11px; }
 .u-swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; margin-right: 6px; }
@@ -1041,7 +1043,7 @@ body.view-3d .node-panel { display: none; }
 
 .u-controls {
   position: absolute;
-  right: 18px;
+  right: calc(16px + 44px + 12px); /* clear of the 44px .onebar-toggle FAB (right:16px) */
   bottom: max(18px, env(safe-area-inset-bottom));
   display: flex;
   gap: 6px;
@@ -1691,22 +1693,20 @@ body:not(.view-3d) .onebar-toggle { bottom: 172px; right: 18px; }
 
 /* ---------- The record card (census, paired with the loaded graph) ---------- */
 .record-card {
-  position: fixed;
-  top: 112px;
-  left: max(16px, env(safe-area-inset-left));
-  z-index: 5;
-  min-width: 168px;
-  padding: 10px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  box-shadow: 0 0 0 1px var(--border);
+  position: static;
+  padding: 0 0 8px;
+  margin: 0 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
   font-family: var(--mono);
   font-size: 12.5px;
   color: var(--text-2);
 }
 .record-card[hidden] { display: none; }
-.record-card h3 { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; color: var(--text); letter-spacing: .02em; }
-.record-card dl { margin: 0; }
+.record-card h3 { margin: 0 0 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--text-3); }
+.record-card dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2px 16px; }
 .record-card dl > div { display: flex; justify-content: space-between; gap: 16px; }
 .record-card dt { margin: 0; }
 .record-card dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }

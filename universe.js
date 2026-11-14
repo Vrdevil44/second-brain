@@ -499,8 +499,7 @@ function searchRankOf(node) {
       if (n.id === 'core') { n.fx = 0; n.fy = 0; n.fz = 0; break; }
     }
     if (S.api && typeof S.api.onMeta === 'function') {
-      const iso = S.isolated ? ' · isolated' : '';
-      S.api.onMeta(vNodes.length + ' facts · ' + vEdges.length + ' relations' + iso);
+      S.api.onMeta({ isolated: !!S.isolated });
     }
     if (S.resetBtn) S.resetBtn.hidden = !S.isolated;
     refreshSuggestions();
@@ -1001,7 +1000,20 @@ function searchRankOf(node) {
     const box = h('div', 'u-legend');
     // Kinds: registry rows (stored hex) + one "unassigned: <name>" row per graph kind the registry lacks.
     const dCount = new Map();
-    for (const n of S.data.nodes) { const k = kindOf(n); if (k && n.node !== 'domain-hub') dCount.set(k, (dCount.get(k) || 0) + 1); }
+    let coreCount = 0;
+    for (const n of S.data.nodes) {
+      if (String(n.id) === 'core') { coreCount++; continue; }
+      const k = kindOf(n);
+      if (k) dCount.set(k, (dCount.get(k) || 0) + 1);
+    }
+    // Core is not a kind slot (kindOf never yields it): informational row, no toggle.
+    let coreRow = null;
+    if (coreCount) {
+      coreRow = h('div', 'u-legend-row legend-row-static');
+      const csw = h('i', 'u-swatch u-swatch-diamond');
+      csw.style.background = CORE_COLOR;
+      coreRow.append(csw, h('span', 'u-legend-name', 'Core'), h('small', 'u-legend-count', String(coreCount)));
+    }
     const tCount = new Map();
     for (const e of S.data.edges) tCount.set(e.type, (tCount.get(e.type) || 0) + 1);
 
@@ -1032,7 +1044,8 @@ function searchRankOf(node) {
       ? legendRow('domain', d, KIND_HEX.get(d), dCount.get(d) || 0)
       : legendRow('domain', d, UNASSIGNED_COLOR, dCount.get(d) || 0, 'unassigned: ' + d));
     const tRows = TYPES.map((t) => legendRow('type', t, TYPE_COLORS[t], tCount.get(t) || 0));
-    box.append(collapsibleSection('Kinds', dRows));
+    if (coreRow) dRows.push(coreRow);
+    box.append(collapsibleSection('Domains', dRows));
     box.append(collapsibleSection('Relations', tRows));
     return box;
   }

@@ -676,6 +676,19 @@ function expandQueryVariants(q, groups) {
   document.body.classList.add('view-3d');
   let graphData = null;
   let sessionDataKey = null; // derived data key, held in memory only while unlocked (same lifetime as graphData)
+  function renderGraphMeta() {
+    // Meta line in the top bar.
+    const c = portalGraphCounts();
+    const parts = [];
+    if (c.nodes !== null) parts.push(nf.format(c.nodes) + ' nodes');
+    if (c.edges !== null) parts.push(nf.format(c.edges) + ' relations');
+    if (graphData && graphData.generated) {
+      const d = new Date(graphData.generated);
+      if (!isNaN(d)) parts.push('updated ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+    }
+    $('#graph-meta').textContent = parts.join(' · ');
+  }
+
   let graph2dBuilt = false;
   const scriptLoads = new Map();
 
@@ -698,13 +711,13 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=8560d69');
-        await loadScriptOnce('universe.js?v=8560d69');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=95ecdf6');
+        await loadScriptOnce('universe.js?v=95ecdf6');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
         window.BrainUniverse.init(box, graphData, {
-          onMeta: (text) => { $('#graph-meta').textContent = text; },
+          onMeta: (m) => { renderGraphMeta(); if (m && m.isolated) $('#graph-meta').textContent += ' · isolated'; },
           loadLiveState: loadLiveStateLive, // live tailnet API first, baked fallback
           kindRegistry: kindSlots, // null -> every kind renders unassigned
           onBeatUpdates: (st) => appendBeatUpdates(st),
@@ -899,12 +912,15 @@ function expandQueryVariants(q, groups) {
     return Object.assign({}, st, { facts: pairedCensus.facts.live, facts_source: 'census' });
   }
 
-  function loadedGraphCounts() {
-    const edges = graph2dBuilt ? graph.edges : (graphData && graphData.edges);
+  function portalGraphCounts() {
     return {
       nodes: graphData && Array.isArray(graphData.nodes) ? graphData.nodes.length : null,
-      edges: Array.isArray(edges) ? edges.length : null,
+      edges: graphData && Array.isArray(graphData.edges) ? graphData.edges.length : null,
     };
+  }
+
+  function loadedGraphCounts() {
+    return portalGraphCounts();
   }
 
   function renderRecordCard() {
@@ -972,7 +988,6 @@ function expandQueryVariants(q, groups) {
       const sseAt = (liveSseState && liveSseState.at) || 0;
       const contactAt = Math.max(sseAt, liveFetchOkAt);
       const unlocked = !!graphData || !!(graph.nodes && graph.nodes.length);
-      const edges = graph2dBuilt ? graph.edges : (graphData && graphData.edges); // 3D never builds graph.edges
       return {
         gateOff: !!(window.BRAIN_CONFIG && window.BRAIN_CONFIG.GATE_OFF),
         hasToken: (typeof portalToken !== 'undefined' && !!portalToken),
@@ -980,7 +995,7 @@ function expandQueryVariants(q, groups) {
         census: pairedCensus,
         contactAt: contactAt,
         live: contactAt > 0,
-        relations: (unlocked && Array.isArray(edges)) ? edges.length : null,
+        relations: unlocked ? portalGraphCounts().edges : null,
         unlocked: unlocked,
       };
     },
@@ -1472,6 +1487,7 @@ function expandQueryVariants(q, groups) {
         updatedIds = r.updatedIds;
         resultingHash = delta.hash || targetHash;
       }
+      renderGraphMeta();
       pageGraphHash = resultingHash;
       convergeRetry = 0;
       await rebuildGraphView();
@@ -1584,16 +1600,7 @@ function expandQueryVariants(q, groups) {
       n.vr = tierRadius(n);
     }
 
-    // Meta line in the top bar.
-    const parts = [
-      nf.format(graph.nodes.length) + ' nodes',
-      nf.format(graph.edges.length) + ' relations',
-    ];
-    if (data && data.generated) {
-      const d = new Date(data.generated);
-      if (!isNaN(d)) parts.push('updated ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
-    }
-    $('#graph-meta').textContent = parts.join(' · ');
+    renderGraphMeta();
     $('#demo-badge').hidden = !(data && data.demo);
 
     seedPositions();
@@ -4088,15 +4095,18 @@ function expandQueryVariants(q, groups) {
       const kCount = new Map();
       for (const n of graphData.nodes) {
         const k = kindOfNode(n);
-        if (k && n.node !== 'domain-hub') kCount.set(k, (kCount.get(k) || 0) + 1);
+        if (k) kCount.set(k, (kCount.get(k) || 0) + 1);
+        else if (String(n.id) === 'core') kCount.set('core', (kCount.get('core') || 0) + 1);
       }
       const registered = kindSlots ? kindSlots.map((e) => e.kind) : [];
+      const coreCount = kCount.get('core') || 0;
+      kCount.delete('core');
       const extra = [...kCount.keys()].filter((k) => !(kindHex && kindHex.has(k))).sort();
       const box = document.createElement('div');
       box.className = 'u-legend';
       const title = document.createElement('h3');
       title.className = 'u-legend-title';
-      title.textContent = 'Kinds';
+      title.textContent = 'Domains';
       box.appendChild(title);
       // Track hidden kinds.
       if (!window._hiddenKinds) window._hiddenKinds = new Set();
@@ -4125,6 +4135,21 @@ function expandQueryVariants(q, groups) {
           if (typeof apply2dTypeFilter === 'function') apply2dTypeFilter();
         });
         box.appendChild(btn);
+      }
+      if (coreCount) {
+        const row = document.createElement('div');
+        row.className = 'u-legend-row legend-row-static';
+        const sw = document.createElement('i');
+        sw.className = 'u-swatch u-swatch-diamond';
+        sw.style.background = CORE_COLOR;
+        const name = document.createElement('span');
+        name.className = 'u-legend-name';
+        name.textContent = 'Core';
+        const cnt = document.createElement('small');
+        cnt.className = 'u-legend-count';
+        cnt.textContent = coreCount;
+        row.append(sw, name, cnt);
+        box.appendChild(row);
       }
       container.appendChild(box);
       return;
