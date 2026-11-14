@@ -878,7 +878,7 @@
       "node": "person-anuj-bhaiya",
       "status": "active",
       "date": "2026-11-12",
-      "size": 3,
+      "size": 4,
       "gravity": 0.1
     },
     {
@@ -888,7 +888,7 @@
       "node": "person-anuj-bhaiya",
       "status": "active",
       "date": "2026-11-12",
-      "size": 2,
+      "size": 3,
       "gravity": 0.1
     },
     {
@@ -898,6 +898,26 @@
       "node": "person-anuj-bhaiya",
       "status": "active",
       "date": "2026-11-12",
+      "size": 4,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1891",
+      "label": "Anuj visit watch, Nov 13: no tickets sold out, no price moves — VanDusen, Capilano, Astra Lumina, gondola, bungee, Grous",
+      "domain": "people",
+      "node": "person-anuj-bhaiya",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1892",
+      "label": "Manan call is today, Nov 13: checklist is the Dec 26 morning-arrival plan, who books the flight, and the return date. If",
+      "domain": "people",
+      "node": "person-anuj-bhaiya",
+      "status": "active",
+      "date": "2026-11-13",
       "size": 3,
       "gravity": 0.1
     },
@@ -1629,7 +1649,7 @@
       "node": "person-manan",
       "status": "active",
       "date": "2026-11-12",
-      "size": 3,
+      "size": 4,
       "gravity": 0.1
     },
     {
@@ -2121,6 +2141,16 @@
       "date": "2026-10-30",
       "size": 2,
       "gravity": 0.532
+    },
+    {
+      "id": "F-1890",
+      "label": "Owner confirms (chat 2026-11-13): DPS Etawah is his school, a real place; the gap-detector place fact F-0899 is confirme",
+      "domain": "places",
+      "node": "place-dps-etawah",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
     },
     {
       "id": "F-1336",
@@ -2730,6 +2760,26 @@
       "status": "active",
       "date": "2026-11-12",
       "size": 4,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1893",
+      "label": "Durango rims RULED OUT Nov 13: their bolt pattern is 5x127, his 300 needs 5x115 — they will not fit the hub at all. The ",
+      "domain": "projects",
+      "node": "proj-car",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1894",
+      "label": "THIRD bumper route (new parts seller, morning Nov 13): he has the bumper ONLY — no head unit, no rims/tires from him, do",
+      "domain": "projects",
+      "node": "proj-car",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
       "gravity": 0.1
     },
     {
@@ -5389,7 +5439,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-10-31",
-      "size": 3,
+      "size": 4,
       "gravity": 0.151
     },
     {
@@ -5679,7 +5729,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-12",
-      "size": 3,
+      "size": 10,
       "gravity": 0.1
     },
     {
@@ -5709,7 +5759,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-12",
-      "size": 3,
+      "size": 4,
       "gravity": 0.1
     },
     {
@@ -5729,7 +5779,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-12",
-      "size": 2,
+      "size": 3,
       "gravity": 0.1
     },
     {
@@ -5739,7 +5789,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-12",
-      "size": 3,
+      "size": 4,
       "gravity": 0.1
     },
     {
@@ -5770,6 +5820,136 @@
       "status": "active",
       "date": "2026-11-12",
       "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1898",
+      "label": "Training cadence reframed by him Nov 13 (his answer 1a): weekly training is now criteria-driven, not Sunday-only — it fi",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1899",
+      "label": "Semantic-search measurement (night chain, surfaced Nov 13): on the stale Oct 26 production index the semantic leg HURT r",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1900",
+      "label": "Portal OTP rule (his call Nov 13): ask him fresh every time a one-time code is needed; the portal password must NOT go v",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1901",
+      "label": "Gate-off ruling, corrected Nov 13 ~10:56 PT: gate off means ONLY the lock is removed (password and OTP prompt gone) — fu",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1902",
+      "label": "Brain Complete Build project launched Nov 13 (his order: make a proper project, proper testing every phase, build the br",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1903",
+      "label": "Brain Complete Build Phase 0 PASSED 8/8 (re-check #4, Nov 13 14:46-14:56 PT, his Chrome): no lock, LIVE chip stable, hea",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1904",
+      "label": "Outward window is NOT running (tested Nov 13 at his ask): three GK questions outside the graph all got hallucinated extr",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1905",
+      "label": "Design-system rulings (his answers Nov 13 ~21:30 PT): (1) kind colours are DYNAMIC with NO cap — every new kind gets its",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1906",
+      "label": "STANDING TOKEN granted Nov 13 for Wave 7 births (his answer 8): Max need not ask separately for each birth; gates and lo",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1907",
+      "label": "Brain Complete Build Phase 1: build and proof done — hollow-sphere root cause found and fixed (gravity held 626 of 948 n",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1908",
+      "label": "Brain Complete Build Phase 2 T3 PASSED and verified (Record inside Updates, DOMAINS label correct, no panel overlap, Res",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1909",
+      "label": "UI decisions Nov 13 ~10:56 PT: \"The record\" tile leaves the face and becomes a section inside the Updates pill (kills th",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1910",
+      "label": "Dream-brain Tests workflow kept failing on master through Nov 12-13, 2026: eleven run-failed mails for commits d21bfd1, ",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
       "gravity": 0.1
     },
     {
@@ -6423,7 +6603,7 @@
       "node": "topic-career",
       "status": "active",
       "date": "2026-11-04",
-      "size": 3,
+      "size": 4,
       "gravity": 0.157
     },
     {
@@ -6463,7 +6643,7 @@
       "node": "topic-career",
       "status": "active",
       "date": "2026-11-12",
-      "size": 2,
+      "size": 3,
       "gravity": 0.1
     },
     {
@@ -6643,7 +6823,7 @@
       "node": "topic-github",
       "status": "active",
       "date": "2026-11-12",
-      "size": 2,
+      "size": 3,
       "gravity": 0.1
     },
     {
@@ -7184,7 +7364,7 @@
       "node": "topic-methodology",
       "status": "active",
       "date": "2026-10-23",
-      "size": 3,
+      "size": 4,
       "gravity": 0.139
     },
     {
@@ -7424,7 +7604,7 @@
       "node": "topic-methodology",
       "status": "active",
       "date": "2026-11-12",
-      "size": 2,
+      "size": 3,
       "gravity": 0.1
     },
     {
@@ -7434,6 +7614,26 @@
       "node": "topic-methodology",
       "status": "active",
       "date": "2026-11-12",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1896",
+      "label": "Agile check rule (his order Nov 13 evening): as soon as each thing completes, check it immediately — do not batch 10 thi",
+      "domain": "topics",
+      "node": "topic-methodology",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1897",
+      "label": "Visual UI audit rule (his order Nov 13): Max must SEE and USE the live portal UI himself in a browser — not verify from ",
+      "domain": "topics",
+      "node": "topic-methodology",
+      "status": "active",
+      "date": "2026-11-13",
       "size": 2,
       "gravity": 0.1
     },
@@ -7704,7 +7904,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-10-29",
-      "size": 2,
+      "size": 3,
       "gravity": 0.146
     },
     {
@@ -8408,6 +8608,16 @@
       "gravity": 0.1
     },
     {
+      "id": "F-1911",
+      "label": "Wealthsimple \"Direct deposit received\" Nov 13, 2026: $451.59 from F12.net Inc. now available in his chequing account. Th",
+      "domain": "topics",
+      "node": "topic-money",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
       "id": "F-0505",
       "label": "[self-model] Node panels: tapping a node opens a detail panel; the rest of the graph dims (focus-dimming); panels dismis",
       "domain": "topics",
@@ -9105,7 +9315,17 @@
       "node": "topic-trading",
       "status": "active",
       "date": "2026-11-12",
-      "size": 2,
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1895",
+      "label": "Markets, Nov 13: NVDA bounced ~2.4% premarket to ~$170 after the Huang resignation shock, then the open reversed on the ",
+      "domain": "topics",
+      "node": "topic-trading",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 3,
       "gravity": 0.1
     },
     {
@@ -9661,9 +9881,24 @@
       "type": "CONTEXT"
     },
     {
+      "source": "F-1853",
+      "target": "F-1852",
+      "type": "EXTENDS"
+    },
+    {
       "source": "F-1854",
       "target": "F-1824",
       "type": "UPDATES"
+    },
+    {
+      "source": "F-1891",
+      "target": "F-1854",
+      "type": "UPDATES"
+    },
+    {
+      "source": "F-1892",
+      "target": "F-1875",
+      "type": "EXTENDS"
     },
     {
       "source": "F-0763",
@@ -10546,6 +10781,11 @@
       "type": "EXTENDS"
     },
     {
+      "source": "F-1885",
+      "target": "F-1880",
+      "type": "COMPONENT"
+    },
+    {
       "source": "F-1886",
       "target": "F-1790",
       "type": "UPDATES"
@@ -10553,6 +10793,46 @@
     {
       "source": "F-1887",
       "target": "F-0482",
+      "type": "EXTENDS"
+    },
+    {
+      "source": "F-1901",
+      "target": "F-1880",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1903",
+      "target": "F-1880",
+      "type": "COMPONENT"
+    },
+    {
+      "source": "F-1905",
+      "target": "F-1880",
+      "type": "EXTENDS"
+    },
+    {
+      "source": "F-1906",
+      "target": "F-1886",
+      "type": "EXTENDS"
+    },
+    {
+      "source": "F-1907",
+      "target": "F-1880",
+      "type": "COMPONENT"
+    },
+    {
+      "source": "F-1908",
+      "target": "F-1880",
+      "type": "COMPONENT"
+    },
+    {
+      "source": "F-1909",
+      "target": "F-1880",
+      "type": "EXTENDS"
+    },
+    {
+      "source": "F-1910",
+      "target": "F-1696",
       "type": "EXTENDS"
     },
     {
@@ -10706,6 +10986,11 @@
       "type": "CHALLENGES"
     },
     {
+      "source": "F-1876",
+      "target": "F-1744",
+      "type": "REFINES"
+    },
+    {
       "source": "F-1713",
       "target": "F-0130",
       "type": "CONTEXT"
@@ -10759,6 +11044,11 @@
       "source": "F-1868",
       "target": "F-1764",
       "type": "UPDATES"
+    },
+    {
+      "source": "F-1869",
+      "target": "F-1883",
+      "type": "SUPPORTS"
     },
     {
       "source": "F-1792",
@@ -10823,6 +11113,16 @@
     {
       "source": "F-1766",
       "target": "F-0130",
+      "type": "EXTENDS"
+    },
+    {
+      "source": "F-1878",
+      "target": "F-0811",
+      "type": "REFINES"
+    },
+    {
+      "source": "F-1896",
+      "target": "F-1877",
       "type": "EXTENDS"
     },
     {
@@ -10916,6 +11216,11 @@
       "type": "EXTENDS"
     },
     {
+      "source": "F-1911",
+      "target": "F-1110",
+      "type": "EXTENDS"
+    },
+    {
       "source": "F-1675",
       "target": "F-1046",
       "type": "SUPPORTS"
@@ -10993,6 +11298,11 @@
     {
       "source": "F-1848",
       "target": "F-1806",
+      "type": "UPDATES"
+    },
+    {
+      "source": "F-1895",
+      "target": "F-1860",
       "type": "UPDATES"
     },
     {
@@ -11507,6 +11817,16 @@
     },
     {
       "source": "F-1854",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1891",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1892",
       "target": "domain-people",
       "type": "DOMAIN"
     },
@@ -12161,6 +12481,11 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1890",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-1336",
       "target": "domain-places",
       "type": "DOMAIN"
@@ -12462,6 +12787,16 @@
     },
     {
       "source": "F-1866",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1893",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1894",
       "target": "domain-projects",
       "type": "DOMAIN"
     },
@@ -13991,6 +14326,71 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1898",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1899",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1900",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1901",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1902",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1903",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1904",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1905",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1906",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1907",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1908",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1909",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1910",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-0934",
       "target": "domain-topics",
       "type": "DOMAIN"
@@ -14856,6 +15256,16 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1896",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1897",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-0045",
       "target": "domain-topics",
       "type": "DOMAIN"
@@ -15341,6 +15751,11 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1911",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-0505",
       "target": "domain-topics",
       "type": "DOMAIN"
@@ -15692,6 +16107,11 @@
     },
     {
       "source": "F-1860",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1895",
       "target": "domain-topics",
       "type": "DOMAIN"
     },
@@ -16140,6 +16560,10 @@
     },
     {
       "node": "place-cartech-classics",
+      "kind": "place"
+    },
+    {
+      "node": "place-dps-etawah",
       "kind": "place"
     },
     {

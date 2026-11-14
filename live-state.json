@@ -1,10 +1,10 @@
 {
   "v": 1,
-  "beat": 2093,
-  "ts": "2026-11-14T08:38:24Z",
-  "head": "830692c6",
+  "beat": 2109,
+  "ts": "2026-11-14T12:38:24Z",
+  "head": "dd625f5c",
   "nodes": 948,
-  "inbox": 8,
+  "inbox": 1,
   "fail": 0,
   "echo_c": 0,
   "echo_d": 0,
@@ -33,125 +33,6 @@
     "last_think": "2026-11-14T00:08:26.645Z"
   },
   "activity": [
-    {
-      "t": "2026-11-14T02:53:24Z",
-      "kind": "beat",
-      "beat": 2070,
-      "label": "beat 2070 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T03:08:24Z",
-      "kind": "beat",
-      "beat": 2071,
-      "label": "beat 2071 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T03:23:24Z",
-      "kind": "beat",
-      "beat": 2072,
-      "label": "beat 2072 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T03:38:24Z",
-      "kind": "beat",
-      "beat": 2073,
-      "label": "beat 2073 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T03:53:24Z",
-      "kind": "beat",
-      "beat": 2074,
-      "label": "beat 2074 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T04:08:24Z",
-      "kind": "beat",
-      "beat": 2075,
-      "label": "beat 2075 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T04:23:24Z",
-      "kind": "beat",
-      "beat": 2076,
-      "label": "beat 2076 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T04:38:24Z",
-      "kind": "beat",
-      "beat": 2077,
-      "label": "beat 2077 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T04:53:24Z",
-      "kind": "beat",
-      "beat": 2078,
-      "label": "beat 2078 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T05:08:24Z",
-      "kind": "beat",
-      "beat": 2079,
-      "label": "beat 2079 \u2014 948 facts, inbox 1",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T05:23:24Z",
-      "kind": "beat",
-      "beat": 2080,
-      "label": "beat 2080 \u2014 948 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T05:38:24Z",
-      "kind": "beat",
-      "beat": 2081,
-      "label": "beat 2081 \u2014 948 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T05:53:24Z",
-      "kind": "beat",
-      "beat": 2082,
-      "label": "beat 2082 \u2014 948 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T06:08:24Z",
-      "kind": "beat",
-      "beat": 2083,
-      "label": "beat 2083 \u2014 948 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T06:23:24Z",
-      "kind": "beat",
-      "beat": 2084,
-      "label": "beat 2084 \u2014 948 facts, inbox 8",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T06:38:24Z",
-      "kind": "beat",
-      "beat": 2085,
-      "label": "beat 2085 \u2014 948 facts, inbox 8",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T06:53:24Z",
-      "kind": "beat",
-      "beat": 2086,
-      "label": "beat 2086 \u2014 948 facts, inbox 8",
-      "fids": []
-    },
     {
       "t": "2026-11-14T07:08:24Z",
       "kind": "beat",
@@ -200,6 +81,125 @@
       "beat": 2093,
       "label": "beat 2093 \u2014 948 facts, inbox 8",
       "fids": []
+    },
+    {
+      "t": "2026-11-14T08:53:24Z",
+      "kind": "beat",
+      "beat": 2094,
+      "label": "beat 2094 \u2014 948 facts, inbox 8",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T09:08:24Z",
+      "kind": "beat",
+      "beat": 2095,
+      "label": "beat 2095 \u2014 948 facts, inbox 8",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T09:23:24Z",
+      "kind": "beat",
+      "beat": 2096,
+      "label": "beat 2096 \u2014 948 facts, inbox 8",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T09:38:24Z",
+      "kind": "beat",
+      "beat": 2097,
+      "label": "beat 2097 \u2014 948 facts, inbox 8",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T09:53:24Z",
+      "kind": "beat",
+      "beat": 2098,
+      "label": "beat 2098 \u2014 948 facts, inbox 8",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T10:08:24Z",
+      "kind": "beat",
+      "beat": 2099,
+      "label": "beat 2099 \u2014 948 facts, inbox 8",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T10:23:24Z",
+      "kind": "beat",
+      "beat": 2100,
+      "label": "beat 2100 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T10:23:24Z",
+      "kind": "demand_resolved",
+      "beat": 2100,
+      "label": "inbox cleared 8 \u2192 1 \u2014 demands settled",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T10:38:24Z",
+      "kind": "beat",
+      "beat": 2101,
+      "label": "beat 2101 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T10:53:24Z",
+      "kind": "beat",
+      "beat": 2102,
+      "label": "beat 2102 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T11:08:24Z",
+      "kind": "beat",
+      "beat": 2103,
+      "label": "beat 2103 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T11:23:24Z",
+      "kind": "beat",
+      "beat": 2104,
+      "label": "beat 2104 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T11:38:24Z",
+      "kind": "beat",
+      "beat": 2105,
+      "label": "beat 2105 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T11:53:24Z",
+      "kind": "beat",
+      "beat": 2106,
+      "label": "beat 2106 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T12:08:24Z",
+      "kind": "beat",
+      "beat": 2107,
+      "label": "beat 2107 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T12:23:24Z",
+      "kind": "beat",
+      "beat": 2108,
+      "label": "beat 2108 \u2014 948 facts, inbox 1",
+      "fids": []
+    },
+    {
+      "t": "2026-11-14T12:38:24Z",
+      "kind": "beat",
+      "beat": 2109,
+      "label": "beat 2109 \u2014 948 facts, inbox 1",
+      "fids": []
     }
   ],
   "formation": {
@@ -212,7 +212,7 @@
   },
   "sync": {
     "v": 2,
-    "at": "2026-11-14T08:38:36Z",
+    "at": "2026-11-14T12:38:25Z",
     "state": "idle",
     "words": "All synced \u2014 watching for new arrivals",
     "dial": {
@@ -225,7 +225,7 @@
       "peek": []
     },
     "last": {
-      "at": "2026-11-14T08:38:36Z",
+      "at": "2026-11-14T12:38:25Z",
       "captures": 0,
       "bytes": 0,
       "duration_s": 1
