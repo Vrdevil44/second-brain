@@ -832,6 +832,14 @@ input[type="password"], input[type="text"] { font-family: var(--mono); font-size
     width: auto;
     bottom: calc(max(12px, env(safe-area-inset-bottom)) + 8px);
   }
+  /* R1-mobile: the full-width bottom stack's empty area must not eat taps
+     meant for the Reset view button (its only visible child is the Updates
+     toggle; the rest of its box is empty but pointer-events:auto). */
+  #bottom-stack { pointer-events: none; }
+  #bottom-stack .updates-toggle,
+  #bottom-stack .updates-log,
+  #bottom-stack .hud,
+  #bottom-stack .pills-row { pointer-events: auto; }
   #bottom-stack .hud { display: none; }
   #bottom-stack .hud.expanded {
     display: block;
