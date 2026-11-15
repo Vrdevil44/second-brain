@@ -1,244 +1,244 @@
 {
-  "v": 1,
-  "beat": 2205,
-  "ts": "2026-11-15T12:38:24Z",
-  "head": "266b1497",
-  "nodes": 970,
-  "inbox": 13,
-  "fail": 0,
-  "echo_c": 0,
-  "echo_d": 0,
-  "echo_touched": 0,
-  "touched": [],
-  "demands": [
-    "No contradictions this beat. That is the floor, not the ceiling \u2014 find the next inefficiency."
+ "v": 1,
+ "beat": 2221,
+ "ts": "2026-11-15T16:38:24Z",
+ "head": "9b3e8f9a",
+ "nodes": 970,
+ "inbox": 13,
+ "fail": 0,
+ "echo_c": 0,
+ "echo_d": 0,
+ "echo_touched": 0,
+ "touched": [],
+ "demands": [
+  "No contradictions this beat. That is the floor, not the ceiling \u2014 find the next inefficiency."
+ ],
+ "arrivals": [],
+ "core": {
+  "focus": [
+   {
+    "label": "Works at F12.net as Project Services Specialist (between tier-3 support and compliance),\u2026",
+    "why": "the mesh keeps surfacing it (gravity 0.54)"
+   },
+   {
+    "label": "Net pay $2,248.19 bi-weekly (~$4,871/mo); RRSP employee + employer match ~$977/yr\u2026",
+    "why": "the mesh keeps surfacing it (gravity 0.51)"
+   },
+   {
+    "label": "Money target (stated 2026-10-01): fix the car, build an emergency fund, pay off credit\u2026",
+    "why": "the mesh keeps surfacing it (gravity 0.51)"
+   }
   ],
-  "arrivals": [],
-  "core": {
-    "focus": [
-      {
-        "label": "Works at F12.net as Project Services Specialist (between tier-3 support and compliance),\u2026",
-        "why": "the mesh keeps surfacing it (gravity 0.54)"
-      },
-      {
-        "label": "Net pay $2,248.19 bi-weekly (~$4,871/mo); RRSP employee + employer match ~$977/yr\u2026",
-        "why": "the mesh keeps surfacing it (gravity 0.51)"
-      },
-      {
-        "label": "Money target (stated 2026-10-01): fix the car, build an emergency fund, pay off credit\u2026",
-        "why": "the mesh keeps surfacing it (gravity 0.51)"
-      }
-    ],
-    "open_questions": 0,
-    "last_think": "2026-11-15T00:08:27.827Z"
+  "open_questions": 0,
+  "last_think": "2026-11-15T00:08:27.827Z"
+ },
+ "activity": [
+  {
+   "t": "2026-11-15T10:53:24Z",
+   "kind": "beat",
+   "beat": 2198,
+   "label": "beat 2198 \u2014 970 facts, inbox 13",
+   "fids": []
   },
-  "activity": [
-    {
-      "t": "2026-11-15T06:53:24Z",
-      "kind": "beat",
-      "beat": 2182,
-      "label": "beat 2182 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T07:08:24Z",
-      "kind": "beat",
-      "beat": 2183,
-      "label": "beat 2183 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T07:23:24Z",
-      "kind": "beat",
-      "beat": 2184,
-      "label": "beat 2184 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T07:38:24Z",
-      "kind": "beat",
-      "beat": 2185,
-      "label": "beat 2185 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T07:53:24Z",
-      "kind": "beat",
-      "beat": 2186,
-      "label": "beat 2186 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T08:08:24Z",
-      "kind": "beat",
-      "beat": 2187,
-      "label": "beat 2187 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T08:23:24Z",
-      "kind": "beat",
-      "beat": 2188,
-      "label": "beat 2188 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T08:38:24Z",
-      "kind": "beat",
-      "beat": 2189,
-      "label": "beat 2189 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T08:53:24Z",
-      "kind": "beat",
-      "beat": 2190,
-      "label": "beat 2190 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T09:08:24Z",
-      "kind": "beat",
-      "beat": 2191,
-      "label": "beat 2191 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T09:23:24Z",
-      "kind": "beat",
-      "beat": 2192,
-      "label": "beat 2192 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T09:38:24Z",
-      "kind": "beat",
-      "beat": 2193,
-      "label": "beat 2193 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T09:53:24Z",
-      "kind": "beat",
-      "beat": 2194,
-      "label": "beat 2194 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T10:08:24Z",
-      "kind": "beat",
-      "beat": 2195,
-      "label": "beat 2195 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T10:23:24Z",
-      "kind": "beat",
-      "beat": 2196,
-      "label": "beat 2196 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T10:38:24Z",
-      "kind": "beat",
-      "beat": 2197,
-      "label": "beat 2197 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T10:53:24Z",
-      "kind": "beat",
-      "beat": 2198,
-      "label": "beat 2198 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T11:08:24Z",
-      "kind": "beat",
-      "beat": 2199,
-      "label": "beat 2199 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T11:23:24Z",
-      "kind": "beat",
-      "beat": 2200,
-      "label": "beat 2200 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T11:38:24Z",
-      "kind": "beat",
-      "beat": 2201,
-      "label": "beat 2201 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T11:53:24Z",
-      "kind": "beat",
-      "beat": 2202,
-      "label": "beat 2202 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T12:08:24Z",
-      "kind": "beat",
-      "beat": 2203,
-      "label": "beat 2203 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T12:23:24Z",
-      "kind": "beat",
-      "beat": 2204,
-      "label": "beat 2204 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T12:38:24Z",
-      "kind": "beat",
-      "beat": 2205,
-      "label": "beat 2205 \u2014 970 facts, inbox 13",
-      "fids": []
-    }
-  ],
-  "formation": {
-    "stage": "forming",
-    "words": "the core is forming",
-    "progress_0_1": 0.25,
-    "thinks": 5,
-    "focus_stability": 0,
-    "gravity_concentration": 0.291
+  {
+   "t": "2026-11-15T11:08:24Z",
+   "kind": "beat",
+   "beat": 2199,
+   "label": "beat 2199 \u2014 970 facts, inbox 13",
+   "fids": []
   },
-  "sync": {
-    "v": 2,
-    "at": "2026-11-15T09:08:35Z",
-    "state": "idle",
-    "words": "All synced \u2014 watching for new arrivals",
-    "dial": {
-      "percent": 100,
-      "label": "synced"
-    },
-    "pending": {
-      "captures": 0,
-      "bytes": 0,
-      "peek": []
-    },
-    "last": {
-      "at": "2026-11-15T09:08:35Z",
-      "captures": 0,
-      "bytes": 0,
-      "duration_s": 1
-    },
-    "estimate": {
-      "avg_bps": 68,
-      "eta_words": "-"
-    },
-    "watch": {
-      "mode": "continuous",
-      "check_every": "15m",
-      "trigger": "doorbell + scheduled peek"
-    },
-    "step": "idle"
+  {
+   "t": "2026-11-15T11:23:24Z",
+   "kind": "beat",
+   "beat": 2200,
+   "label": "beat 2200 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T11:38:24Z",
+   "kind": "beat",
+   "beat": 2201,
+   "label": "beat 2201 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T11:53:24Z",
+   "kind": "beat",
+   "beat": 2202,
+   "label": "beat 2202 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T12:08:24Z",
+   "kind": "beat",
+   "beat": 2203,
+   "label": "beat 2203 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T12:23:24Z",
+   "kind": "beat",
+   "beat": 2204,
+   "label": "beat 2204 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T12:38:24Z",
+   "kind": "beat",
+   "beat": 2205,
+   "label": "beat 2205 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T12:53:24Z",
+   "kind": "beat",
+   "beat": 2206,
+   "label": "beat 2206 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T13:08:24Z",
+   "kind": "beat",
+   "beat": 2207,
+   "label": "beat 2207 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T13:23:24Z",
+   "kind": "beat",
+   "beat": 2208,
+   "label": "beat 2208 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T13:38:24Z",
+   "kind": "beat",
+   "beat": 2209,
+   "label": "beat 2209 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T13:53:24Z",
+   "kind": "beat",
+   "beat": 2210,
+   "label": "beat 2210 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T14:08:24Z",
+   "kind": "beat",
+   "beat": 2211,
+   "label": "beat 2211 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T14:23:24Z",
+   "kind": "beat",
+   "beat": 2212,
+   "label": "beat 2212 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T14:38:24Z",
+   "kind": "beat",
+   "beat": 2213,
+   "label": "beat 2213 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T14:53:24Z",
+   "kind": "beat",
+   "beat": 2214,
+   "label": "beat 2214 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T15:08:24Z",
+   "kind": "beat",
+   "beat": 2215,
+   "label": "beat 2215 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T15:23:24Z",
+   "kind": "beat",
+   "beat": 2216,
+   "label": "beat 2216 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T15:38:24Z",
+   "kind": "beat",
+   "beat": 2217,
+   "label": "beat 2217 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T15:53:24Z",
+   "kind": "beat",
+   "beat": 2218,
+   "label": "beat 2218 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T16:08:24Z",
+   "kind": "beat",
+   "beat": 2219,
+   "label": "beat 2219 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T16:23:24Z",
+   "kind": "beat",
+   "beat": 2220,
+   "label": "beat 2220 \u2014 970 facts, inbox 13",
+   "fids": []
+  },
+  {
+   "t": "2026-11-15T16:38:24Z",
+   "kind": "beat",
+   "beat": 2221,
+   "label": "beat 2221 \u2014 970 facts, inbox 13",
+   "fids": []
   }
+ ],
+ "formation": {
+  "stage": "forming",
+  "words": "the core is forming",
+  "progress_0_1": 0.25,
+  "thinks": 5,
+  "focus_stability": 0,
+  "gravity_concentration": 0.291
+ },
+ "sync": {
+  "v": 2,
+  "at": "2026-11-15T16:38:20Z",
+  "state": "idle",
+  "words": "All synced \u2014 watching for new arrivals",
+  "dial": {
+   "percent": 100,
+   "label": "synced"
+  },
+  "pending": {
+   "captures": 0,
+   "bytes": 0,
+   "peek": []
+  },
+  "last": {
+   "at": "2026-11-15T16:38:20Z",
+   "captures": 0,
+   "bytes": 0,
+   "duration_s": 1
+  },
+  "estimate": {
+   "avg_bps": 68,
+   "eta_words": "-"
+  },
+  "watch": {
+   "mode": "continuous",
+   "check_every": "15m",
+   "trigger": "doorbell + scheduled peek"
+  },
+  "step": "idle"
+ }
 }
