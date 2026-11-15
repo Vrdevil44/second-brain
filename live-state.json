@@ -1,10 +1,10 @@
 {
   "v": 1,
-  "beat": 2173,
-  "ts": "2026-11-15T04:38:24Z",
-  "head": "f04313e6",
+  "beat": 2189,
+  "ts": "2026-11-15T08:38:24Z",
+  "head": "95238c66",
   "nodes": 970,
-  "inbox": 7,
+  "inbox": 13,
   "fail": 0,
   "echo_c": 0,
   "echo_d": 0,
@@ -33,118 +33,6 @@
     "last_think": "2026-11-15T00:08:27.827Z"
   },
   "activity": [
-    {
-      "t": "2026-11-14T23:08:24Z",
-      "kind": "beat",
-      "beat": 2151,
-      "label": "beat 2151 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T23:23:24Z",
-      "kind": "beat",
-      "beat": 2152,
-      "label": "beat 2152 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T23:38:24Z",
-      "kind": "beat",
-      "beat": 2153,
-      "label": "beat 2153 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-14T23:53:24Z",
-      "kind": "beat",
-      "beat": 2154,
-      "label": "beat 2154 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T00:08:24Z",
-      "kind": "beat",
-      "beat": 2155,
-      "label": "beat 2155 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T00:08:24Z",
-      "kind": "think",
-      "beat": 2155,
-      "label": "core-think: focus=none questions=+0/-0 proposals=0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T00:23:24Z",
-      "kind": "beat",
-      "beat": 2156,
-      "label": "beat 2156 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T00:38:24Z",
-      "kind": "beat",
-      "beat": 2157,
-      "label": "beat 2157 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T00:53:24Z",
-      "kind": "beat",
-      "beat": 2158,
-      "label": "beat 2158 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T01:08:24Z",
-      "kind": "beat",
-      "beat": 2159,
-      "label": "beat 2159 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T01:23:24Z",
-      "kind": "beat",
-      "beat": 2160,
-      "label": "beat 2160 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T01:38:24Z",
-      "kind": "beat",
-      "beat": 2161,
-      "label": "beat 2161 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T01:53:24Z",
-      "kind": "beat",
-      "beat": 2162,
-      "label": "beat 2162 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T02:08:24Z",
-      "kind": "beat",
-      "beat": 2163,
-      "label": "beat 2163 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T02:23:24Z",
-      "kind": "beat",
-      "beat": 2164,
-      "label": "beat 2164 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T02:38:24Z",
-      "kind": "beat",
-      "beat": 2165,
-      "label": "beat 2165 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
     {
       "t": "2026-11-15T02:53:24Z",
       "kind": "beat",
@@ -200,6 +88,118 @@
       "beat": 2173,
       "label": "beat 2173 \u2014 970 facts, inbox 7",
       "fids": []
+    },
+    {
+      "t": "2026-11-15T04:53:24Z",
+      "kind": "beat",
+      "beat": 2174,
+      "label": "beat 2174 \u2014 970 facts, inbox 7",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T05:08:24Z",
+      "kind": "beat",
+      "beat": 2175,
+      "label": "beat 2175 \u2014 970 facts, inbox 7",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T05:23:24Z",
+      "kind": "beat",
+      "beat": 2176,
+      "label": "beat 2176 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T05:38:24Z",
+      "kind": "beat",
+      "beat": 2177,
+      "label": "beat 2177 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T05:53:24Z",
+      "kind": "beat",
+      "beat": 2178,
+      "label": "beat 2178 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T06:08:24Z",
+      "kind": "beat",
+      "beat": 2179,
+      "label": "beat 2179 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T06:23:24Z",
+      "kind": "beat",
+      "beat": 2180,
+      "label": "beat 2180 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T06:38:24Z",
+      "kind": "beat",
+      "beat": 2181,
+      "label": "beat 2181 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T06:53:24Z",
+      "kind": "beat",
+      "beat": 2182,
+      "label": "beat 2182 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T07:08:24Z",
+      "kind": "beat",
+      "beat": 2183,
+      "label": "beat 2183 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T07:23:24Z",
+      "kind": "beat",
+      "beat": 2184,
+      "label": "beat 2184 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T07:38:24Z",
+      "kind": "beat",
+      "beat": 2185,
+      "label": "beat 2185 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T07:53:24Z",
+      "kind": "beat",
+      "beat": 2186,
+      "label": "beat 2186 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T08:08:24Z",
+      "kind": "beat",
+      "beat": 2187,
+      "label": "beat 2187 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T08:23:24Z",
+      "kind": "beat",
+      "beat": 2188,
+      "label": "beat 2188 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T08:38:24Z",
+      "kind": "beat",
+      "beat": 2189,
+      "label": "beat 2189 \u2014 970 facts, inbox 13",
+      "fids": []
     }
   ],
   "formation": {
@@ -212,7 +212,7 @@
   },
   "sync": {
     "v": 2,
-    "at": "2026-11-15T04:38:44Z",
+    "at": "2026-11-15T08:38:34Z",
     "state": "idle",
     "words": "All synced \u2014 watching for new arrivals",
     "dial": {
@@ -225,7 +225,7 @@
       "peek": []
     },
     "last": {
-      "at": "2026-11-15T04:38:44Z",
+      "at": "2026-11-15T08:38:34Z",
       "captures": 0,
       "bytes": 0,
       "duration_s": 1
