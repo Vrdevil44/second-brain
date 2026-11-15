@@ -711,8 +711,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=bd812d4');
-        await loadScriptOnce('universe.js?v=bd812d4');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=b7c7dc5');
+        await loadScriptOnce('universe.js?v=b7c7dc5');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4758,6 +4758,8 @@ function expandQueryVariants(q, groups) {
     askBar.progressStop();
     askBar.busy = false;
     askBar.refresh();
+    input.value = '';
+    askBar.onInput();
     askBar.onResponse(ok, body);
   };
 
@@ -5518,7 +5520,6 @@ function expandQueryVariants(q, groups) {
     });
     bar.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !$('#askbar-panel').hidden) { e.preventDefault(); askBar.closePanel(); return; }
-      if (e.key === 'Enter' && e.target === input && !e.shiftKey && !e.isComposing) { e.preventDefault(); askBar.submit(); }
     });
     askBar.initMic();
     askBar.refresh();

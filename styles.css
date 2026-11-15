@@ -1,6 +1,7 @@
 /* Second Brain portal: dark premium theme */
 
 :root {
+  --bstack-open-max: min(480px, max(120px, calc(100vh - 220px)));
   --bg: #07080d;
   --bg-2: #0c0e16;
   --surface: rgba(17, 19, 30, 0.82);
@@ -335,6 +336,7 @@ a:hover { color: #b0a6ff; }
   position: static;
   width: 100%;
   max-height: 200px;
+  min-height: 0;
 }
 #bottom-stack .pills-row { display: none; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: var(--dot-color, var(--text-3)); }
@@ -1365,6 +1367,7 @@ body.view-3d .node-panel { display: none; }
   font-size: 16px; /* 16px stops iPhone Safari zooming the page on focus */
   line-height: 1.4;
   resize: none;
+  min-height: 0;
   max-height: 120px;
 }
 .askbar-input::placeholder { color: var(--text-3); }
@@ -1624,6 +1627,18 @@ body.view-3d .node-panel { display: none; }
 #bottom-stack.updates-open .updates-log { display: block; }
 #bottom-stack.updates-open .hud .hud-body { display: block; }
 #bottom-stack .pills-row { display: none; }
+
+/* Batch 2 (2026-11-15): the open Updates stack is height-capped and the
+   universe left panel lifts above it, so neither panel covers the other.
+   Desktop only: at max-width 640px .u-left is top-anchored and the stack
+   already has its own 50vh caps. */
+@media (min-width: 641px) {
+  #bottom-stack.updates-open { max-height: var(--bstack-open-max); }
+  #bottom-stack.updates-open .hud { min-height: 0; overflow-y: auto; }
+  body:has(#bottom-stack.updates-open) .u-left {
+    bottom: calc(max(18px, env(safe-area-inset-bottom)) + 52px + var(--bstack-open-max) + 8px);
+  }
+}
 @media (max-width: 640px) {
   #bottom-stack.updates-open .updates-log { max-height: 50vh; padding: 10px 14px; border-radius: 12px; overflow-y: auto; }
   #bottom-stack.updates-open .hud { max-height: 50vh; overflow-y: auto; }
