@@ -711,8 +711,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=8ac1dcf');
-        await loadScriptOnce('universe.js?v=8ac1dcf');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=bd812d4');
+        await loadScriptOnce('universe.js?v=bd812d4');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -767,25 +767,86 @@ function expandQueryVariants(q, groups) {
       .catch(() => { aliasGroups = []; });
   }
 
-  function expandedSearch(q) {
+  // Pick handler for search results: 3D focuses the universe, 2D selects + centres the node.
+  function focusSearchResult(id) {
     const U = window.BrainUniverse;
+    if (viewMode === '2d') {
+      const n = graph.byId.get(id);
+      if (n) { selectNode(n); centerOn(n); }
+      return;
+    }
+    if (U && U.focusNode) U.focusNode(id);
+  }
+
+  // Search must work when the 3D universe is not initialized (e.g. 2D view); these scan
+  // graphData directly with semantics mirroring BrainUniverse.searchNodes/searchRelations.
+  function expandedSearch(q) {
+    function localSearchNodes(v) {
+      if (!graphData || !Array.isArray(graphData.nodes)) return [];
+      const query = v.toLowerCase().trim();
+      if (query.length < 2) return [];
+      const hits = [];
+      for (const node of graphData.nodes) {
+        const text = ((node.label || node.name || '') + ' ' + (node.id || '')).toLowerCase();
+        const words = text.split(/[^a-z0-9]+/);
+        const weight = words.includes(query) ? 3 : words.some((w) => w.startsWith(query)) ? 2 : text.includes(query) ? 1 : 0;
+        if (weight > 0) {
+          const out = { id: node.id, label: node.label || node.name || node.id };
+          out.score = weight;
+          hits.push({ raw: node, out });
+        }
+      }
+      hits.sort((a, b) => (searchRankOf(a.raw) - searchRankOf(b.raw)) || (b.out.score - a.out.score));
+      return hits.slice(0, 20).map((h) => h.out);
+    }
+
+    function localSearchRelations(v) {
+      if (!graphData || !Array.isArray(graphData.edges)) return [];
+      const query = v.toLowerCase().trim();
+      if (query.length < 2) return [];
+      const fm = query.match(/^f-?(\d+)$/);
+      const fid = fm ? 'F-' + fm[1] : null;
+      const labelOf = (id) => {
+        const lid = String(id).toLowerCase();
+        const n = (graphData.nodes || []).find((x) => String(x.id).toLowerCase() === lid);
+        return n ? (n.label || n.name || id) : id;
+      };
+      const out = [];
+      const seen = new Set();
+      for (const e of graphData.edges) {
+        const type = String(e.type || '').toUpperCase();
+        if (type === 'DOMAIN') continue;
+        const from = (e.source && e.source.id) || e.source || e.from;
+        const to = (e.target && e.target.id) || e.target || e.to;
+        const hit = fid
+          ? String(from).toUpperCase() === fid || String(to).toUpperCase() === fid
+          : type.toLowerCase().includes(query);
+        if (!hit) continue;
+        const key = from + '|' + type + '|' + to;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ from, fromLabel: labelOf(from), type, to, toLabel: labelOf(to) });
+        if (out.length >= 20) break;
+      }
+      return out;
+    }
+    const U = window.BrainUniverse;
+    const ready = !!(U && U.searchNodes && (typeof U.isReady !== 'function' || U.isReady()));
     const nodes = [];
     const rels = [];
     const seenNodes = new Set();
     const seenRels = new Set();
     for (const v of expandQueryVariants(q, aliasGroups)) {
       try {
-        if (U && U.searchNodes) {
-          for (const n of U.searchNodes(v) || []) {
-            if (seenNodes.has(n.id)) continue;
-            seenNodes.add(n.id);
-            nodes.push(n);
-          }
+        for (const n of (ready ? U.searchNodes(v) : localSearchNodes(v)) || []) {
+          if (seenNodes.has(n.id)) continue;
+          seenNodes.add(n.id);
+          nodes.push(n);
         }
       } catch (e) { /* noop */ }
       try {
-        if (U && U.searchRelations) {
-          for (const r of U.searchRelations(v) || []) {
+        if (!ready || U.searchRelations) {
+          for (const r of (ready ? U.searchRelations(v) : localSearchRelations(v)) || []) {
             const key = r.from + '|' + r.type + '|' + r.to;
             if (seenRels.has(key)) continue;
             seenRels.add(key);
@@ -4184,14 +4245,10 @@ function expandQueryVariants(q, groups) {
       // Search graph nodes.
       const matches = [];
       const merged = expandedSearch(q);
-      if (window.BrainUniverse && window.BrainUniverse.searchNodes) {
-        matches.push(...merged.nodes);
-      }
+      matches.push(...merged.nodes);
       // Search relations too ("contradicts", "blocks", "F-0308"…).
       let relMatches = [];
-      if (window.BrainUniverse && window.BrainUniverse.searchRelations) {
-        try { relMatches = merged.rels; } catch (e) { /* noop */ }
-      }
+      try { relMatches = merged.rels; } catch (e) { /* noop */ }
       const closePanel = () => { panel.remove(); document.removeEventListener('click', outsideCloser, true); };
       for (const m of matches.slice(0, 20)) {
         const div = document.createElement('div');
@@ -4201,9 +4258,7 @@ function expandQueryVariants(q, groups) {
         div.querySelector('.muted').textContent = m.id;
         div.addEventListener('click', () => {
           closePanel();
-          if (window.BrainUniverse && window.BrainUniverse.focusNode) {
-            window.BrainUniverse.focusNode(m.id);
-          }
+          focusSearchResult(m.id);
         });
         results.appendChild(div);
       }
@@ -4226,9 +4281,7 @@ function expandQueryVariants(q, groups) {
           div.querySelector('.muted').textContent = r.from + ' → ' + r.to;
           div.addEventListener('click', () => {
             closePanel();
-            if (window.BrainUniverse && window.BrainUniverse.focusNode) {
-              window.BrainUniverse.focusNode(r.from);
-            }
+            focusSearchResult(r.from);
           });
           results.appendChild(div);
         }
@@ -6100,10 +6153,10 @@ function expandQueryVariants(q, groups) {
     let nodes = [];
     let rels = [];
     const merged = expandedSearch(q);
-    try { if (U && U.searchNodes) nodes = merged.nodes; } catch (e) { /* noop */ }
-    try { if (U && U.searchRelations) rels = merged.rels; } catch (e) { /* noop */ }
+    try { nodes = merged.nodes; } catch (e) { /* noop */ }
+    try { rels = merged.rels; } catch (e) { /* noop */ }
     while (box.firstChild) box.removeChild(box.firstChild);
-    const focus = (id) => { if (U && U.focusNode) U.focusNode(id); };
+    const focus = focusSearchResult;
     for (const m of nodes.slice(0, 20)) {
       box.appendChild(oneBar.row(m.label || m.id, m.id, () => focus(m.id)));
     }

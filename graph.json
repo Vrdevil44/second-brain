@@ -1399,8 +1399,18 @@
       "node": "person-guggu",
       "status": "active",
       "date": "2026-10-30",
-      "size": 2,
+      "size": 3,
       "gravity": 0.144
+    },
+    {
+      "id": "F-1927",
+      "label": "Interac e-Transfer Nov 14, 2026: Gagandeep Kaur Dhaliwal sent him $600.00 CAD (reference CAX9AV8j, claim by Dec 13, 2026",
+      "domain": "people",
+      "node": "person-guggu",
+      "status": "active",
+      "date": "2026-11-14",
+      "size": 3,
+      "gravity": 0.1
     },
     {
       "id": "F-0739",
@@ -5949,8 +5959,18 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-13",
-      "size": 3,
+      "size": 4,
       "gravity": 0.164
+    },
+    {
+      "id": "F-1928",
+      "label": "Dream-brain Tests workflow failed again on master, Nov 14, 2026, 12:44 UTC (commit 61d43cd, 4m48s): the test job failed ",
+      "domain": "projects",
+      "node": "proj-second-brain",
+      "status": "active",
+      "date": "2026-11-14",
+      "size": 3,
+      "gravity": 0.1
     },
     {
       "id": "F-0934",
@@ -6825,6 +6845,16 @@
       "date": "2026-11-12",
       "size": 3,
       "gravity": 0.163
+    },
+    {
+      "id": "F-1925",
+      "label": "GitHub usage warning Nov 14, 2026, 05:02 PT: the Vrdevil44 account has used 90% of the 2,000 free Actions minutes includ",
+      "domain": "topics",
+      "node": "topic-github",
+      "status": "active",
+      "date": "2026-11-14",
+      "size": 2,
+      "gravity": 0.1
     },
     {
       "id": "F-0582",
@@ -8514,7 +8544,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-11-10",
-      "size": 3,
+      "size": 4,
       "gravity": 0.16
     },
     {
@@ -8616,6 +8646,156 @@
       "date": "2026-11-13",
       "size": 3,
       "gravity": 0.164
+    },
+    {
+      "id": "F-1924",
+      "label": "Scotia ABM cash withdrawals Nov 14, 2026, from account ending 7289: $270.00 at 12:07 pm ET (9:07 am PT), then $400.00 at",
+      "domain": "topics",
+      "node": "topic-money",
+      "status": "active",
+      "date": "2026-11-14",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1926",
+      "label": "Interac e-Transfer Nov 14, 2026: Vibhu sent $1,000.00 CAD to himself and accepted it the same day — money moved between ",
+      "domain": "topics",
+      "node": "topic-money",
+      "status": "active",
+      "date": "2026-11-14",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1929",
+      "label": "Wealthsimple credit card payment Nov 14, 2026: $631.80 paid from his chequing to the Wealthsimple Visa. Remaining statem",
+      "domain": "topics",
+      "node": "topic-money",
+      "status": "active",
+      "date": "2026-11-14",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1912",
+      "label": "Owner order (chat 2026-11-13): research the 8 core neural network architectures (MLP, CNN, RNN, LSTM, Transformer, Autoe",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1913",
+      "label": "Owner design principle: brain functions should be written like neural network architectures, smartly and cleverly (his w",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1914",
+      "label": "The 8 architectures as function lessons: MLP = weighted sum plus a bend, stacked (depth of simple functions); CNN = one ",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1915",
+      "label": "2025-2026 status: no single architecture wins; the frontier is composition. MLP lives inside every Transformer block; CN",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1916",
+      "label": "Already in this brain in disguise: lexical retrieval is a hand-built 1-D CNN (best current retriever, 27/34 golden vs se",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1917",
+      "label": "Four shared backend pattern functions adopted as design law from this research: scan() (one local-pattern detector reuse",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1918",
+      "label": "Do-now roadmap from the NN research: (1) GNN link-prediction heuristics (common neighbours, Adamic-Adar, MiniLM dot prod",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1919",
+      "label": "Never list from the NN research, recorded so they are not re-proposed: never train a GAN (sourceless generation breaks t",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1920",
+      "label": "Neuromorphic computing verdict: it is not a 9th architecture, it changes execution physics (spikes/events instead of con",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1921",
+      "label": "This brain already works neuromorphically in spirit: event-driven tunnel with zero idle sync, sparks travelling real rel",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1922",
+      "label": "Design ceiling, soberly: on the owner axes (truthful cited-or-declined answers, alive with real work visible, self-rearr",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1923",
+      "label": "CORRECTION to the long-standing 237 relation candidates figure: 237 is the file count of inbox/proposals, not a candidat",
+      "domain": "topics",
+      "node": "topic-neural-network-architectures",
+      "status": "active",
+      "date": "2026-11-13",
+      "size": 2,
+      "gravity": 0.1
     },
     {
       "id": "F-0505",
@@ -10031,6 +10211,11 @@
       "type": "CONTEXT"
     },
     {
+      "source": "F-1927",
+      "target": "F-1531",
+      "type": "EXTENDS"
+    },
+    {
       "source": "F-0739",
       "target": "F-1237",
       "type": "SUPPORTS"
@@ -10836,6 +11021,11 @@
       "type": "EXTENDS"
     },
     {
+      "source": "F-1928",
+      "target": "F-1910",
+      "type": "EXTENDS"
+    },
+    {
       "source": "F-1666",
       "target": "F-1486",
       "type": "CONTEXT"
@@ -11219,6 +11409,11 @@
       "source": "F-1911",
       "target": "F-1110",
       "type": "EXTENDS"
+    },
+    {
+      "source": "F-1929",
+      "target": "F-1816",
+      "type": "UPDATES"
     },
     {
       "source": "F-1675",
@@ -12087,6 +12282,11 @@
     },
     {
       "source": "F-1531",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1927",
       "target": "domain-people",
       "type": "DOMAIN"
     },
@@ -14391,6 +14591,11 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1928",
+      "target": "domain-projects",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-0934",
       "target": "domain-topics",
       "type": "DOMAIN"
@@ -14847,6 +15052,11 @@
     },
     {
       "source": "F-1869",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1925",
       "target": "domain-topics",
       "type": "DOMAIN"
     },
@@ -15766,6 +15976,81 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1924",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1926",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1929",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1912",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1913",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1914",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1915",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1916",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1917",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1918",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1919",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1920",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1921",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1922",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1923",
+      "target": "domain-topics",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-0505",
       "target": "domain-topics",
       "type": "DOMAIN"
@@ -16668,6 +16953,10 @@
     },
     {
       "node": "topic-money",
+      "kind": "topic"
+    },
+    {
+      "node": "topic-neural-network-architectures",
       "kind": "topic"
     },
     {

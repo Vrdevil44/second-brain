@@ -329,7 +329,9 @@ function searchRankOf(node) {
     // (131 of ~191 facts have no relations; without seeding they'd drift
     // randomly.) Offsets are hashed from the node id, so the layout is stable
     // across loads. The force simulation still refines from here.
-    const SEED_R = 300, SEED_J = 170;
+    // Growth Law (owner 2026-11-15): seeds scale by cbrt(N/576), never below 1.
+    const s = Math.cbrt(Math.max(576, (Array.isArray(data && data.nodes) ? data.nodes : []).length) / 576);
+    const SEED_R = 300 * s, SEED_J = 170 * s;
     const centers = {};
     const seedKinds = layoutKinds(data);
     seedKinds.forEach((d, i) => {
@@ -369,7 +371,7 @@ function searchRankOf(node) {
       // the mesh visibly settles around the mind; low-gravity drifts outward.
       // Subtle and stable: initial bias only, the force sim does the rest.
       const grav = Math.min(1, Math.max(0, Number(n.gravity) || 0.10));
-      const gR = 300 * (1.25 - grav); // grav 1 -> r=75, grav 0.1 -> r=345
+      const gR = 300 * s * (1.25 - grav); // grav 1 -> r=75, grav 0.1 -> r=345
       const th = hash01(id + ':gt') * Math.PI * 2;
       const ph = Math.acos(2 * hash01(id + ':gp') - 1);
       const node = {
@@ -1486,6 +1488,10 @@ function searchRankOf(node) {
     S.graph.d3Force('brainGravity', (alpha) => {
       if (!S || !S.graph) return;
       const nodes = S.graph.graphData().nodes;
+      // Growth Law (owner 2026-11-15): the brain grows by cbrt(N) so density
+      // stays constant; 576 nodes is the size the constants were tuned at.
+      const N = nodes.length;
+      const s = Math.cbrt(Math.max(576, N) / 576);
       for (let i = 0; i < nodes.length; i++) {
         const n = nodes[i];
         if (n.id === 'core') continue; // core is pinned at center
@@ -1495,15 +1501,119 @@ function searchRankOf(node) {
         // beneath the shell, so the settled cloud is a filled ball instead of
         // a hollow shell (which projected as a flat ring/disc). Floor is the
         // core surface (~70): no target ever sits inside the core's visual.
-        const shellR = 70 + (1 - g) * 320; // core surface ~70, rim ~390
+        // Growth Law: layers are proportions of the current outer radius 390*s.
+        const floorR = 70 * s;
+        const shellR = floorR + (1 - g) * 320 * s; // core surface ~70s, rim ~390s
         const fill = 0.12 + 0.88 * hash01(n.id + ':gr');
-        const targetR = 70 + (shellR - 70) * fill;
+        const targetR = floorR + (shellR - floorR) * fill;
         const x = n.x || 0, y = n.y || 0, z = n.z || 0;
         const r = Math.sqrt(x * x + y * y + z * z) || 0.001;
         const pull = ((r - targetR) / r) * alpha * 0.5;
         n.vx = (n.vx || 0) - x * pull;
         n.vy = (n.vy || 0) - y * pull;
         n.vz = (n.vz || 0) - z * pull;
+      }
+    });
+    // Local gravity (owner 2026-11-15): every node is drawn toward its hub (its
+    // highest-degree neighbour, only if strictly higher degree), so clusters
+    // form around hubs across domains. Pull is proportional to distance, like
+    // brainGravity; dead zone under 48 keeps clusters from collapsing.
+    S.graph.d3Force('clusterGravity', (alpha) => {
+      if (!S || !S.graph) return;
+      const data = S.graph.graphData();
+      const nodes = data.nodes || [];
+      const links = data.links || [];
+      let c = S._cgCache;
+      if (!c || c.nodes !== nodes || c.links !== links) {
+        const byId = new Map();
+        const degree = new Map();
+        const hubOf = new Map();
+        for (const n of nodes) { byId.set(n.id, n); degree.set(n.id, 0); }
+        const pairs = [];
+        for (const l of links) {
+          const a = byId.get(idOf(l.source));
+          const b = byId.get(idOf(l.target));
+          if (!a || !b) continue;
+          degree.set(a.id, degree.get(a.id) + 1);
+          degree.set(b.id, degree.get(b.id) + 1);
+          pairs.push([a, b]);
+        }
+        const consider = (n, m) => {
+          const dm = degree.get(m.id);
+          if (dm <= degree.get(n.id)) return;
+          const cur = hubOf.get(n.id);
+          if (!cur || dm > degree.get(cur.id)) hubOf.set(n.id, m);
+        };
+        for (const [a, b] of pairs) { consider(a, b); consider(b, a); }
+        c = S._cgCache = { nodes, links, byId, degree, hubOf };
+      }
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (n.id === 'core' || n.fx != null) continue; // core / pinned stay put
+        const hub = c.hubOf.get(n.id);
+        if (!hub) continue;
+        const dx = (hub.x || 0) - (n.x || 0);
+        const dy = (hub.y || 0) - (n.y || 0);
+        const dz = (hub.z || 0) - (n.z || 0);
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist < 48 || dist === 0) continue;
+        const w = 0.05 / Math.sqrt(Math.max(1, c.degree.get(hub.id)));
+        n.vx = (n.vx || 0) + dx * alpha * w;
+        n.vy = (n.vy || 0) + dy * alpha * w;
+        n.vz = (n.vz || 0) + dz * alpha * w;
+      }
+    });
+    // Minimum spacing (Growth Law, owner 2026-11-15): nodes never overlap their
+    // neighbours. MIN_D is tied to node visual size and deliberately NOT scaled
+    // — growth keeps density constant, so spacing stays constant.
+    S.graph.d3Force('minSpacing', (alpha) => {
+      if (!S || !S.graph) return;
+      const MIN_D = 24;
+      const nodes = S.graph.graphData().nodes || [];
+      const cells = new Map();
+      const cellOf = (n) => [
+        Math.floor((n.x || 0) / MIN_D), Math.floor((n.y || 0) / MIN_D), Math.floor((n.z || 0) / MIN_D),
+      ];
+      for (let i = 0; i < nodes.length; i++) {
+        const [ix, iy, iz] = cellOf(nodes[i]);
+        const key = ix + ',' + iy + ',' + iz;
+        const b = cells.get(key);
+        if (b) b.push(i); else cells.set(key, [i]);
+      }
+      for (let i = 0; i < nodes.length; i++) {
+        const a = nodes[i];
+        const [ix, iy, iz] = cellOf(a);
+        const aMove = a.fx == null;
+        for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) for (let oz = -1; oz <= 1; oz++) {
+          const bucket = cells.get((ix + ox) + ',' + (iy + oy) + ',' + (iz + oz));
+          if (!bucket) continue;
+          for (const j of bucket) {
+            if (j <= i) continue; // each unordered pair once
+            const b = nodes[j];
+            const bMove = b.fx == null;
+            if (!aMove && !bMove) continue;
+            const dx = (b.x || 0) - (a.x || 0);
+            const dy = (b.y || 0) - (a.y || 0);
+            const dz = (b.z || 0) - (a.z || 0);
+            const dist = Math.hypot(dx, dy, dz);
+            if (!(dist < MIN_D)) continue;
+            if (dist > 1e-6) {
+              const push = ((MIN_D - dist) / dist) * 0.5 * alpha;
+              if (aMove) { a.vx = (a.vx || 0) - dx * push; a.vy = (a.vy || 0) - dy * push; a.vz = (a.vz || 0) - dz * push; }
+              if (bMove) { b.vx = (b.vx || 0) + dx * push; b.vy = (b.vy || 0) + dy * push; b.vz = (b.vz || 0) + dz * push; }
+            } else {
+              // Coincident: deterministic direction from the pair's hash.
+              const th = hash01(a.id + '|' + b.id) * Math.PI * 2;
+              const ph = Math.acos(2 * hash01(b.id + '|' + a.id) - 1);
+              const k = MIN_D * 0.25 * alpha;
+              const ux = Math.sin(ph) * Math.cos(th) * k;
+              const uy = Math.sin(ph) * Math.sin(th) * k;
+              const uz = Math.cos(ph) * k;
+              if (aMove) { a.vx = (a.vx || 0) - ux; a.vy = (a.vy || 0) - uy; a.vz = (a.vz || 0) - uz; }
+              if (bMove) { b.vx = (b.vx || 0) + ux; b.vy = (b.vy || 0) + uy; b.vz = (b.vz || 0) + uz; }
+            }
+          }
+        }
       }
     });
 
