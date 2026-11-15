@@ -818,7 +818,7 @@
       "node": "person-anuj-bhaiya",
       "status": "active",
       "date": "2026-11-10",
-      "size": 3,
+      "size": 5,
       "gravity": 0.545
     },
     {
@@ -878,7 +878,7 @@
       "node": "person-anuj-bhaiya",
       "status": "active",
       "date": "2026-11-12",
-      "size": 4,
+      "size": 5,
       "gravity": 0.305
     },
     {
@@ -1142,6 +1142,36 @@
       "gravity": 0.284
     },
     {
+      "id": "F-1930",
+      "label": "Enrichment capture, content wave 1 2026-11-15: this page holds 2 facts (F-0764 identity, F-1532 booking behaviour); the ",
+      "domain": "people",
+      "node": "person-dr-bahrani",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1931",
+      "label": "The current standing rule for the Dr. Bahrani revisit is recorded on the health topic page as F-1289: the rule is no lon",
+      "domain": "people",
+      "node": "person-dr-bahrani",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1932",
+      "label": "Dr. Bahrani practices at Sina Medical (place-sina-medical); that place page's prose carries the same clinical context: d",
+      "domain": "people",
+      "node": "person-dr-bahrani",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
       "id": "F-0296",
       "label": "F12 manager's name is Kevan (okay to record)",
       "domain": "people",
@@ -1308,7 +1338,7 @@
       "node": "person-guggu",
       "status": "active",
       "date": "2026-10-01",
-      "size": 9,
+      "size": 10,
       "gravity": 0.513
     },
     {
@@ -1318,7 +1348,7 @@
       "node": "person-guggu",
       "status": "active",
       "date": "2026-10-10",
-      "size": 4,
+      "size": 5,
       "gravity": 0.123
     },
     {
@@ -1503,6 +1533,26 @@
       "gravity": 0.284
     },
     {
+      "id": "F-1933",
+      "label": "Enrichment capture, content wave 1 2026-11-15: this page holds Ishaan's identity (F-1585) only; the one money-flow recor",
+      "domain": "people",
+      "node": "person-ishaan",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1934",
+      "label": "Money-flow note (UNVERIFIED, kept unverified): the money topic page records at F-1578 that Ishaan, cousin in India, is o",
+      "domain": "people",
+      "node": "person-ishaan",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
       "id": "F-1383",
       "label": "Reversal (Oct 20, 2026, ~23:30 PT): after a week of silence (Oct 15-18; Vibhu had messaged Oct 16 and Oct 18 evening wit",
       "domain": "people",
@@ -1563,6 +1613,26 @@
       "gravity": 0.284
     },
     {
+      "id": "F-1935",
+      "label": "Enrichment capture, content wave 1 2026-11-15: this page holds a single fact (F-1625, his role and offer, moved here fro",
+      "domain": "people",
+      "node": "person-kenneth-macknight",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1936",
+      "label": "On the DOTM project page, the Spectrum comeback campaign record F-0870 (now superseded) named Kenneth Macknight (Kenny) ",
+      "domain": "people",
+      "node": "person-kenneth-macknight",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
       "id": "F-0742",
       "label": "Kimberley 'Kim' Hutmacher is the General Manager of F12.net (Surrey, since March 2026); the Technical Account Manager ro",
       "domain": "people",
@@ -1619,7 +1689,7 @@
       "node": "person-manan",
       "status": "active",
       "date": "2026-10-08",
-      "size": 2,
+      "size": 3,
       "gravity": 0.256
     },
     {
@@ -1873,6 +1943,26 @@
       "gravity": 0.284
     },
     {
+      "id": "F-1937",
+      "label": "Enrichment capture, content wave 1 2026-11-15: this page holds Patanjali's identity (F-1239, which itself points at the ",
+      "domain": "people",
+      "node": "person-patanjali",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1938",
+      "label": "The Remitly record naming Patanjali lives on the money topic page: F-1236 (Vibhu sends money to India via Remitly to his",
+      "domain": "people",
+      "node": "person-patanjali",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 5,
+      "gravity": 0.1
+    },
+    {
       "id": "F-1148",
       "label": "Pouya is Vibhu's best friend at work (his own words, 2026-10-21); Pouya is his senior and colleague at F12.net, and the ",
       "domain": "people",
@@ -1979,8 +2069,38 @@
       "node": "person-sonu-tyagi",
       "status": "active",
       "date": "2026-10-21",
-      "size": 3,
+      "size": 4,
       "gravity": 0.274
+    },
+    {
+      "id": "F-1939",
+      "label": "Enrichment capture, content wave 1 2026-11-15: this page holds a single fact (F-0747, the 2026-10-21 snapshot ending at ",
+      "domain": "people",
+      "node": "person-sonu-tyagi",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1940",
+      "label": "The Sonu Tyagi / Approach Entertainment thread is recorded in full on the DOTM project page as F-1155: his Oct 17, 2026 ",
+      "domain": "people",
+      "node": "person-sonu-tyagi",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 3,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1941",
+      "label": "On 2026-11-12 Sonu Tyagi finally sent the DOTM PR framework (email with DOTM Proposal.pptx attached), ending the long si",
+      "domain": "people",
+      "node": "person-sonu-tyagi",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 5,
+      "gravity": 0.1
     },
     {
       "id": "F-0776",
@@ -2009,7 +2129,7 @@
       "node": "person-vibhu",
       "status": "active",
       "date": "2026-10-01",
-      "size": 2,
+      "size": 3,
       "gravity": 0.494
     },
     {
@@ -2069,7 +2189,7 @@
       "node": "person-vibhu",
       "status": "active",
       "date": "2026-10-30",
-      "size": 4,
+      "size": 6,
       "gravity": 0.287
     },
     {
@@ -2129,7 +2249,7 @@
       "node": "person-vibhu",
       "status": "active",
       "date": "2026-10-30",
-      "size": 2,
+      "size": 5,
       "gravity": 0.284
     },
     {
@@ -2143,6 +2263,46 @@
       "gravity": 0.264
     },
     {
+      "id": "F-1942",
+      "label": "Wiring capture, content wave 1 2026-11-15: companion to this morning's Wikipedia enrichment capture for Abbotsford (key ",
+      "domain": "places",
+      "node": "place-abbotsford",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1943",
+      "label": "Existing brain mentions of Abbotsford: at least 4 active facts on other pages name it in their own text: F-0212, F-0239,",
+      "domain": "places",
+      "node": "place-abbotsford",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 5,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1944",
+      "label": "Wiring capture, content wave 1 2026-11-15: companion to this morning's Wikipedia enrichment capture for Burnaby (key wik",
+      "domain": "places",
+      "node": "place-burnaby",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1945",
+      "label": "Existing brain mentions of Burnaby: at least 18 active facts on other pages name it in their own text: F-0003, F-0010, F",
+      "domain": "places",
+      "node": "place-burnaby",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 6,
+      "gravity": 0.1
+    },
+    {
       "id": "F-1635",
       "label": "Cartech Classics — Milan Nenadic's shop at 2380 Shell Rd, Richmond BC V6X 2P1 (Chrysler 300 project). His cell and shop ",
       "domain": "places",
@@ -2151,6 +2311,26 @@
       "date": "2026-10-30",
       "size": 2,
       "gravity": 0.529
+    },
+    {
+      "id": "F-1946",
+      "label": "Wiring capture, content wave 1 2026-11-15: companion to this morning's Wikipedia enrichment capture for Chandigarh (key ",
+      "domain": "places",
+      "node": "place-chandigarh",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1947",
+      "label": "Existing brain mentions of Chandigarh: active facts naming it include F-1146 and F-1495; earlier records F-0306, F-0361,",
+      "domain": "places",
+      "node": "place-chandigarh",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 4,
+      "gravity": 0.1
     },
     {
       "id": "F-1890",
@@ -2163,6 +2343,26 @@
       "gravity": 0.164
     },
     {
+      "id": "F-1948",
+      "label": "Wiring capture, content wave 1 2026-11-15: companion to this morning's Wikipedia enrichment capture for DPS Etawah (key ",
+      "domain": "places",
+      "node": "place-dps-etawah",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1949",
+      "label": "Existing brain mentions of DPS Etawah: facts naming the school include F-1146 and F-1495 (active) and F-0361, F-0402, F-",
+      "domain": "places",
+      "node": "place-dps-etawah",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 4,
+      "gravity": 0.1
+    },
+    {
       "id": "F-1336",
       "label": "F12.net Inc., 13555 156 Street, Edmonton, AB T5V 1R9 — his employer's payroll address is Edmonton while his work sits in",
       "domain": "places",
@@ -2171,6 +2371,26 @@
       "date": "2026-10-30",
       "size": 2,
       "gravity": 0.529
+    },
+    {
+      "id": "F-1950",
+      "label": "Wiring capture, content wave 1 2026-11-15: companion to this morning's Wikipedia enrichment capture for Etawah (key wiki",
+      "domain": "places",
+      "node": "place-etawah",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1951",
+      "label": "Existing brain mentions of Etawah: at least 6 active facts on other pages name it in their own text: F-1146, F-1495, F-1",
+      "domain": "places",
+      "node": "place-etawah",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 5,
+      "gravity": 0.1
     },
     {
       "id": "F-1284",
@@ -2193,14 +2413,54 @@
       "gravity": 0.284
     },
     {
+      "id": "F-1952",
+      "label": "Wiring capture, content wave 1 2026-11-15: companion to this morning's Wikipedia enrichment capture for Surrey (key wiki",
+      "domain": "places",
+      "node": "place-surrey",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1953",
+      "label": "Existing brain mentions of Surrey: at least 5 active facts on other pages name it in their own text: F-0310, F-0742, F-1",
+      "domain": "places",
+      "node": "place-surrey",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 5,
+      "gravity": 0.1
+    },
+    {
       "id": "F-1639",
       "label": "Canadian address for partnership-form submissions (given Oct 15, 2026): 4880 Lougheed Highway, Burnaby, BC V5C 0N1. Some",
       "domain": "places",
       "node": "place-unit-2708",
       "status": "active",
       "date": "2026-10-30",
-      "size": 2,
+      "size": 3,
       "gravity": 0.529
+    },
+    {
+      "id": "F-1954",
+      "label": "Wiring capture, content wave 1 2026-11-15: companion to this morning's Wikipedia enrichment capture for Vancouver (key w",
+      "domain": "places",
+      "node": "place-vancouver",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 2,
+      "gravity": 0.1
+    },
+    {
+      "id": "F-1955",
+      "label": "Existing brain mentions of Vancouver: at least 18 active facts on other pages name it in their own text: F-0028, F-1084,",
+      "domain": "places",
+      "node": "place-vancouver",
+      "status": "active",
+      "date": "2026-11-15",
+      "size": 6,
+      "gravity": 0.1
     },
     {
       "id": "F-1481",
@@ -2569,7 +2829,7 @@
       "node": "proj-car",
       "status": "active",
       "date": "2026-11-11",
-      "size": 2,
+      "size": 3,
       "gravity": 0.545
     },
     {
@@ -2689,7 +2949,7 @@
       "node": "proj-car",
       "status": "active",
       "date": "2026-11-11",
-      "size": 2,
+      "size": 3,
       "gravity": 0.16
     },
     {
@@ -2859,7 +3119,7 @@
       "node": "proj-dotm",
       "status": "active",
       "date": "2026-10-01",
-      "size": 4,
+      "size": 5,
       "gravity": 0.109
     },
     {
@@ -3309,7 +3569,7 @@
       "node": "proj-dotm",
       "status": "active",
       "date": "2026-10-30",
-      "size": 4,
+      "size": 5,
       "gravity": 0.147
     },
     {
@@ -3709,7 +3969,7 @@
       "node": "proj-dotm",
       "status": "active",
       "date": "2026-11-12",
-      "size": 3,
+      "size": 4,
       "gravity": 0.163
     },
     {
@@ -3719,7 +3979,7 @@
       "node": "proj-dotm",
       "status": "active",
       "date": "2026-11-12",
-      "size": 3,
+      "size": 4,
       "gravity": 0.163
     },
     {
@@ -5889,7 +6149,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-13",
-      "size": 3,
+      "size": 4,
       "gravity": 0.164
     },
     {
@@ -5899,7 +6159,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-13",
-      "size": 2,
+      "size": 3,
       "gravity": 0.162
     },
     {
@@ -6503,7 +6763,7 @@
       "node": "topic-career",
       "status": "active",
       "date": "2026-11-01",
-      "size": 3,
+      "size": 4,
       "gravity": 0.533
     },
     {
@@ -7083,7 +7343,7 @@
       "node": "topic-health",
       "status": "active",
       "date": "2026-10-30",
-      "size": 2,
+      "size": 3,
       "gravity": 0.144
     },
     {
@@ -7724,7 +7984,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-10-07",
-      "size": 3,
+      "size": 4,
       "gravity": 0.117
     },
     {
@@ -7944,7 +8204,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-10-29",
-      "size": 2,
+      "size": 3,
       "gravity": 0.142
     },
     {
@@ -8064,7 +8324,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-10-30",
-      "size": 2,
+      "size": 3,
       "gravity": 0.144
     },
     {
@@ -8154,7 +8414,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-10-30",
-      "size": 2,
+      "size": 3,
       "gravity": 0.144
     },
     {
@@ -8274,7 +8534,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-10-30",
-      "size": 2,
+      "size": 3,
       "gravity": 0.144
     },
     {
@@ -8594,7 +8854,7 @@
       "node": "topic-money",
       "status": "active",
       "date": "2026-11-12",
-      "size": 2,
+      "size": 3,
       "gravity": 0.874
     },
     {
@@ -10131,6 +10391,11 @@
       "type": "REFINES"
     },
     {
+      "source": "F-1931",
+      "target": "F-1289",
+      "type": "CONTEXT"
+    },
+    {
       "source": "F-1859",
       "target": "F-1172",
       "type": "CONTEXT"
@@ -10236,6 +10501,11 @@
       "type": "CONTEXT"
     },
     {
+      "source": "F-1934",
+      "target": "F-1578",
+      "type": "CONTEXT"
+    },
+    {
       "source": "F-0742",
       "target": "F-1237",
       "type": "CONTEXT"
@@ -10281,6 +10551,21 @@
       "type": "SUPPORTS"
     },
     {
+      "source": "F-1938",
+      "target": "F-1236",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1938",
+      "target": "F-1111",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1938",
+      "target": "F-1270",
+      "type": "CONTEXT"
+    },
+    {
       "source": "F-0774",
       "target": "F-0024",
       "type": "CONTEXT"
@@ -10296,6 +10581,26 @@
       "type": "CONTEXT"
     },
     {
+      "source": "F-1940",
+      "target": "F-1155",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1941",
+      "target": "F-1858",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1941",
+      "target": "F-1871",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1941",
+      "target": "F-0747",
+      "type": "UPDATES"
+    },
+    {
       "source": "F-0776",
       "target": "F-0024",
       "type": "CONTEXT"
@@ -10303,6 +10608,111 @@
     {
       "source": "F-1146",
       "target": "F-1654",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1943",
+      "target": "F-0212",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1943",
+      "target": "F-0239",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1943",
+      "target": "F-1841",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1945",
+      "target": "F-0003",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1945",
+      "target": "F-0010",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1945",
+      "target": "F-1639",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1945",
+      "target": "F-1820",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1947",
+      "target": "F-1146",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1947",
+      "target": "F-1495",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1949",
+      "target": "F-1146",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1949",
+      "target": "F-1495",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1951",
+      "target": "F-1495",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1951",
+      "target": "F-1863",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1951",
+      "target": "F-1903",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1953",
+      "target": "F-0310",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1953",
+      "target": "F-1701",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1953",
+      "target": "F-1829",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1955",
+      "target": "F-0028",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1955",
+      "target": "F-1820",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1955",
+      "target": "F-1852",
+      "type": "CONTEXT"
+    },
+    {
+      "source": "F-1955",
+      "target": "F-1904",
       "type": "CONTEXT"
     },
     {
@@ -12136,6 +12546,21 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1930",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1931",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1932",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-0296",
       "target": "domain-people",
       "type": "DOMAIN"
@@ -12336,6 +12761,16 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1933",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1934",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-1383",
       "target": "domain-people",
       "type": "DOMAIN"
@@ -12362,6 +12797,16 @@
     },
     {
       "source": "F-1625",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1935",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1936",
       "target": "domain-people",
       "type": "DOMAIN"
     },
@@ -12531,6 +12976,16 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1937",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1938",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-1148",
       "target": "domain-people",
       "type": "DOMAIN"
@@ -12582,6 +13037,21 @@
     },
     {
       "source": "F-0747",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1939",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1940",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1941",
       "target": "domain-people",
       "type": "DOMAIN"
     },
@@ -12676,7 +13146,37 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1942",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1943",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1944",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1945",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-1635",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1946",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1947",
       "target": "domain-places",
       "type": "DOMAIN"
     },
@@ -12686,7 +13186,27 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1948",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1949",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-1336",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1950",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1951",
       "target": "domain-places",
       "type": "DOMAIN"
     },
@@ -12701,7 +13221,27 @@
       "type": "DOMAIN"
     },
     {
+      "source": "F-1952",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1953",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
       "source": "F-1639",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1954",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "F-1955",
       "target": "domain-places",
       "type": "DOMAIN"
     },
@@ -16864,7 +17404,19 @@
       "kind": "person"
     },
     {
+      "node": "place-abbotsford",
+      "kind": "place"
+    },
+    {
+      "node": "place-burnaby",
+      "kind": "place"
+    },
+    {
       "node": "place-cartech-classics",
+      "kind": "place"
+    },
+    {
+      "node": "place-chandigarh",
       "kind": "place"
     },
     {
@@ -16876,11 +17428,23 @@
       "kind": "place"
     },
     {
+      "node": "place-etawah",
+      "kind": "place"
+    },
+    {
       "node": "place-fastrack-autobody",
       "kind": "place"
     },
     {
+      "node": "place-surrey",
+      "kind": "place"
+    },
+    {
       "node": "place-unit-2708",
+      "kind": "place"
+    },
+    {
+      "node": "place-vancouver",
       "kind": "place"
     },
     {

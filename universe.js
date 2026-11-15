@@ -614,6 +614,7 @@ function searchRankOf(node) {
       updateFocus();
     } else {
       select(id, false);
+      if (S.selected === id) pulseNodeRelations(id, 4);
     }
   }
 
@@ -1418,6 +1419,7 @@ function searchRankOf(node) {
         const id = node ? node.id : null;
         if (S.hovered === id) return;
         S.hovered = id;
+        if (id) pulseNodeRelations(id, 3);
         if (id) stopRotation(); else armResume();
         if (node) {
           S.tip.textContent = node.name;
@@ -1516,8 +1518,10 @@ function searchRankOf(node) {
     });
     // Local gravity (owner 2026-11-15): every node is drawn toward its hub (its
     // highest-degree neighbour, only if strictly higher degree), so clusters
-    // form around hubs across domains. Pull is proportional to distance, like
-    // brainGravity; dead zone under 48 keeps clusters from collapsing.
+    // form around hubs across domains. Degree and hubs count REAL relations
+    // only (DOMAIN scaffolding edges are skipped). Pull is proportional to
+    // distance, like brainGravity, with weight 0.12 / sqrt(hub degree); dead
+    // zone under 30 keeps clusters from collapsing.
     S.graph.d3Force('clusterGravity', (alpha) => {
       if (!S || !S.graph) return;
       const data = S.graph.graphData();
@@ -1534,6 +1538,7 @@ function searchRankOf(node) {
           const a = byId.get(idOf(l.source));
           const b = byId.get(idOf(l.target));
           if (!a || !b) continue;
+          if (String(l.type || '').toUpperCase() === 'DOMAIN') continue; // scaffolding: not a real relation
           degree.set(a.id, degree.get(a.id) + 1);
           degree.set(b.id, degree.get(b.id) + 1);
           pairs.push([a, b]);
@@ -1556,8 +1561,8 @@ function searchRankOf(node) {
         const dy = (hub.y || 0) - (n.y || 0);
         const dz = (hub.z || 0) - (n.z || 0);
         const dist = Math.hypot(dx, dy, dz);
-        if (dist < 48 || dist === 0) continue;
-        const w = 0.05 / Math.sqrt(Math.max(1, c.degree.get(hub.id)));
+        if (dist < 30 || dist === 0) continue;
+        const w = 0.12 / Math.sqrt(Math.max(1, c.degree.get(hub.id)));
         n.vx = (n.vx || 0) + dx * alpha * w;
         n.vy = (n.vy || 0) + dy * alpha * w;
         n.vz = (n.vz || 0) + dz * alpha * w;
@@ -2191,6 +2196,7 @@ function searchRankOf(node) {
   const FX_RING_ALPHA = 0.5;
   const FX_DRAW_MS = 900;
   const FX_GHOST_ALPHA = 0.35;
+  const FX_MEMBRANE_ALPHA = 0.14;   // steady membrane beacon alpha
   const FX_PULSE_S = 5.5;
 
   // The one shared concurrency counter (limit 24 live animating objects).
@@ -2318,19 +2324,18 @@ function searchRankOf(node) {
     const inbox = Math.max(0, Number(st.inbox) || 0);
     if (L.membrane) { L.membrane.inbox = inbox; return; }
     const scene = liveScene();
-    const mesh = liveMesh(STREAK_KNOWLEDGE, FX_GHOST_ALPHA);
+    const mesh = liveMesh(STREAK_KNOWLEDGE, FX_MEMBRANE_ALPHA);
     if (!scene || !mesh) return; // glow template not ready yet: try next poll
     const R = edgeRadius() * 1.08, d = hashDir('membrane');
     mesh.position.set(d.x * R, d.y * R, d.z * R);
-    mesh.visible = false;
     scene.add(mesh);
     const m = L.membrane = { inbox };
     L.fx.push({
       update(now) {
         budgetLog(now);
-        mesh.visible = m.inbox > 0;
+        mesh.visible = true;
         const pulse = fxReduced() ? 1 : 0.8 + 0.2 * Math.sin((2 * Math.PI * now) / (FX_PULSE_S * 1000));
-        mesh.material.opacity = FX_GHOST_ALPHA * pulse;
+        mesh.material.opacity = FX_MEMBRANE_ALPHA * pulse;
         mesh.scale.setScalar(5 + 9 * Math.min(1, m.inbox / 40));
         return true;
       },
@@ -2737,6 +2742,7 @@ function searchRankOf(node) {
     getPanelRows,
     markFresh,
     eventPacket: (edge) => fireEventPacket(edge),
+    pulseNode: (id) => pulseNodeRelations(id, 4),
     focusNode: (id) => {
       if (!S || !S.graph) return false;
       const node = S.graph.graphData().nodes.find((n) => n.id === id);
@@ -2841,6 +2847,7 @@ function searchRankOf(node) {
     const resolve = (xs) => (Array.isArray(xs) ? xs : []).map(String).filter((id) => !!nodeById(id));
     const litIds = resolve(fids);
     const pulseIds = resolve(looked);
+    for (const id of litIds.slice(0, 4)) pulseNodeRelations(id, 2);
     const settle = () => {
       if (!S || !S.live) return;
       for (const id of barGlow) { const g = S.live.glow.get(id); if (g && g.bar) S.live.glow.delete(id); }
@@ -3613,6 +3620,43 @@ function searchRankOf(node) {
     const flip = SP.ctx.rng() < 0.5; // direction is arbitrary; completion lights both ends
     SP.strikeSparks.push({ s: flip ? e.target : e.source, t: flip ? e.source : e.target, type: e.type, t0: SP.clock,
       ph: 0, legs: 0, once: true, fast: STRIKE_SPEED_X, glow: 1.8, rgb: sparksHexRgb(SPARKS_CORE_COLOR), key, done: both });
+  }
+
+  // SPARKS-PULSE:begin
+  // Pure planner: which of a node's incident edges to pulse. No DOMAIN scaffolding,
+  // qualified relation types first, stable order within each class, capped.
+  function sparksPulsePlan(edges, cap) {
+    const QUAL = ['CAUSES', 'CAUSED-BY', 'SUPPORTS', 'ENABLES', 'REFINES', 'EXTENDS', 'CHALLENGES', 'BLOCKS', 'UPDATES', 'INSTANCE'];
+    const list = Array.isArray(edges) ? edges : [];
+    const qualified = [];
+    const rest = [];
+    for (const e of list) {
+      if (!e) continue;
+      const t = String(e.type || '').toUpperCase();
+      if (t === 'DOMAIN') continue;
+      (QUAL.indexOf(t) !== -1 ? qualified : rest).push(e);
+    }
+    const out = qualified.concat(rest);
+    const n = Number.isFinite(cap) ? Math.max(0, cap) : out.length;
+    return out.slice(0, n);
+  }
+  // SPARKS-PULSE:end
+
+  const pulseLastAt = new Map(); // node id -> last pulse time
+  const PULSE_NODE_COOLDOWN_MS = 8000;
+  // Event source wrapper: hover / selection / ask citations pulse a node's real relations.
+  function pulseNodeRelations(id, cap) {
+    const SP = S && S.sparks;
+    if (!SP || !SP.running || id == null) return 0;
+    const key = String(id);
+    const now = Date.now();
+    if (now - (pulseLastAt.get(key) || 0) < PULSE_NODE_COOLDOWN_MS) return 0;
+    const edges = SP.relByNode && SP.relByNode.get(key);
+    if (!edges || !edges.length) return 0;
+    pulseLastAt.set(key, now);
+    let fired = 0;
+    for (const e of sparksPulsePlan(edges, cap == null ? 4 : cap)) if (fireEventPacket(e)) fired++;
+    return fired;
   }
 
   // Event packet: one calm one-way crossing on a real rendered relation, exact direction.
