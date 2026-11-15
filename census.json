@@ -1,5 +1,5 @@
 {
-  "generatedFrom": "2f829d65ac6826453cc7aa7edd412ad91b832bd1531e4ac79b9b78c55ca01455",
+  "generatedFrom": "d3122c623e368929873c191341f30da16eb7d21c41b839af52f0bf6f4efc5ab9",
   "facts": {
     "total": 1905,
     "active": 1132,
@@ -10,7 +10,7 @@
   },
   "graph": {
     "nodes": 970,
-    "edges": 1322,
+    "edges": 1326,
     "hubs": 7,
     "core": 1,
     "coreFacts": 31,

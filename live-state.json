@@ -1,8 +1,8 @@
 {
   "v": 1,
-  "beat": 2189,
-  "ts": "2026-11-15T08:38:24Z",
-  "head": "95238c66",
+  "beat": 2205,
+  "ts": "2026-11-15T12:38:24Z",
+  "head": "266b1497",
   "nodes": 970,
   "inbox": 13,
   "fail": 0,
@@ -33,118 +33,6 @@
     "last_think": "2026-11-15T00:08:27.827Z"
   },
   "activity": [
-    {
-      "t": "2026-11-15T02:53:24Z",
-      "kind": "beat",
-      "beat": 2166,
-      "label": "beat 2166 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T03:08:24Z",
-      "kind": "beat",
-      "beat": 2167,
-      "label": "beat 2167 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T03:23:24Z",
-      "kind": "beat",
-      "beat": 2168,
-      "label": "beat 2168 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T03:38:24Z",
-      "kind": "beat",
-      "beat": 2169,
-      "label": "beat 2169 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T03:53:24Z",
-      "kind": "beat",
-      "beat": 2170,
-      "label": "beat 2170 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T04:08:24Z",
-      "kind": "beat",
-      "beat": 2171,
-      "label": "beat 2171 \u2014 970 facts, inbox 3",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T04:23:24Z",
-      "kind": "beat",
-      "beat": 2172,
-      "label": "beat 2172 \u2014 970 facts, inbox 7",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T04:38:24Z",
-      "kind": "beat",
-      "beat": 2173,
-      "label": "beat 2173 \u2014 970 facts, inbox 7",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T04:53:24Z",
-      "kind": "beat",
-      "beat": 2174,
-      "label": "beat 2174 \u2014 970 facts, inbox 7",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T05:08:24Z",
-      "kind": "beat",
-      "beat": 2175,
-      "label": "beat 2175 \u2014 970 facts, inbox 7",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T05:23:24Z",
-      "kind": "beat",
-      "beat": 2176,
-      "label": "beat 2176 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T05:38:24Z",
-      "kind": "beat",
-      "beat": 2177,
-      "label": "beat 2177 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T05:53:24Z",
-      "kind": "beat",
-      "beat": 2178,
-      "label": "beat 2178 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T06:08:24Z",
-      "kind": "beat",
-      "beat": 2179,
-      "label": "beat 2179 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T06:23:24Z",
-      "kind": "beat",
-      "beat": 2180,
-      "label": "beat 2180 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T06:38:24Z",
-      "kind": "beat",
-      "beat": 2181,
-      "label": "beat 2181 \u2014 970 facts, inbox 13",
-      "fids": []
-    },
     {
       "t": "2026-11-15T06:53:24Z",
       "kind": "beat",
@@ -200,6 +88,118 @@
       "beat": 2189,
       "label": "beat 2189 \u2014 970 facts, inbox 13",
       "fids": []
+    },
+    {
+      "t": "2026-11-15T08:53:24Z",
+      "kind": "beat",
+      "beat": 2190,
+      "label": "beat 2190 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T09:08:24Z",
+      "kind": "beat",
+      "beat": 2191,
+      "label": "beat 2191 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T09:23:24Z",
+      "kind": "beat",
+      "beat": 2192,
+      "label": "beat 2192 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T09:38:24Z",
+      "kind": "beat",
+      "beat": 2193,
+      "label": "beat 2193 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T09:53:24Z",
+      "kind": "beat",
+      "beat": 2194,
+      "label": "beat 2194 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T10:08:24Z",
+      "kind": "beat",
+      "beat": 2195,
+      "label": "beat 2195 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T10:23:24Z",
+      "kind": "beat",
+      "beat": 2196,
+      "label": "beat 2196 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T10:38:24Z",
+      "kind": "beat",
+      "beat": 2197,
+      "label": "beat 2197 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T10:53:24Z",
+      "kind": "beat",
+      "beat": 2198,
+      "label": "beat 2198 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T11:08:24Z",
+      "kind": "beat",
+      "beat": 2199,
+      "label": "beat 2199 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T11:23:24Z",
+      "kind": "beat",
+      "beat": 2200,
+      "label": "beat 2200 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T11:38:24Z",
+      "kind": "beat",
+      "beat": 2201,
+      "label": "beat 2201 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T11:53:24Z",
+      "kind": "beat",
+      "beat": 2202,
+      "label": "beat 2202 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T12:08:24Z",
+      "kind": "beat",
+      "beat": 2203,
+      "label": "beat 2203 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T12:23:24Z",
+      "kind": "beat",
+      "beat": 2204,
+      "label": "beat 2204 \u2014 970 facts, inbox 13",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T12:38:24Z",
+      "kind": "beat",
+      "beat": 2205,
+      "label": "beat 2205 \u2014 970 facts, inbox 13",
+      "fids": []
     }
   ],
   "formation": {
@@ -212,7 +212,7 @@
   },
   "sync": {
     "v": 2,
-    "at": "2026-11-15T08:38:34Z",
+    "at": "2026-11-15T09:08:35Z",
     "state": "idle",
     "words": "All synced \u2014 watching for new arrivals",
     "dial": {
@@ -225,7 +225,7 @@
       "peek": []
     },
     "last": {
-      "at": "2026-11-15T08:38:34Z",
+      "at": "2026-11-15T09:08:35Z",
       "captures": 0,
       "bytes": 0,
       "duration_s": 1
