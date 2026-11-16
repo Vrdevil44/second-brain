@@ -718,8 +718,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=b70ebda');
-        await loadScriptOnce('universe.js?v=b70ebda');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=889a365');
+        await loadScriptOnce('universe.js?v=889a365');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -5241,6 +5241,57 @@ function expandQueryVariants(q, groups) {
       chips.push(el('span', { class: 'kb-dash-chip' }, 'untyped ' + nf.format(m.relations.untyped)));
     }
     factKids.push(el('div', { class: 'kb-dash-chips' }, ...chips));
+    // Visual layer (additive): the same census and relations numbers
+    // as shapes. Every segment is a share of a total already named in
+    // this section, and the legends repeat the counts they draw.
+    const vizKids = [];
+    if (m.facts && m.facts.total > 0) {
+      const f = m.facts;
+      const C = 2 * Math.PI * 34;
+      const segs = [
+        ['Live', f.live, '--success'], ['Superseded', f.superseded, '--accent'],
+        ['Dormant', f.dormant, '--text-3'],
+      ];
+      if (f.contested) segs.push(['Contested', f.contested, '--warn']);
+      let acc = 0;
+      const circles = segs.filter((s) => s[1] > 0).map((s) => {
+        const frac = s[1] / f.total;
+        const c = el('circle', { cx: '42', cy: '42', r: '34', class: 'kb-donut-seg',
+          transform: 'rotate(-90 42 42)',
+          style: 'stroke:var(' + s[2] + ');stroke-dasharray:' + (frac * C).toFixed(1) + ' ' + C.toFixed(1)
+            + ';stroke-dashoffset:' + (-acc * C).toFixed(1) });
+        acc += frac;
+        return c;
+      });
+      vizKids.push(el('div', { class: 'kb-viz' },
+        el('div', { class: 'kb-dash-block-title' }, 'Facts by state'),
+        el('div', { class: 'kb-viz-flex' },
+          el('svg', { class: 'kb-donut', viewBox: '0 0 84 84', role: 'img', 'aria-label': 'Facts by state' },
+            el('circle', { cx: '42', cy: '42', r: '34', class: 'kb-donut-base' }),
+            ...circles,
+            el('text', { x: '42', y: '47', class: 'kb-donut-num', 'text-anchor': 'middle' }, nf.format(f.total))),
+          el('div', { class: 'kb-viz-legend' },
+            ...segs.map((s) => el('div', { class: 'kb-viz-leg-row' },
+              el('span', { class: 'kb-viz-dot', style: 'background:var(' + s[2] + ')' }),
+              s[0] + ' ' + nf.format(s[1])))))));
+    }
+    if (m.relations && m.relations.total > 0) {
+      const r = m.relations;
+      const mixSeg = (n, colorVar) => el('span', { class: 'kb-mix-seg',
+        style: 'width:' + ((n / r.total) * 100).toFixed(1) + '%;background:var(' + colorVar + ')' });
+      const legRow = (label, n, colorVar) => el('div', { class: 'kb-viz-leg-row' },
+        el('span', { class: 'kb-viz-dot', style: 'background:var(' + colorVar + ')' }),
+        label + ' ' + nf.format(n));
+      vizKids.push(el('div', { class: 'kb-viz' },
+        el('div', { class: 'kb-dash-block-title' }, 'Relations by origin'),
+        el('div', { class: 'kb-mix' },
+          mixSeg(r.domain, '--accent'), mixSeg(r.semantic, '--idea'), mixSeg(r.untyped, '--text-3')),
+        el('div', { class: 'kb-viz-legend' },
+          legRow('Domain', r.domain, '--accent'),
+          legRow('Other typed', r.semantic, '--idea'),
+          legRow('Untyped', r.untyped, '--text-3'))));
+    }
+    if (vizKids.length) factKids.push(el('div', { class: 'kb-viz-row' }, ...vizKids));
     factKids.push(line(nf.format(m.library.dictionaries) + ' dictionaries · ' + nf.format(m.library.dictTerms)
       + ' terms · ' + nf.format(m.library.skills) + ' skills'));
     dash.append(section('facts', 'Facts & Relations', 'book',
@@ -5332,6 +5383,13 @@ function expandQueryVariants(q, groups) {
       if (m.askFeed.lastRetrievalMs !== null) parts.push('retrieval ' + nf.format(m.askFeed.lastRetrievalMs) + ' ms');
       if (m.askFeed.today !== null) parts.push(nf.format(m.askFeed.today) + ' asks today');
       sysKids.push(line(parts.join(' · ')));
+      if (m.askFeed.lastTotalMs !== null && m.askFeed.lastRetrievalMs !== null && m.askFeed.lastTotalMs > 0) {
+        const pct = Math.max(2, Math.min(100, Math.round((m.askFeed.lastRetrievalMs / m.askFeed.lastTotalMs) * 100)));
+        sysKids.push(el('div', { class: 'kb-meter' },
+          el('div', { class: 'kb-meter-track' },
+            el('span', { class: 'kb-meter-fill', style: 'width:' + pct + '%' })),
+          el('div', { class: 'kb-meter-cap' }, 'retrieval share of the last answer')));
+      }
     } else {
       sysKids.push(line('Ask timing detail arrives with the next backend update.'));
     }
@@ -5366,6 +5424,13 @@ function expandQueryVariants(q, groups) {
         }
       }
       sysKids.push(line(parts.join(' · ')));
+      if (m.trainingFeed && m.trainingFeed.factsSinceRefresh !== null) {
+        const pct = Math.max(0, Math.min(100, Math.round((m.trainingFeed.factsSinceRefresh / 50) * 100)));
+        sysKids.push(el('div', { class: 'kb-meter' },
+          el('div', { class: 'kb-meter-track' },
+            el('span', { class: 'kb-meter-fill kb-meter-fill-alt', style: 'width:' + pct + '%' })),
+          el('div', { class: 'kb-meter-cap' }, 'new facts toward the next refresh, at 50')));
+      }
     } else {
       sysKids.push(line('GPU training detail arrives with the next backend update.'));
     }
@@ -5448,6 +5513,11 @@ function expandQueryVariants(q, groups) {
       if (tc.total) {
         buildKids.push(line('Tasks: ' + tc.done + ' done · ' + tc.running + ' running · '
           + tc.next + ' next · ' + tc.parked + ' parked of ' + tc.total));
+        const tcSeg = (n, colorVar) => el('span', { class: 'kb-mix-seg',
+          style: 'width:' + ((n / tc.total) * 100).toFixed(1) + '%;background:var(' + colorVar + ')' });
+        buildKids.push(el('div', { class: 'kb-mix kb-build-mix' },
+          tcSeg(tc.done, '--success'), tcSeg(tc.running, '--accent-glow'),
+          tcSeg(tc.next, '--accent'), tcSeg(tc.parked, '--text-3')));
       }
     } else {
       buildKids.push(line('The build tracker render copy has not landed with this portal build yet.'));
@@ -5651,6 +5721,13 @@ function expandQueryVariants(q, groups) {
       kids.push(line(p));
       if (m.processes.byKind.length) {
         kids.push(line(m.processes.byKind.map((e) => e.kind + ' ' + nf.format(e.n)).join(' · ')));
+        const maxN = Math.max(...m.processes.byKind.map((e) => e.n));
+        kids.push(el('div', { class: 'kb-bars' },
+          ...m.processes.byKind.map((e) => el('div', { class: 'kb-bar-row' },
+            el('span', { class: 'kb-bar-k' }, e.kind),
+            el('span', { class: 'kb-bar-track' },
+              el('span', { class: 'kb-bar-fill', style: 'width:' + Math.max(2, Math.round((e.n / maxN) * 100)) + '%' })),
+            el('span', { class: 'kb-bar-n' }, nf.format(e.n))))));
       }
     } else {
       kids.push(line('Pipeline event detail arrives with the next backend update.'));
@@ -5689,6 +5766,15 @@ function expandQueryVariants(q, groups) {
       'aria-label': 'Graph growth chart: nodes and relations per snapshot' },
       el('polyline', { points: series('edges'), fill: 'none', style: 'stroke:var(--accent)', 'stroke-width': '1.5' }),
       el('polyline', { points: series('nodes'), fill: 'none', style: 'stroke:var(--text-2)', 'stroke-width': '1.5' }));
+    // Dots on the real snapshots, each carrying its own values as a
+    // tooltip; the last snapshot is marked larger. Nothing interpolated.
+    const dots = (key, colorVar, label) => series(key).split(' ').map((p, i) => {
+      const xy = p.split(',');
+      return el('circle', { cx: xy[0], cy: xy[1], r: i === rows.length - 1 ? '3.5' : '2.2',
+          class: 'kb-chart-dot', style: 'fill:var(' + colorVar + ')' },
+        el('title', {}, fmtDay(rows[i].at) + ': ' + nf.format(rows[i][key]) + ' ' + label));
+    });
+    svg.append(...dots('edges', '--accent', 'relations'), ...dots('nodes', '--text-2', 'nodes'));
     return el('div', { class: 'kb-chart', id: 'kb-sec-growth' },
       el('div', { class: 'kb-dash-block-title' }, 'Growth'),
       svg,

@@ -1416,6 +1416,31 @@ body.view-3d .node-panel { display: none; }
 .kb-dash-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .kb-dash-chip { font-size: 13px; border: 1px solid var(--line-glow); border-radius: 999px; padding: 2px 10px; background: var(--surface-2); }
 .kb-dash-source { margin-top: 14px; font-size: 12px; color: var(--text-2); }
+.kb-viz-row { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; }
+.kb-viz { flex: 1 1 240px; min-width: 220px; }
+.kb-viz-flex { display: flex; align-items: center; gap: 14px; }
+.kb-donut { width: 84px; height: 84px; flex: none; }
+.kb-donut-base { fill: none; stroke: var(--surface-2); stroke-width: 9; }
+.kb-donut-seg { fill: none; stroke-width: 9; }
+.kb-donut-num { fill: var(--text); font-size: 15px; font-weight: 700; }
+.kb-viz-legend { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.kb-viz-leg-row { display: flex; align-items: center; gap: 7px; }
+.kb-viz-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.kb-mix { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--surface-2); margin: 6px 0 8px; }
+.kb-mix-seg { display: block; height: 100%; }
+.kb-build-mix { max-width: 520px; }
+.kb-meter { margin-top: 6px; max-width: 520px; }
+.kb-meter-track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.kb-meter-fill { display: block; height: 100%; border-radius: 999px; background: var(--accent-glow); }
+.kb-meter-fill-alt { background: var(--accent); }
+.kb-meter-cap { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+.kb-bars { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; max-width: 560px; }
+.kb-bar-row { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 10px; font-size: 13px; }
+.kb-bar-k { color: var(--text-2); overflow-wrap: anywhere; }
+.kb-bar-track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.kb-bar-fill { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.kb-bar-n { text-align: right; font-variant-numeric: tabular-nums; }
+.kb-chart-dot { stroke: none; }
 .kb-dash-feed { max-height: 160px; overflow: hidden; position: relative; }
 .kb-dash-feed-scroll .kb-dash-feed-track { animation: kb-dash-feedscroll 45s ease-in-out infinite alternate; }
 @keyframes kb-dash-feedscroll { from { transform: translateY(0); } to { transform: translateY(calc(-100% + 160px)); } }
