@@ -20,6 +20,26 @@
   --accent: #8b7cff;
   --accent-2: #6a5cf0;
   --accent-glow: #6ee7ff;
+  /* KB palette (visual upgrade 2026-11-16): one harmonious hue per
+     headline tile, section and doc. The red family is deliberately
+     absent here: it stays reserved for alarm / status (--danger). */
+  --kb-blue: #5aa2ff;
+  --kb-green: #3ddc97;
+  --kb-violet: #8b7cff;
+  --kb-cyan: #6ee7ff;
+  --kb-amber: #ffb547;
+  --kb-pink: #ff7ad9;
+  --kb-teal: #38d6c4;
+  --kb-lime: #a3e635;
+  --kb-yellow: #facc15;
+  --kb-indigo: #6a5cf0;
+  --kb-orchid: #c084fc;
+  --kb-fuchsia: #e879f9;
+  --kb-steel: #8fa3b8;
+  --kb-sky: #38bdf8;
+  --kb-grey: #a3a6b8;
+  --kb-orange: #fb923c;
+  --kb-rose: #f472b6;
   --line-glow: rgba(110, 231, 255, 0.16);
   --card: rgba(13, 18, 32, 0.86);
   --ring-glow: 0 0 0 3px rgba(110, 231, 255, 0.12);
@@ -1310,12 +1330,18 @@ body.view-3d .node-panel { display: none; }
 .kb-rail-chip:hover, .kb-rail-chip:focus-visible { color: var(--text); background: var(--surface-2); border-color: var(--line-glow); outline: none; }
 .kb-headlines { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 6px; }
 .kb-tile { position: relative; border: 1px solid var(--line-glow); border-radius: var(--radius); padding: 12px 14px 10px; background: var(--surface); overflow: hidden; transition: border-color .18s ease, transform .18s ease; }
-.kb-tile::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-glow)); opacity: .85; }
-.kb-tile:hover { border-color: var(--accent-glow); transform: translateY(-1px); }
+.kb-tile::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--tile, linear-gradient(90deg, var(--accent), var(--accent-glow))); opacity: .85; }
+.kb-tile:hover { border-color: var(--tile, var(--accent-glow)); transform: translateY(-1px); }
 .kb-tile-value { font-size: 26px; font-weight: 750; line-height: 1.1; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .kb-tile-label { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 3px; }
 .kb-tile-source { font-size: 11px; color: var(--text-3); margin-top: 2px; overflow-wrap: anywhere; }
 .kb-tile-spark { display: block; width: 100%; height: 20px; margin-top: 8px; }
+.kb-tile-spark-seeded { opacity: .85; }
+.kb-range { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
+.kb-range-label { font-size: 12px; font-weight: 600; color: var(--text-2); margin-right: 2px; }
+.kb-range-btn { font: inherit; font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--line-glow); border-radius: 999px; padding: 4px 12px; cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; }
+.kb-range-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.kb-range-btn.active { background: var(--accent-glow); border-color: var(--accent-glow); color: var(--bg); }
 .kb-tile-tick { animation: kb-tile-tick .8s ease; }
 @keyframes kb-tile-tick { 0% { border-color: var(--accent-glow); } 100% { border-color: var(--line-glow); } }
 .kb-life-grid { display: flex; flex-wrap: wrap; gap: 8px; }

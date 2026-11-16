@@ -744,8 +744,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c58c4a3');
-        await loadScriptOnce('universe.js?v=c58c4a3');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c4a1ea2');
+        await loadScriptOnce('universe.js?v=c4a1ea2');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4547,6 +4547,7 @@ function expandQueryVariants(q, groups) {
   let kbExampleStep = 0;   // worked-example step position, in memory only
   let kbStageOpen = null;  // stage drawer component id, in memory only
   let kbTilePrev = {};     // headline tile values at last render (tick on real change)
+  let kbRange = 'all';     // headline + growth range: '3w' | '3m' | 'all'
   let kbFlowSig = '';      // last feed signature the data flow view travelled for
   let kbFlowPrev = {};     // flow stage count signatures at last render
   let kbDocsHidden = false; // docs panel collapsed for board room, in memory only
@@ -4570,6 +4571,7 @@ function expandQueryVariants(q, groups) {
     kbExampleStep = 0;
     kbStageOpen = null;
     kbTilePrev = {};
+    kbRange = 'all';
     kbFlowSig = '';
     kbFlowPrev = {};
     kbDocsHidden = false;
@@ -5052,7 +5054,20 @@ function expandQueryVariants(q, groups) {
         const e2 = num(r.edges);
         if (t === null || n === null || e2 === null) continue;
         if (Number.isNaN(Date.parse(t))) continue;
-        rows.push({ at: t, nodes: n, edges: e2 });
+        const row = { at: t, nodes: n, edges: e2 };
+        // Capture-recorded headline metrics ride the row (see
+        // scripts/graph-history.mjs METRIC_KEYS): known keys with
+        // non-negative integer counts only; a row without a real
+        // metrics block stays exactly {at, nodes, edges}.
+        if (r.metrics && typeof r.metrics === 'object' && !Array.isArray(r.metrics)) {
+          const met = {};
+          for (const key of ['facts_total', 'facts_live', 'inbox', 'merged_last', 'open_questions', 'asks_today', 'semantic_rows']) {
+            const v = r.metrics[key];
+            if (Number.isInteger(v) && v >= 0) met[key] = v;
+          }
+          if (Object.keys(met).length) row.metrics = met;
+        }
+        rows.push(row);
       }
       rows.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
       if (rows.length) history = rows.slice(-200);
@@ -5147,6 +5162,9 @@ function expandQueryVariants(q, groups) {
     if (typeof kbRenderHeadlines === 'function') {
       const headlines = kbRenderHeadlines(m);
       if (headlines) dash.append(headlines);
+      if (headlines && m.history && m.history.length >= 2 && typeof kbRenderRangeControl === 'function') {
+        dash.append(kbRenderRangeControl());
+      }
     }
 
     // ---- Anchor rail: one tap to any board; a collapsed board opens
@@ -5595,7 +5613,11 @@ function expandQueryVariants(q, groups) {
         if (!line.trim()) continue;
         try {
           const j = JSON.parse(line);
-          if (j && j.counts) rows.push({ at: j.at, nodes: j.counts.nodes, edges: j.counts.edges });
+          if (j && j.counts) {
+            const row = { at: j.at, nodes: j.counts.nodes, edges: j.counts.edges };
+            if (j.metrics && typeof j.metrics === 'object' && !Array.isArray(j.metrics)) row.metrics = j.metrics;
+            rows.push(row);
+          }
         } catch { /* a torn snapshot line is skipped, never repaired */ }
       }
       if (rows.length) { kbHistory = rows; kbHistoryState = 'ready'; kbRenderDashboard(); }
@@ -5607,15 +5629,92 @@ function expandQueryVariants(q, groups) {
     }
   }
 
+  // KB visual upgrade (owner order 2026-11-16): one harmonious accent
+  // per headline tile, per section and per doc, all from the --kb-*
+  // palette in styles.css. The maps store the bare custom-property
+  // name; stamps build the var() reference. The red family is never
+  // used here: it stays reserved for alarm / status.
+  const KB_TILE_ACCENTS = {
+    'facts in total': '--kb-blue',
+    'facts live on the face': '--kb-green',
+    'things on the graph': '--kb-violet',
+    'relations': '--kb-cyan',
+    'in the inbox now': '--kb-amber',
+    'merged at the last consolidation': '--kb-pink',
+    'asks answered today': '--kb-teal',
+    'rows in the semantic index': '--kb-lime',
+    'open questions': '--kb-yellow',
+  };
+
+  const KB_RANGE_DAYS = { '3w': 21, '3m': 90, 'all': 0 };
+
+  // Rows inside the selected range, anchored on the NEWEST row so the
+  // window always ends at the latest snapshot. A range longer than
+  // the recorded history returns all of it: clamped, never padded.
+  function kbHistoryInRange(rows, rangeId) {
+    if (!Array.isArray(rows)) return rows;
+    const days = KB_RANGE_DAYS[rangeId] || 0;
+    if (!days || !rows.length) return rows;
+    const anchor = Date.parse(rows[rows.length - 1].at);
+    if (!Number.isFinite(anchor)) return rows;
+    const cutoff = anchor - days * 86400000;
+    return rows.filter((r) => {
+      const t = Date.parse(r && r.at);
+      return Number.isFinite(t) && t >= cutoff;
+    });
+  }
+
+  // SEEDED sparkline shape (owner amendment 2026-11-16): for a tile
+  // whose recorded series has fewer than 2 real points, a gentle
+  // growth curve that ends EXACTLY at the tile's live value and never
+  // rises above it. This is a presentational shape, NOT recorded
+  // data: it is flagged seeded here and rendered dashed at reduced
+  // opacity, and it is dropped the moment the capture-recorded series
+  // for the metric reaches 2 real points. Deterministic per metric
+  // (start fraction and curve both derive from the metric key), so
+  // re-renders never jitter.
+  function kbSeededSeries(key, current, points) {
+    const n = Math.max(2, points || 14);
+    const v = (typeof current === 'number' && Number.isFinite(current) && current > 0) ? current : 0;
+    let h = 0;
+    const k = String(key || '');
+    for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+    const start = 0.52 + (h % 20) / 100; // begin at 52..71% of today's value
+    const bend = 1.3 + ((h >> 4) % 40) / 100; // gentle ease, per metric
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      out.push(v * (start + (1 - start) * Math.pow(t, bend)));
+    }
+    out[n - 1] = v; // ends exactly at today's true value
+    return out;
+  }
+
+  function kbRenderRangeControl() {
+    const opts = [['3w', '3 weeks'], ['3m', '3 months'], ['all', 'All']];
+    return el('div', { class: 'kb-range', role: 'group', 'aria-label': 'History range' },
+      el('span', { class: 'kb-range-label' }, 'History range'),
+      ...opts.map(([id, label]) => el('button', {
+        type: 'button',
+        class: 'kb-range-btn' + (kbRange === id ? ' active' : ''),
+        'aria-pressed': kbRange === id ? 'true' : 'false',
+        onclick: () => { kbRange = id; kbRenderDashboard(); },
+      }, label)));
+  }
+
   // Headline numbers strip: the dashboard board from the KB console spec.
   // One tile per number; every tile names its source in small text; a
   // number with no source in this state does not get a tile.
   function kbRenderHeadlines(m) {
     if (!m) return null;
     const tiles = [];
-    // Sparkline from a real series only (the growth history rows); no
-    // series, no sparkline. Purely graphical: it adds no new number.
-    const sparkline = (values, colorVar) => {
+    // Sparkline from a real series (the growth history rows, or the
+    // capture-recorded metrics on those rows). Purely graphical: it
+    // adds no new number. A tile whose recorded series has fewer than
+    // 2 points draws the SEEDED shape instead (owner amendment
+    // 2026-11-16): flagged data-seeded, dashed, reduced opacity, and
+    // dropped the moment 2 real points exist.
+    const sparkline = (values, colorVar, seeded) => {
       if (!Array.isArray(values) || values.length < 2) return null;
       let min = Infinity, max = -Infinity;
       for (const v of values) { if (v < min) min = v; if (v > max) max = v; }
@@ -5626,10 +5725,32 @@ function expandQueryVariants(q, groups) {
         return x.toFixed(1) + ',' + y.toFixed(1);
       });
       const linePath = 'M' + pts.join(' L');
-      return el('svg', { class: 'kb-tile-spark', viewBox: '0 0 100 20',
-          preserveAspectRatio: 'none', 'aria-hidden': 'true' },
-        el('path', { d: linePath + ' L100,20 L0,20 Z', style: 'fill:var(' + colorVar + ');opacity:.14' }),
-        el('path', { d: linePath, fill: 'none', style: 'stroke:var(' + colorVar + ')', 'stroke-width': '1.6' }));
+      const svgAttrs = { class: 'kb-tile-spark' + (seeded ? ' kb-tile-spark-seeded' : ''),
+        viewBox: '0 0 100 20', preserveAspectRatio: 'none', 'aria-hidden': 'true' };
+      if (seeded) svgAttrs['data-seeded'] = 'true';
+      const lineAttrs = { d: linePath, fill: 'none',
+        style: 'stroke:var(' + colorVar + ')' + (seeded ? ';opacity:.55' : ''), 'stroke-width': '1.6' };
+      if (seeded) lineAttrs['stroke-dasharray'] = '3 2.4';
+      return el('svg', svgAttrs,
+        el('path', { d: linePath + ' L100,20 L0,20 Z', style: 'fill:var(' + colorVar + ');opacity:' + (seeded ? '.06' : '.14') }),
+        el('path', lineAttrs));
+    };
+    // The history rows inside the selected range drive every spark.
+    const rows = (typeof kbHistoryInRange === 'function')
+      ? kbHistoryInRange(m.history, (typeof kbRange === 'string') ? kbRange : 'all')
+      : m.history;
+    // A metric tile plots its recorded points once at least 2 exist;
+    // until then it shows the seeded shape ending at its live value.
+    const metricSpark = (key, colorVar, liveValue) => {
+      const real = [];
+      if (Array.isArray(rows)) {
+        for (const r of rows) {
+          if (r && r.metrics && typeof r.metrics[key] === 'number') real.push(r.metrics[key]);
+        }
+      }
+      if (real.length >= 2) return sparkline(real, colorVar, false);
+      if (typeof kbSeededSeries !== 'function') return null;
+      return sparkline(kbSeededSeries(key, liveValue), colorVar, true);
     };
     const tile = (value, label, source, spark) => {
       if (value === null || value === undefined) return;
@@ -5640,31 +5761,43 @@ function expandQueryVariants(q, groups) {
         el('div', { class: 'kb-tile-label' }, label),
         el('div', { class: 'kb-tile-source' }, source)];
       if (spark) kids.push(spark);
-      tiles.push(el('div', { class: 'kb-tile' + (tick ? ' kb-tile-tick' : '') }, ...kids));
+      const accent = (typeof KB_TILE_ACCENTS === 'object' && KB_TILE_ACCENTS)
+        ? KB_TILE_ACCENTS[label] : undefined;
+      tiles.push(el('div', { class: 'kb-tile' + (tick ? ' kb-tile-tick' : ''),
+        style: accent ? '--tile:var(' + accent + ')' : '' }, ...kids));
     };
     if (m.facts) {
-      tile(nf.format(m.facts.total), 'facts in total', 'the census paired with the graph');
-      tile(nf.format(m.facts.live), 'facts live on the face', 'the census paired with the graph');
+      tile(nf.format(m.facts.total), 'facts in total', 'the census paired with the graph',
+        metricSpark('facts_total', '--kb-blue', m.facts.total));
+      tile(nf.format(m.facts.live), 'facts live on the face', 'the census paired with the graph',
+        metricSpark('facts_live', '--kb-green', m.facts.live));
       if (m.facts.things !== null) {
         tile(nf.format(m.facts.things), 'things on the graph', 'the census paired with the graph',
-          sparkline(Array.isArray(m.history) ? m.history.map((h) => h.nodes) : null, '--accent'));
+          sparkline(Array.isArray(rows) ? rows.map((h) => h.nodes) : null, '--kb-violet', false));
       }
     }
     tile(nf.format(m.relations.total), 'relations', 'the loaded graph',
-      sparkline(Array.isArray(m.history) ? m.history.map((h) => h.edges) : null, '--accent-glow'));
+      sparkline(Array.isArray(rows) ? rows.map((h) => h.edges) : null, '--kb-cyan', false));
     const arrive = m.stages ? m.stages.find((s) => s.id === 'arrive') : null;
-    if (arrive && arrive.count) tile(nf.format(arrive.count.n), 'in the inbox now', 'live state from the host');
+    if (arrive && arrive.count) {
+      tile(nf.format(arrive.count.n), 'in the inbox now', 'live state from the host',
+        metricSpark('inbox', '--kb-amber', arrive.count.n));
+    }
     if (m.merge && m.merge.merged !== null) {
-      tile(nf.format(m.merge.merged), 'merged at the last consolidation', 'the last merge record');
+      tile(nf.format(m.merge.merged), 'merged at the last consolidation', 'the last merge record',
+        metricSpark('merged_last', '--kb-pink', m.merge.merged));
     }
     if (m.askFeed && m.askFeed.today !== null) {
-      tile(nf.format(m.askFeed.today), 'asks answered today', 'the ask log on the host');
+      tile(nf.format(m.askFeed.today), 'asks answered today', 'the ask log on the host',
+        metricSpark('asks_today', '--kb-teal', m.askFeed.today));
     }
     if (m.semanticFeed && m.semanticFeed.rows !== null) {
-      tile(nf.format(m.semanticFeed.rows), 'rows in the semantic index', 'the semantic index census');
+      tile(nf.format(m.semanticFeed.rows), 'rows in the semantic index', 'the semantic index census',
+        metricSpark('semantic_rows', '--kb-lime', m.semanticFeed.rows));
     }
     if (m.findings && m.findings.openQuestions !== null) {
-      tile(nf.format(m.findings.openQuestions), 'open questions', 'the core question store');
+      tile(nf.format(m.findings.openQuestions), 'open questions', 'the core question store',
+        metricSpark('open_questions', '--kb-yellow', m.findings.openQuestions));
     }
     if (!tiles.length) return null;
     return el('div', { class: 'kb-headlines' }, ...tiles);
@@ -5851,14 +5984,27 @@ function expandQueryVariants(q, groups) {
     const slot = (txt) => el('div', { class: 'kb-chart', id: 'kb-sec-growth' },
       el('div', { class: 'kb-dash-block-title' }, 'Growth'),
       el('div', { class: 'kb-dash-line' }, txt));
-    if (!m || !Array.isArray(m.history) || m.history.length < 2) {
+    if (!m || !Array.isArray(m.history)) {
       if (kbHistoryState === 'loading') return slot('Growth history is loading…');
       if (kbHistoryState === 'failed' || kbHistoryState === 'idle') {
         return slot('Growth history is not available in this portal build yet.');
       }
       return null;
     }
-    const rows = m.history;
+    // The selected range drives the chart too: the same filtered rows
+    // and the same anchor as the headline sparklines.
+    const allRows = m.history;
+    const rows = (typeof kbHistoryInRange === 'function')
+      ? kbHistoryInRange(allRows, (typeof kbRange === 'string') ? kbRange : 'all')
+      : allRows;
+    if (rows.length < 2) {
+      if (allRows.length >= 2) return slot('Growth history in this range is not available yet.');
+      if (kbHistoryState === 'loading') return slot('Growth history is loading…');
+      if (kbHistoryState === 'failed' || kbHistoryState === 'idle') {
+        return slot('Growth history is not available in this portal build yet.');
+      }
+      return null;
+    }
     const W = 600, H = 170, PL = 8, PR = 8, PT = 10, PB = 18;
     // One shared scale for both series: a single min/max across nodes and
     // edges together. Per-series scales stretched both lines to full
