@@ -677,17 +677,16 @@ function expandQueryVariants(q, groups) {
   let graphData = null;
   let sessionDataKey = null; // derived data key, held in memory only while unlocked (same lifetime as graphData)
   function renderGraphMeta() {
-    // Meta line in the top bar.
+    // Meta line in the top bar. Counts come from the ONE shared counter
+    // (faceCounts, KB slice) — the same numbers the KB dashboard shows.
     const c = portalGraphCounts();
+    const fc = faceCounts(graphData);
     const parts = [];
-    const nodes = graphData && Array.isArray(graphData.nodes) ? graphData.nodes : [];
-    if (nodes.some((n) => n && Array.isArray(n.facts))) {
-      // Thing graph: things are the nodes carrying facts[]; projected skill/dictionary/question nodes are not things.
-      let things = 0, facts = 0;
-      for (const n of nodes) if (n && Array.isArray(n.facts)) { things++; facts += n.facts.length; }
-      parts.push(nf.format(things) + ' things', nf.format(facts) + ' facts');
+    if (fc && fc.carriesFacts) {
+      parts.push(nf.format(fc.things) + ' things', nf.format(fc.facts) + ' facts');
     } else if (c.nodes !== null) parts.push(nf.format(c.nodes) + ' nodes');
-    if (c.edges !== null) parts.push(nf.format(c.edges) + ' relations');
+    if (fc) parts.push(nf.format(fc.relations) + ' relations');
+    else if (c.edges !== null) parts.push(nf.format(c.edges) + ' relations');
     if (graphData && graphData.generated) {
       const d = new Date(graphData.generated);
       if (!isNaN(d)) parts.push('updated ' + d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
@@ -717,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c5793fd');
-        await loadScriptOnce('universe.js?v=c5793fd');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=46a4a30');
+        await loadScriptOnce('universe.js?v=46a4a30');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4531,6 +4530,21 @@ function expandQueryVariants(q, groups) {
     if (d) { d.textContent = ''; d.hidden = true; }
   }
 
+  // THE face counter (portal-face design §6, fixes the counts defect):
+  // one function computes the counts every face shows — the header meta
+  // line and the KB dashboard's Graph stage both consume it, so the same
+  // graph can never wear two numbers again. things = nodes carrying
+  // facts[] (projected skill/dictionary/question nodes are not things);
+  // facts = the facts inside those things; relations = edges.
+  function faceCounts(graph) {
+    if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
+    let things = 0, facts = 0, carriesFacts = false;
+    for (const n of graph.nodes) {
+      if (n && Array.isArray(n.facts)) { carriesFacts = true; things++; facts += n.facts.length; }
+    }
+    return { things, facts, relations: graph.edges.length, carriesFacts };
+  }
+
   // Pure view model for the dashboard: reads each value from its one source.
   function kbDashboardModel(graph, census, st) {
     const num = (x) => (typeof x === 'number' && Number.isFinite(x)) ? x : null;
@@ -4571,7 +4585,7 @@ function expandQueryVariants(q, groups) {
         stat: null },
       { id: 'graph', label: 'Graph',
         note: 'One node per thing, with its facts inside it.',
-        stat: [{ n: graph.nodes.length, text: 'nodes' }, { n: graph.edges.length, text: 'relations' }] },
+        stat: [{ n: faceCounts(graph).things, text: 'things' }, { n: faceCounts(graph).relations, text: 'relations' }] },
       { id: 'ask', label: 'Ask',
         note: 'Retrieval reads the live fact pool, and answers cite the facts they used.',
         stat: null },
@@ -4591,6 +4605,7 @@ function expandQueryVariants(q, groups) {
       syncAgeS: num(sh.sync_age_s),
       training: (sh.training && typeof sh.training.stamp === 'string' && sh.training.stamp) ? {
         stamp: sh.training.stamp,
+        at: (typeof sh.training.at === 'string' && sh.training.at) ? sh.training.at : null,
         gate: (typeof sh.training.gate === 'string') ? sh.training.gate : null,
         wired: sh.training.wired === true,
       } : null,
@@ -4676,7 +4691,15 @@ function expandQueryVariants(q, groups) {
         }
         if (h.training) {
           const g = h.training.gate;
-          rows.push('GPU training: last run ' + h.training.stamp + (g
+          // The payload carries the run's real moment (training.at, an
+          // ISO stamp from the backend); the face shows that calendar
+          // date, never the raw build stamp ("2026-11-16d"). UTC keeps
+          // the shown date the same on every screen.
+          const atMs = h.training.at ? Date.parse(h.training.at) : NaN;
+          const when = Number.isFinite(atMs)
+            ? new Date(atMs).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
+            : h.training.stamp;
+          rows.push('GPU training: last run ' + when + (g
             ? ' · gate ' + g + (h.training.wired ? ' · wired live' : g === 'pass' ? '' : ' · incumbent kept')
             : ''));
         }
