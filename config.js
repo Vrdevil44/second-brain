@@ -14,5 +14,7 @@ window.BRAIN_CONFIG = {
   // this back to false and the next publish re-encrypts everything and the
   // gate returns. The box backend's server-side token auth is a separate
   // layer and is NOT affected by this flag.
-  GATE_OFF: true
+  // Gate re-enabled on the owner's order, 2026-11-16: same password, same
+  // TOTP as before the fixing window (no rotation).
+  GATE_OFF: false
 };
