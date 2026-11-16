@@ -1441,6 +1441,7 @@ body.view-3d .node-panel { display: none; }
 .kb-bar-fill { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
 .kb-bar-n { text-align: right; font-variant-numeric: tabular-nums; }
 .kb-chart-dot { stroke: none; }
+.kb-standing-sub { margin-top: 12px; }
 .kb-dash-feed { max-height: 160px; overflow: hidden; position: relative; }
 .kb-dash-feed-scroll .kb-dash-feed-track { animation: kb-dash-feedscroll 45s ease-in-out infinite alternate; }
 @keyframes kb-dash-feedscroll { from { transform: translateY(0); } to { transform: translateY(calc(-100% + 160px)); } }

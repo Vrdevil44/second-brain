@@ -718,8 +718,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=889a365');
-        await loadScriptOnce('universe.js?v=889a365');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c281d22');
+        await loadScriptOnce('universe.js?v=c281d22');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -5127,6 +5127,7 @@ function expandQueryVariants(q, groups) {
       ['window', 'Outward Window', true],
       ['log', 'Log', true],
       ['build', 'The Build', true],
+      ['standing', 'Global Standing', typeof kbRenderGlobalStanding === 'function'],
     ];
     const rail = el('nav', { class: 'kb-rail', 'aria-label': 'Dashboard boards' });
     for (const [rid, rlabel, present] of railDefs) {
@@ -5525,6 +5526,12 @@ function expandQueryVariants(q, groups) {
     dash.append(section('build', 'The Build', 'board',
       'The workshop board: what has been built, what is on the bench, and what is still on the drawing board.', buildKids));
 
+    // ---- Global Standing: researched context, not telemetry ----
+    if (typeof kbRenderGlobalStanding === 'function') {
+      const standing = kbRenderGlobalStanding();
+      if (standing) dash.append(standing);
+    }
+
     dash.append(el('div', { class: 'kb-dash-source' }, kbLiveState
       ? 'Every number here comes from the graph, the census and the live state this portal already loaded.'
       : 'Live state unavailable. The counts here come from the loaded graph and its paired census.'));
@@ -5734,6 +5741,55 @@ function expandQueryVariants(q, groups) {
     }
     return kbBlock('activity', 'Activity Monitoring',
       'Proof of life, read off the machine itself: what is running, what ran, and what it did.', kids);
+  }
+
+  // Global Standing: researched numbers that place this tool in its
+  // category, each with its source and date on the row. This is a
+  // researched reference panel, not live telemetry: the figures are
+  // republished here from the F12 product research (Nov 2026) and the
+  // market check of Nov 16, 2026, and they change only when the
+  // research is redone. No rankings are claimed; where the honest
+  // position is not yet comparable, the panel says so.
+  function kbRenderGlobalStanding() {
+    const kids = [];
+    const line = (txt) => el('div', { class: 'kb-dash-line' }, txt);
+    const sub = (txt) => el('div', { class: 'kb-dash-block-title kb-standing-sub' }, txt);
+    kids.push(sub('The category'));
+    kids.push(line('Category: knowledge management and IT documentation tooling for technical teams.'));
+    kids.push(line('Market: published estimates for knowledge management software in 2025 range from about US$13B to US$39B '
+      + 'depending on the research firm and its definition. Data Bridge Market Research puts it at US$18.68B in 2025, '
+      + 'forecast to reach US$108.18B by 2033. Market figures researched Nov 16, 2026; the spread between firms is the honest headline.'));
+    kids.push(sub('The problem, measured by others'));
+    kids.push(line('19% of the work week goes to searching and gathering information. '
+      + 'McKinsey Global Institute, The Social Economy, Jul 2012. Caveat: self-reported time use on pre-2012 survey data.'));
+    kids.push(line('About 2.5 hours per day searching for information. '
+      + 'IDC research, as republished in IT Glue (Kaseya) resources, accessed 2026. Caveat: vendor republished figures with a long, dated lineage.'));
+    kids.push(line('AI assistance raised support productivity 14% on average, and 34% for novices. '
+      + 'Brynjolfsson, Li and Raymond, NBER Working Paper 31161, Apr 2023, published in the Quarterly Journal of Economics, 2025. '
+      + 'Caveat: one firm, chat-based support; an analogue, not a prediction for this tool.'));
+    kids.push(line('AI coding assistance: one set task completed 55.8% faster. '
+      + 'Peng, Kalliamvakou, Cihon and Demirer, 2023. Caveat: a vendor run study, one bounded task, wide confidence interval; the top of the published range.'));
+    kids.push(line('Counterweight: experienced developers took 19% longer with AI tools on code they knew well. '
+      + 'METR randomised controlled trial, Jul 2025. Caveat: small sample of experts; included so this panel never reads as one-sided.'));
+    kids.push(sub('Against the tools in its class'));
+    kids.push(line('The comparison is against the category pattern, with IT Glue as the reference tool, from the F12 product details (Nov 2026), stated in both directions.'));
+    kids.push(line('Freshness: records update on arrival here, with staleness derived from the data. There: manual review cycles and expiry flags.'));
+    kids.push(line('Finding knowledge: an answer with the facts cited here. There: search returns documents to read.'));
+    kids.push(line('Change history: supersede, never delete, at the fact level here. There: document revision history.'));
+    kids.push(line('Integrations: the category leaders win outright today, with 100+ connectors in the leaders. This pilot has a handful of ingestion paths.'));
+    kids.push(line('Maturity and support: mature products with vendor support and SLAs there. Here: a pilot system, one operator, no SLA.'));
+    kids.push(line('Certifications: held by the vendors there. Here: none claimed or claimable today.'));
+    kids.push(line('Positioning: not a replacement for IT Glue. The living layer for the domains where freshness, relations and cited answers matter most.'));
+    kids.push(sub('This pilot instance, measured'));
+    kids.push(line('Golden ask set: 23 of 24 hits, 20 of 24 in the top 3, on the wired semantic index. '
+      + 'Baseline before it: 8 of 24 and 7 of 24. Measured Nov 15, 2026.'));
+    kids.push(line('Fast path on the reference question: 4,564 ms down to 70 ms, with identical citations. Measured Nov 15, 2026.'));
+    kids.push(line('A candidate 64 dimension index failed its evaluation gate (21 of 24 against the incumbent 24 of 24) and was dropped; nothing was wired. Nov 15, 2026.'));
+    kids.push(line('Not yet comparable: no published benchmark measures a system like this on the same task, so no global ranking is claimed. '
+      + 'Team scale time savings exist only as a labelled model in the F12 package, not as a measurement.'));
+    return kbBlock('standing', 'Global Standing',
+      'Where this tool stands in the world: the category it belongs to, the published research on the problem, an honest comparison, and this pilot measured beside the research only where the numbers truly compare.',
+      kids);
   }
 
   // Growth chart: nodes and relations per snapshot, drawn only from the
