@@ -1,0 +1,602 @@
+{
+  "building_blocks": [
+    {
+      "id": "capture-inbox",
+      "name": "Capture and Inbox (sense)",
+      "note": "Captures, dumps and mail digests land in inbox; recurring streams update one living fact per stream (dedupe guard landed 2026-11-15).",
+      "status": "done"
+    },
+    {
+      "id": "write-gate",
+      "name": "Write Gate and Validation",
+      "note": "Zero unvalidated writes is a standing invariant; privacy scan hard-refuses; births run validate, secret scan, merge, doctor.",
+      "status": "done"
+    },
+    {
+      "id": "consolidation",
+      "name": "Consolidation Engine",
+      "note": "Merge, classify, entity, taxonomy and pattern passes; on-arrival since 2026-11-13, nightly run is a safety net. Echo facts superseded, never deleted.",
+      "status": "done"
+    },
+    {
+      "id": "fact-store",
+      "name": "Fact Store and Thing-Node Graph",
+      "note": "2,348 facts (1,551 active) inside 121 thing-nodes; 352 redirects; census honest. Live header 2026-11-15 evening: 103 things, 1,369 facts in things, 247 relations.",
+      "status": "done"
+    },
+    {
+      "id": "core-capsule",
+      "name": "Core Capsule (identity and constitution)",
+      "note": "Identity, constitution, preferences live in the lock and read paths; 31 core facts. Content still thin on some pages (now, hot), named in the content rollout.",
+      "status": "done"
+    },
+    {
+      "id": "dictionaries",
+      "name": "Dictionaries (language layer)",
+      "note": "3 dictionaries live as things: finance-ca 77, immigration-ca 73, music-industry 80 terms (229 total, F-2126 to F-2354), searchable. Owner order 2026-11-15: every domain and type may grow its own dictionary.",
+      "status": "running"
+    },
+    {
+      "id": "relations-engine",
+      "name": "Relations Engine",
+      "note": "Wikilink machinery turns page links into CONTEXT edges with context; typed fact arrows; edges 239 to 247 tonight as clusters land; semantic share 45.2 percent and rising. portal/graph-relations.jsonl held out of publish pending redaction review.",
+      "status": "done"
+    },
+    {
+      "id": "retrieval-ask",
+      "name": "Retrieval and Ask",
+      "note": "Pulse-first retrieval live (4,564 ms to 70 ms); semantic leg wired 2026-11-15 on the 2026-11-16d index (2,380 rows, 1,376 facts) after a conditional gate pass; golden set 23 of 24 hits. Open: identity-question miss (F-1880 over F-0001) in the pre-demo ask check.",
+      "status": "done"
+    },
+    {
+      "id": "local-max",
+      "name": "Local Max Runtime (dual-mind)",
+      "note": "Resident awake since 2026-11-15; local mind qwen2.5:1.5b for everyday cycles; Claude seat LIVE (owner RDP login, SEAT_ENABLED set, supervised deep-think wake proved thinker seat, $0); 30 seat calls per day cap, tool-less; wake-health alert armed.",
+      "status": "done"
+    },
+    {
+      "id": "think-loop",
+      "name": "Think Loop and Demands",
+      "note": "Core-think runs mesh hygiene; demand generation sat at zero across 5 passes (live defect, fix in chain item 10). Demands shown to the owner must be owner-answerable questions (owner order 2026-11-15).",
+      "status": "running"
+    },
+    {
+      "id": "outward-window",
+      "name": "Outward Window (research)",
+      "note": "Backend real (window-pull, question store) but never pulled in production; portal node landed tonight as clickable with a static panel. Owner correction 2026-11-15: NO label, click plus details, live feed showing the flow of questions out and answers and facts in.",
+      "status": "running"
+    },
+    {
+      "id": "portal-ui",
+      "name": "Portal UI (3D volume, thread, KB, history)",
+      "note": "Pure void, 3D by default; god thread shipped; history slider verified working live 2026-11-15; KB dashboard v1 live, full live build-out in chain item 9. Rearrange v2 queued: chat as side panel sliding the UI left, options into side/nav/settings panels, history slider stays.",
+      "status": "running"
+    },
+    {
+      "id": "self-growth",
+      "name": "Self-Growth Engine",
+      "note": "Audit and design complete 2026-11-15: recursive research loop on existing machinery, privacy triage fork, corroboration gate, shadow-only births; skill operational layer plus skill-consult; learning law distillation added by owner 2026-11-15 22:08 PT. Builds are chain item 10, scenes S1 to S4.",
+      "status": "next"
+    },
+    {
+      "id": "training-refresh",
+      "name": "Training Refresh (Kaggle cadence)",
+      "note": "Criteria-driven: fires at 50 or more new facts or 7 days elapsed; daily check 04:15 PT verified armed 2026-11-15; about 0.18 GPU-hours used that week against a 10 GPU-hour weekly cap. Next expected fire 2026-11-23.",
+      "status": "done"
+    },
+    {
+      "id": "sync-publish",
+      "name": "Sync and Publish (event tunnel)",
+      "note": "Event-driven box to Tailscale Funnel to Vercel; page names its own mode (LIVE, FALLBACK, BAKED); FALLBACK now equals LIVE. Actions budget $5 set by owner; burn cuts landed as chain item 0.",
+      "status": "done"
+    },
+    {
+      "id": "governance",
+      "name": "Governance and Safety",
+      "note": "Data stays on the box; system-only handover is the owner's call alone; never-do list held; hourly backups kept; semantic-prod never delete. Open: security gate re-enable before go-live, deadline 2026-11-20.",
+      "status": "done"
+    }
+  ],
+  "phases": [
+    {
+      "blocks": [
+        "capture-inbox",
+        "write-gate",
+        "fact-store",
+        "sync-publish",
+        "governance"
+      ],
+      "end": "2026-10-26",
+      "gate": "Live portal on one link; governed writes only; box is the brain's home and body.",
+      "gate_state": "passed",
+      "id": "P0",
+      "name": "Phase 0: Foundation and Body",
+      "start": "2026-10-12",
+      "status": "done",
+      "gate_status": "passed"
+    },
+    {
+      "blocks": [
+        "core-capsule",
+        "consolidation",
+        "think-loop",
+        "governance"
+      ],
+      "end": "2026-11-12",
+      "gate": "Core capsule live; heartbeat and think loops running; births governed; UI programme approved by owner (61 items).",
+      "gate_state": "passed with residuals (layout gravity unfinished, core pages thin)",
+      "id": "P1",
+      "name": "Phase 1: Consciousness Core",
+      "start": "2026-10-17",
+      "status": "done",
+      "gate_status": "passed"
+    },
+    {
+      "blocks": [
+        "dictionaries",
+        "relations-engine",
+        "retrieval-ask",
+        "portal-ui"
+      ],
+      "end": "2026-11-15",
+      "gate": "Everything built is wired to a live consumer or retired; one number, one name, one source.",
+      "gate_state": "passed 2026-11-15 for the wiring in its scope (dictionaries live, skills registry truthful, NN mimic, relations depth, KB dashboard seed); the outward window's first pull and skill-node facts belong to Phase 5 by the owner's own ordering and are tracked there, not hidden",
+      "id": "P2",
+      "name": "Phase 2: Wiring and Consistency (Wave A)",
+      "start": "2026-11-12",
+      "status": "done",
+      "gate_status": "passed"
+    },
+    {
+      "blocks": [
+        "portal-ui",
+        "consolidation",
+        "fact-store"
+      ],
+      "end": "2026-11-20",
+      "gate": "One permanent thread with quote-reply and governed node ops; every node carries a maintained summary over full fact detail.",
+      "gate_state": "god thread passed 2026-11-15; node content rollout batches landed across patterns, projects, topics, library, people and places; Haryana awaits box merge",
+      "id": "P3",
+      "name": "Phase 3: God Thread and Node Content (Wave B)",
+      "start": "2026-11-13",
+      "status": "running",
+      "gate_status": "partial"
+    },
+    {
+      "blocks": [
+        "portal-ui",
+        "outward-window",
+        "think-loop"
+      ],
+      "end": "2026-11-22",
+      "gate": "Aliveness is real work made visible; health is the actual whole system in one honest panel; outward node live.",
+      "gate_state": "in progress: tonight chain items 0 to 7 landed and node content rollout batches landed; items 9, 10 and 12 plus the v2 amendments remain",
+      "id": "P4",
+      "name": "Phase 4: Aliveness and Health (Wave C)",
+      "start": "2026-11-15",
+      "status": "running",
+      "gate_status": "partial"
+    },
+    {
+      "blocks": [
+        "self-growth",
+        "outward-window",
+        "local-max",
+        "dictionaries"
+      ],
+      "end": "2026-12-15",
+      "gate": "Brain researches recursively under governance; skills have an operational layer; repeated seat work distils into Local Max playbooks.",
+      "gate_state": "designs complete and reviewed (self-growth design GO WITH CHANGES, 19 fold-ins); builds queued behind Phase 4",
+      "id": "P5",
+      "name": "Phase 5: Deep Brain and Self-Growth (Wave D)",
+      "start": "2026-11-16",
+      "status": "next",
+      "gate_status": "pending"
+    },
+    {
+      "blocks": [
+        "governance",
+        "sync-publish",
+        "retrieval-ask",
+        "portal-ui",
+        "local-max"
+      ],
+      "end": "2026-11-30",
+      "gate": "Owner presents the working model live on 2026-11-16 (his framing: complete working model, full smartness); security gate re-enabled before go-live (hard deadline 2026-11-20); system-only handover package ready for owner's call.",
+      "gate_state": "presentation 2026-11-16; gate re-enable tracked, deadline 2026-11-20 about 11:25 PT",
+      "id": "P6",
+      "name": "Phase 6: Presentation and Handover Readiness",
+      "start": "2026-11-16",
+      "status": "next",
+      "gate_status": "pending"
+    }
+  ],
+  "project": "Second Brain (dream-brain)",
+  "risks": [
+    {
+      "impact": "high",
+      "mitigation": "Burn cuts landed (item 0); projection 580 to 600 min for Nov 16 to 30 at normal pace, inside budget; sustained 10 plus code pushes per day would bust it; raising the budget is the owner's call",
+      "owner": "Max (chain discipline)",
+      "probability": "medium",
+      "risk": "GitHub Actions budget ($5) runs out before the Dec 1 reset"
+    },
+    {
+      "impact": "high",
+      "mitigation": "Patch folded into generator source as chain item 0.5 before any re-ship; guard recorded in the wake receipt",
+      "owner": "Tonight chain",
+      "probability": "low",
+      "risk": "A bundle re-ship silently reverts dual-mind and the wake-health alert"
+    },
+    {
+      "impact": "medium",
+      "mitigation": "Wake-health alert now stages a proposal at the sleep threshold; standing rule to sweep stale /tmp scratch above 80 percent; driver verifies all three daemons each run",
+      "owner": "Core-build driver",
+      "probability": "medium",
+      "risk": "Silent daemon or heartbeat death (inbox-watch died about 16 hours on 2026-11-15, /tmp full)"
+    },
+    {
+      "impact": "medium",
+      "mitigation": "Golden-set measurement on every change; pre-demo ask check (item 11) fixes cheap identity misses first; no claim of parity until measured",
+      "owner": "Retrieval lane",
+      "probability": "high",
+      "risk": "Ask quality still below Max parity (frontier goal is an end state, not tonight)"
+    },
+    {
+      "impact": "medium",
+      "mitigation": "Chain order puts presentation-facing items first; every ship verified live in the owner's tab about 10 seconds after publish; honest idle states shown, never faked",
+      "owner": "Max",
+      "probability": "medium",
+      "risk": "Presentation on 2026-11-16 shows a surface whose fix is still in flight"
+    },
+    {
+      "impact": "high",
+      "mitigation": "Tracked with a hard deadline of 2026-11-20 about 11:25 PT; no go-live claim before it is re-enabled",
+      "owner": "Max",
+      "probability": "low",
+      "risk": "Security gate still disabled at go-live"
+    },
+    {
+      "impact": "high",
+      "mitigation": "Privacy triage fork: scope inherited from source and only ever tightened; graph-derived name blocklist; corroboration gate (2 sources or 1 Tier-1); births shadow-only in v1; BRAIN_WRITES=0 blocks staging",
+      "owner": "Self-growth lane",
+      "probability": "low",
+      "risk": "Self-growth research pulls personal context outward"
+    },
+    {
+      "impact": "medium",
+      "mitigation": "Governed path only (capture, gate, consolidation); wikilinks only where facts already carry the words; Guggu family membership held for the owner's word",
+      "owner": "Domain relations lane",
+      "probability": "low",
+      "risk": "Cluster or content work invents a relation the facts do not carry"
+    },
+    {
+      "risk": "Jev seat outage (was 401 via the gateway since Oct 26; answered again on 2026-11-15 when attempted for this review)",
+      "probability": "medium",
+      "impact": "low",
+      "mitigation": "Reviews and builds proceed without Jev; revival stays the owner's call; no gateway key or billing change is ever improvised",
+      "owner": "Owner (revival decision)"
+    },
+    {
+      "risk": "The empty-brain apple test, the design's closing proof, has never been run end to end",
+      "probability": "high",
+      "impact": "medium",
+      "mitigation": "Kept as a Phase 6 proof, named as not proven in the scope and on the board; restore-from-repo proof (2026-11-08) is not dressed up as it",
+      "owner": "Phase 6"
+    },
+    {
+      "risk": "Open vision question: when a cross-domain cluster grows strong, does it become its own node or domain candidate",
+      "probability": "n/a",
+      "impact": "low",
+      "mitigation": "Recorded as unanswered with Max's reading (yes) noted; cluster births stay governed until the owner decides",
+      "owner": "Owner"
+    }
+  ],
+  "snapshot_date": "2026-11-15",
+  "snapshot_label": "Snapshot of 2026-11-15, late evening PT. Statuses verified against receipts, commits and live checks named in each card. Dates after 2026-11-15 are planned, not promised.",
+  "tasks": [
+    {
+      "evidence": "Landed 2026-11-15; budget audit: November 2,276 min, net paid $0.126, about 810 paid minutes left under the owner's $5 budget",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 0: workflow burn cuts (Tests about 97 percent of Actions burn; job merges)",
+      "id": "T01",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Patch hidden_files/local-max-dual-mind-2026-11-15.patch applied before any bundle re-ship, per wake receipt guard",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 0.5: dual-mind patch fold-in to generator source",
+      "id": "T02",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Landed 2026-11-15 as part of chain items 1 to 7",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 1: portal quick wins (one shared counter; GPU last-run real date)",
+      "id": "T03",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Landed 2026-11-15; v2 amendment queued from owner stream 22:28 PT",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 2: thread expansion v1 (kind tags, provenance expansion)",
+      "id": "T04",
+      "phase": "P3"
+    },
+    {
+      "evidence": "Checker scripts/domain-audit.mjs built first; clusters landed; live relations rose 239 to 247. Guggu family membership held for owner's word, candidate only",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 3: domain clusters (self-audit checker first, then governed fixes)",
+      "id": "T05",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Verified working live 2026-11-15 22:31 PT: drag moved graph from 121 nodes to the Oct 22 beat (7 nodes), label shows dates",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 4: history slider fix (whole data, facts and dates)",
+      "id": "T06",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Landed 2026-11-15 as part of chain items 1 to 7",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 5: connection ladder (FALLBACK retry 2/5/15/60 plus supervision)",
+      "id": "T07",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Landed 2026-11-15; packets fire on real SSE, merge and window events only (ambient spawning stays off per calm law)",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 6: sparks wired to real backend events under calm caps",
+      "id": "T08",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Verified live 2026-11-15 22:31 PT: panel opens, shows IDLE state and 5 open questions honestly; v2 correction queued (remove label, live flow view, truncation fix)",
+      "lane": "Tonight chain",
+      "status": "done",
+      "title": "Chain item 7: outward node interactive (click opens live panel)",
+      "id": "T09",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Phase 1 proof batch live (9 pages, 29 of 29 tests); rollout batches then landed tonight across patterns and projects (3a95b3f), topics (f2a333f), library, dictionaries and tools (931aa81), people 37 pages (29d06fa) and places (37d1697); Haryana still awaits box merge of its 2 captures",
+      "lane": "Tonight chain",
+      "status": "running",
+      "title": "Chain item 8: node content rollout (batches landed across all domains; Haryana and refresher hardening remain)",
+      "id": "T10",
+      "phase": "P3"
+    },
+    {
+      "evidence": "v1 live (49c2c66); full live build-out per owner order 2026-11-15 20:12 PT: build backend feeds where no honest source exists, never fake a value",
+      "lane": "Tonight chain",
+      "status": "running",
+      "title": "Chain item 9: KB dashboard build-out plus presentation layer",
+      "id": "T11",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Design complete (Claude review GO WITH CHANGES, 19 fold-ins); learning law distillation folded in by owner amendment 2026-11-15 22:08 PT",
+      "lane": "Tonight chain",
+      "status": "next",
+      "title": "Chain item 10: self-growth scenes S1 to S4 plus demand-form fix plus gap files in thread",
+      "id": "T12",
+      "phase": "P5"
+    },
+    {
+      "evidence": "Known miss to fix: What is owner's name answered F-1880 instead of F-0001",
+      "lane": "Tonight chain",
+      "status": "next",
+      "title": "Chain item 11: pre-demo ask check (owner name, Etawah, father, money, skills)",
+      "id": "T13",
+      "phase": "P6"
+    },
+    {
+      "evidence": "Prototype only; stops for owner's judgment after stills proof; no rollout without his word",
+      "lane": "Tonight chain",
+      "status": "next",
+      "title": "Chain item 12: focus-orbit prototype (topic-money only, at most 12 real fact chips)",
+      "id": "T14",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Owner stream 2026-11-15 22:28 to 22:31 PT; includes fix for doubled text Answered by answered by",
+      "lane": "Tonight chain amendment",
+      "status": "next",
+      "title": "V2: god thread as natural chat (hover actions, modal on click, side panel, UI slides left)",
+      "id": "T15",
+      "phase": "P3"
+    },
+    {
+      "evidence": "Owner stream 2026-11-15 22:30 PT",
+      "lane": "Tonight chain amendment",
+      "status": "next",
+      "title": "V2: main page rearrange (options into side, nav, menu or settings panel; history slider stays)",
+      "id": "T16",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Owner correction 2026-11-15 22:29 PT, supersedes the 20:41 PT labelled spec",
+      "lane": "Tonight chain amendment",
+      "status": "next",
+      "title": "V2: outward node without label, live flow in details (questions out, data in, answers and facts arriving)",
+      "id": "T17",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Owner stream 2026-11-15 22:28 PT; extends chain item 12 brief",
+      "lane": "Tonight chain amendment",
+      "status": "next",
+      "title": "V2: focus and zoom depth (tiny sub-nodes of a node's own facts at focus level)",
+      "id": "T18",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Receipt hidden_files/local-max-wake-receipt-2026-11-15.md; first real wake 20261116T044247Z, thinker local, 0 errors",
+      "lane": "Local Max lane",
+      "status": "done",
+      "title": "Local Max wake operation (bundle sync, wake-health alert, supervised first wake)",
+      "id": "T19",
+      "phase": "P4"
+    },
+    {
+      "evidence": "Owner logged in 2026-11-15 about 21:01 PT; supervised wake 20261116T050451Z thinker seat, exit 0, seat ledger ms 5117, $0",
+      "lane": "Local Max lane",
+      "status": "done",
+      "title": "Claude seat enablement (owner RDP login, SEAT_ENABLED, supervised seat wake)",
+      "id": "T20",
+      "phase": "P4"
+    },
+    {
+      "evidence": "29 of 29 tests; 9 pages live on origin; fact layer byte-identical; doctor 0 errors; receipt hidden_files/node-content-lane-receipt.md",
+      "lane": "Node content lane",
+      "status": "done",
+      "title": "Node content Phase 1 (checker, refresher, proof batch of 10 pages)",
+      "id": "T21",
+      "phase": "P3"
+    },
+    {
+      "evidence": "Origin 663033d6; solo suite 2,781 tests, failing set identical to baseline; backend deployed to box 2026-11-16T04:06Z",
+      "lane": "God thread lane",
+      "status": "done",
+      "title": "God thread lane (persistence, quote-reply, demand attach, honest timings, node ops add and create)",
+      "id": "T22",
+      "phase": "P3"
+    },
+    {
+      "evidence": "Conditional gate pass (top1 0.5417, top5 0.9583, both at or above incumbent); semantic-prod now 1,376 facts, 2,380 rows; golden set 23 of 24 hits",
+      "lane": "Refresh lane",
+      "status": "done",
+      "title": "Semantic refresh 2026-11-16d and ask seam closure",
+      "id": "T23",
+      "phase": "P2"
+    },
+    {
+      "evidence": "Origin ca7d573, rollback tag pre-cleanup-2026-11-15; facts grew 2,114 to 2,348 over the day; nothing deleted, superseded facts stay readable",
+      "lane": "Cleanup lane",
+      "status": "done",
+      "title": "Full cleanup and thing-node restructure",
+      "id": "T24",
+      "phase": "P2"
+    },
+    {
+      "evidence": "Capture inbox/2026-11-15-2232-muse-reverse-engineering-method.md committed in company checkout (efe902a); REA privacy rule restated inside it",
+      "lane": "KB filing",
+      "status": "done",
+      "title": "RE repo knowledge filing (method only, no build)",
+      "id": "T25",
+      "phase": "P5"
+    },
+    {
+      "evidence": "Dispatched as a read-only evaluation alongside chain item 8, build nothing; brain already has wikilink to CONTEXT machinery to compare against",
+      "lane": "Evaluation",
+      "status": "running",
+      "title": "Obsidian wikilink and graph model evaluation (replicate what is good, no blind build)",
+      "id": "T26",
+      "phase": "P5"
+    },
+    {
+      "evidence": "Owner stream 2026-11-15 22:28 PT; births through the governed path only",
+      "lane": "Growth",
+      "status": "next",
+      "title": "Dictionaries per domain and type (beyond the first 3)",
+      "id": "T27",
+      "phase": "P5"
+    },
+    {
+      "evidence": "Owner law 2026-11-15 22:08 PT plus amendment 22:09 PT (Claude and Gemini also teachers and accelerators)",
+      "lane": "Self-growth (chain item 10)",
+      "status": "next",
+      "title": "Learning law distillation mechanism (repeated seat work becomes Local Max playbooks)",
+      "id": "T28",
+      "phase": "P5"
+    },
+    {
+      "evidence": "Audit gap 3; Jev is down (401 via gateway, last live Oct 26); revival is the owner's call; Local Max stays proposal-writer only until then",
+      "lane": "Local Max programme",
+      "status": "parked",
+      "title": "Governed dispatch bridge for Local Max plus Jev revival decision",
+      "id": "T29",
+      "phase": "P5"
+    },
+    {
+      "evidence": "Audit gap 4; deputy has never shipped a real task (3 dry-run entries from Oct 18)",
+      "lane": "Local Max programme",
+      "status": "parked",
+      "title": "Deputy loop: re-point the handoff convention or retire it honestly",
+      "id": "T30",
+      "phase": "P5"
+    },
+    {
+      "evidence": "Hard deadline 2026-11-20 about 11:25 PT; tracked until done",
+      "lane": "Governance",
+      "status": "next",
+      "title": "Security gate re-enable before go-live",
+      "id": "T31",
+      "phase": "P6"
+    },
+    {
+      "evidence": "Governed captures filed and pushed (12df3d52, cd194bd0); 2 haryana files sit among 15 inbox files awaiting box consolidation at the last driver check",
+      "lane": "Node content rollout",
+      "status": "next",
+      "title": "Haryana node summary (heads rollout batch 1)",
+      "id": "T32",
+      "phase": "P3"
+    },
+    {
+      "evidence": "Ranked shortlist ready; application beyond top 3 waits for the owner's yes or no",
+      "lane": "Relations",
+      "status": "parked",
+      "title": "Relation candidates ranks 4 to 25 (only top 3 applied)",
+      "id": "T33",
+      "phase": "P2"
+    },
+    {
+      "evidence": "Plan written 2026-11-12 and 13; package not built; who gets it and when is the owner's call alone",
+      "lane": "Handover",
+      "status": "parked",
+      "title": "System-only handover package (empty smart-ready brain, onboarding, settings checker)",
+      "id": "T34",
+      "phase": "P6"
+    },
+    {
+      "evidence": "Drafting happens later, together with the owner, not solo; Kevan leaves F12 Fri 2026-11-20",
+      "lane": "Owner together",
+      "status": "parked",
+      "title": "Kevan and Kim detailed mail (F12 as MIP, in-house documentation tool)",
+      "id": "T35",
+      "phase": "P6"
+    },
+    {
+      "title": "Census regeneration after graph rebuilds (portal census still shows 240 edges vs graph 247)",
+      "status": "next",
+      "lane": "Tonight chain",
+      "evidence": "Backlog item C-a: portal/census.json generatedFrom 0e808265 vs current graph sha 1e91bb5b; facts unchanged at 2,348 and 1,551 active; regeneration owed by the chain",
+      "id": "T36",
+      "phase": "P4"
+    },
+    {
+      "title": "Watchdog files writer fix (box-side relay trigger unknown)",
+      "status": "next",
+      "lane": "Brain-core lane",
+      "evidence": "Files absent for the 10th consecutive driver run; non-blocking, core sync proven alive by independent timestamps; fix not started while lanes run",
+      "id": "T37",
+      "phase": "P4"
+    },
+    {
+      "title": "Presentation surface and KB tab documentation (system-only, shareable-grade)",
+      "status": "running",
+      "lane": "Master scope lane",
+      "evidence": "Owner refinement 2026-11-15 22:52 PT: board is the full web presentation (overview, architecture, pipelines, validations, data stores, structure, functions and features, status, tutorials and FAQ, spec sheet); same documentation lands in the brain Knowledge Base tab; screenshot slots named per view until the live screenshot pass lands",
+      "id": "T38",
+      "phase": "P6"
+    }
+  ]
+}

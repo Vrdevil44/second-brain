@@ -716,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=5c0d113');
-        await loadScriptOnce('universe.js?v=5c0d113');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=1fdeac4');
+        await loadScriptOnce('universe.js?v=1fdeac4');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1511,6 +1511,9 @@ function expandQueryVariants(q, groups) {
     if (b && typeof b.beat === 'number' && (!liveSseState || fresherLiveState(liveSseState.st, b) === b)) {
       liveSseState = { st: b, at: Date.now() };
     }
+    // The KB dashboard's Live Feed updates off the same stream while
+    // its panel is open (kbOnLiveState checks and no-ops when closed).
+    try { kbOnLiveState(b); } catch (err) {}
     // Fire the activity packets once per new entry (state re-deliveries
     // must not refire). Doorbell events carry no node or fid, so they
     // honestly earn no packet — inventing an edge for them would be fake.
@@ -4501,12 +4504,20 @@ function expandQueryVariants(q, groups) {
   let kbLastId = null;     // last viewed section id, in memory only
   let kbGen = 0;           // bumped on reset so late async results are dropped
   let kbLiveState = null;  // last live state seen by the dashboard, in memory only
+  let kbDashOpen = {};     // dashboard section collapse state, in memory only
+  let kbDashLogSig = '';   // last log signature rendered (log rows enter on real gains only)
+  let kbDashFeedSig = '';  // last feed signature rendered (feed rows enter on real gains only)
+  let kbPhases = null;     // tracker render copy (portal/phases.json), in memory only
 
   function kbReset() {
     kbGen++;
     kbSections = null;
     kbLastId = null;
     kbLiveState = null;
+    kbDashOpen = {};
+    kbDashLogSig = '';
+    kbDashFeedSig = '';
+    kbPhases = null;
     const dash = $('#kb-dash');
     if (dash) { dash.textContent = ''; dash.hidden = true; }
     const panel = $('#kb-panel');
@@ -4690,7 +4701,7 @@ function expandQueryVariants(q, groups) {
   }
 
   // Pure view model for the dashboard: reads each value from its one source.
-  function kbDashboardModel(graph, census, st) {
+  function kbDashboardModel(graph, census, st, phases) {
     const num = (x) => (typeof x === 'number' && Number.isFinite(x)) ? x : null;
     if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
     const total = graph.edges.length;
@@ -4718,22 +4729,171 @@ function expandQueryVariants(q, groups) {
       };
     }
 
+    // KB realtime feed (design sections 7 and 8): each block below maps
+    // from its one payload source and stays null while that source is
+    // absent, so the renderer shows an honest absence line instead of a
+    // number. health.audit is absent by design (no doctor artefact
+    // exists); the model never carries it, decoy payload or not.
+    const obj = (x) => (x && typeof x === 'object' && !Array.isArray(x)) ? x : null;
+    const str = (x) => (typeof x === 'string' && x) ? x : null;
+    const feed = obj(st && st.health);
+    const mergeRaw = obj(feed && feed.merge);
+    const merge = mergeRaw ? {
+      at: str(mergeRaw.at), merged: num(mergeRaw.merged), rejected: num(mergeRaw.rejected),
+      duplicates: num(mergeRaw.duplicates), facts: num(mergeRaw.facts),
+    } : null;
+    const gateRaw = obj(feed && feed.gate);
+    const gateFeed = gateRaw ? {
+      rejectedLastRun: num(gateRaw.rejected_last_run), pile: num(gateRaw.pile),
+    } : null;
+    const semRaw = obj(feed && feed.semantic);
+    const semanticFeed = semRaw ? {
+      rows: num(semRaw.rows), facts: num(semRaw.facts), stamp: str(semRaw.stamp), at: str(semRaw.at),
+    } : null;
+    const askRaw = obj(feed && feed.ask);
+    const askFeed = askRaw ? {
+      lastAt: str(askRaw.last_at), lastTotalMs: num(askRaw.last_total_ms),
+      lastRetrievalMs: num(askRaw.last_retrieval_ms), today: num(askRaw.today),
+    } : null;
+    const procRaw = obj(feed && feed.processes);
+    let processes = null;
+    if (procRaw) {
+      const bk = obj(procRaw.by_kind);
+      const byKind = bk ? Object.keys(bk)
+        .map((k) => ({ kind: k, n: num(bk[k]) }))
+        .filter((e) => e.n !== null)
+        .sort((a, b) => (b.n - a.n) || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0)) : [];
+      processes = {
+        total: num(procRaw.total), byKind,
+        lastAt: str(procRaw.last_at), lastKind: str(procRaw.last_kind),
+      };
+    }
+    const trRaw = obj(st && st.training);
+    const trainingFeed = trRaw ? {
+      factsSinceRefresh: num(trRaw.facts_since_refresh), nextOuterDate: str(trRaw.next_outer_date),
+    } : null;
+    // The window block ships in two shapes: the live one (pulls list and
+    // questions_open) and the design one (last_pull, pulls_today,
+    // queued_questions). Both normalise here; a count with no field
+    // (pulls today from a five row tail) is never invented.
+    const winRaw = obj(st && st.window);
+    let windowFeed = null;
+    if (winRaw) {
+      let lastPull = null;
+      const lp = obj(winRaw.last_pull);
+      if (lp) {
+        lastPull = { at: str(lp.at), source: str(lp.domain) || str(lp.source), outcome: str(lp.outcome) };
+      } else if (Array.isArray(winRaw.pulls) && winRaw.pulls.length) {
+        const p = obj(winRaw.pulls[0]);
+        if (p) lastPull = { at: str(p.at), source: str(p.source), outcome: str(p.outcome) };
+      }
+      const qOpen = num(winRaw.questions_open);
+      windowFeed = {
+        enabled: typeof winRaw.enabled === 'boolean' ? winRaw.enabled : null,
+        state: str(winRaw.state), why: str(winRaw.why), lastPull,
+        pullsToday: num(winRaw.pulls_today),
+        queued: qOpen !== null ? qOpen : num(winRaw.queued_questions),
+      };
+    }
+    const findings = {
+      demands: (Array.isArray(st && st.demands_top) ? st.demands_top
+        : (Array.isArray(st && st.demands) ? st.demands : []))
+        .filter((d) => typeof d === 'string' && d).slice(0, 5),
+      demandsOpen: st ? num(st.demands_open) : null,
+      openQuestions: (st && st.core) ? num(st.core.open_questions) : null,
+      contested: facts ? facts.contested : null,
+    };
+    const feedAll = (st && Array.isArray(st.activity) ? st.activity : [])
+      .filter((a) => a && typeof a === 'object' && typeof a.label === 'string' && a.label)
+      .map((a) => ({ t: str(a.t), kind: str(a.kind), label: a.label }));
+    const feedEntries = feedAll.slice(-50);
+    const log = feedAll.slice(-8);
+    // The Build tracker: structure and statuses come from the render
+    // copy of the scope lane's phases.json (portal/phases.json); the
+    // live status truth is the governed facts on proj-second-brain in
+    // the loaded graph, counted here. The section labels its own
+    // freshness and never claims to be real time.
+    const phRaw = obj(phases);
+    let tracker = null;
+    if (phRaw && Array.isArray(phRaw.building_blocks)) {
+      const blocks = phRaw.building_blocks
+        .filter((b) => b && typeof b.name === 'string' && b.name)
+        .map((b) => ({ name: b.name, status: str(b.status) })).slice(0, 24);
+      const phaseRows = (Array.isArray(phRaw.phases) ? phRaw.phases : [])
+        .filter((p) => p && typeof p.name === 'string' && p.name)
+        .map((p) => ({
+          id: str(p.id), name: p.name, status: str(p.status),
+          gate: str(p.gate_status) || str(p.gate_state),
+        })).slice(0, 12);
+      const taskCounts = { done: 0, running: 0, next: 0, parked: 0, total: 0 };
+      if (Array.isArray(phRaw.tasks)) {
+        for (const t of phRaw.tasks) {
+          if (!t || typeof t.status !== 'string') continue;
+          taskCounts.total++;
+          if (['done', 'running', 'next', 'parked'].includes(t.status)) taskCounts[t.status]++;
+        }
+      }
+      let projectFacts = null, projectLatest = null;
+      const proj = graph.nodes.find((n) => n && n.id === 'proj-second-brain');
+      if (proj && Array.isArray(proj.facts)) {
+        projectFacts = proj.facts.length;
+        for (const f of proj.facts) {
+          if (f && typeof f.date === 'string' && (!projectLatest || f.date > projectLatest)) {
+            projectLatest = f.date;
+          }
+        }
+      }
+      tracker = {
+        project: str(phRaw.project), snapshotDate: str(phRaw.snapshot_date),
+        snapshotLabel: str(phRaw.snapshot_label), blocks, phases: phaseRows,
+        taskCounts, projectFacts, projectLatest,
+      };
+    }
+    let dictionaries = 0, dictTerms = 0, skills = 0;
+    for (const n of graph.nodes) {
+      if (!n || typeof n.id !== 'string') continue;
+      if (n.id.startsWith('dict-')) {
+        dictionaries++;
+        if (Array.isArray(n.facts)) dictTerms += n.facts.length;
+      } else if (n.id.startsWith('skill-')) skills++;
+    }
+    const library = { dictionaries, dictTerms, skills };
+    // A stage is active only while its real signal is fresh: inside the
+    // current beat window (15 minutes before the payload's own clock).
+    const nowMs = (st && typeof st.ts === 'string') ? Date.parse(st.ts) : NaN;
+    const fresh = (iso) => {
+      if (!iso || !Number.isFinite(nowMs)) return false;
+      const t = Date.parse(iso);
+      return Number.isFinite(t) && t <= nowMs && (nowMs - t) <= 15 * 60 * 1000;
+    };
+    const inboxN = st ? num(st.inbox) : null;
+    const gateStat = [];
+    if (inboxN !== null) gateStat.push({ n: inboxN, text: 'in gate queue' });
+    if (gateFeed && gateFeed.pile !== null) gateStat.push({ n: gateFeed.pile, text: 'in the rejected pile' });
+    const mergeActive = !!(merge && fresh(merge.at));
+
     const flow = [
       { id: 'capture', label: 'Capture',
-        note: 'Notes arrive in the inbox before anything else happens.', stat: null },
+        note: 'Notes arrive in the inbox before anything else happens.', stat: null,
+        active: inboxN !== null && inboxN > 0 },
       { id: 'gate', label: 'Write gate',
         note: 'A fact needs specificity, a source and at least one relation, or it waits.',
-        stat: (st && num(st.inbox) !== null) ? [{ n: st.inbox, text: 'in gate queue' }] : null },
+        stat: gateStat.length ? gateStat : null,
+        active: (inboxN !== null && inboxN > 0) || !!(gateFeed && gateFeed.pile !== null && gateFeed.pile > 0) },
       { id: 'merge', label: 'Consolidation',
         note: 'Duplicates merge and stale facts retire to the backend. Stored facts are never deleted.',
-        stat: null },
+        stat: (merge && merge.merged !== null) ? [{ n: merge.merged, text: 'merged last run' }] : null,
+        active: mergeActive },
       { id: 'graph', label: 'Graph',
         note: 'One node per thing, with its facts inside it.',
-        stat: [{ n: faceCounts(graph).things, text: 'things' }, { n: faceCounts(graph).relations, text: 'relations' }] },
+        stat: [{ n: faceCounts(graph).things, text: 'things' }, { n: faceCounts(graph).relations, text: 'relations' }],
+        active: mergeActive },
       { id: 'ask', label: 'Ask',
         note: 'Retrieval reads the live fact pool, and answers cite the facts they used.',
-        stat: null },
+        stat: (askFeed && askFeed.today !== null) ? [{ n: askFeed.today, text: 'asks today' }] : null,
+        active: !!(askFeed && fresh(askFeed.lastAt)) },
     ];
+    const flowActive = flow.some((s) => s.active);
 
     const loop = (st && num(st.beat) !== null) ? {
       beat: st.beat,
@@ -4755,13 +4915,19 @@ function expandQueryVariants(q, groups) {
       } : null,
     } : null;
 
-    return { flow, loop, facts, relations, health, hasLiveState: !!st };
+    const loopStep = (st && num(st.beat) !== null) ? num(st.beat) % 4 : null;
+
+    return {
+      flow, flowActive, loop, loopStep, facts, relations, health, hasLiveState: !!st,
+      merge, gateFeed, semanticFeed, askFeed, processes, trainingFeed, windowFeed,
+      findings, log, feed: feedEntries, tracker, library, audit: null,
+    };
   }
 
   function kbRenderDashboard() {
     const dash = $('#kb-dash');
     if (!dash) return;
-    const m = kbDashboardModel(graphData, pairedCensus, kbLiveState);
+    const m = kbDashboardModel(graphData, pairedCensus, kbLiveState, kbPhases);
     dash.textContent = '';
     if (!m) { dash.hidden = true; return; }
     dash.hidden = false;
@@ -4769,90 +4935,337 @@ function expandQueryVariants(q, groups) {
       const t = Date.parse(iso);
       return Number.isFinite(t) ? fmtFreshAge(Date.now() - t) : null;
     };
-    const block = (title, ...kids) => el('div', { class: 'kb-dash-block' },
-      el('div', { class: 'kb-dash-block-title' }, title), ...kids);
+    const fmtDay = (iso) => {
+      const t = Date.parse(iso);
+      return Number.isFinite(t)
+        ? new Date(t).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
+        : null;
+    };
+    const line = (txt, cls) => el('div', { class: cls || 'kb-dash-line' }, txt);
+
+    // One inline SVG icon set, drawn for this dashboard: single weight
+    // line icons in currentColor, so they inherit the registry colours.
+    const P = (d) => ['path', { d }];
+    const C = (cx, cy, r) => ['circle', { cx: String(cx), cy: String(cy), r: String(r) }];
+    const ICONS = {
+      capture: [P('M12 3v10'), P('M7 9l5 5 5-5'), P('M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2')],
+      gate: [P('M4 4v16'), P('M20 4v16'), P('M4 9h16'), P('M4 15h16'), P('M12 4v16')],
+      merge: [C(9, 12, 5), C(15, 12, 5)],
+      graph: [C(6, 6, 2.5), C(18, 8, 2.5), C(9, 18, 2.5), P('M8 7l7.5.7'), P('M7 8.3l1.2 7'), P('M16 10l-5 5.5')],
+      ask: [P('M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4V5z')],
+      flow: [P('M4 12h13'), P('M13 6l6 6-6 6')],
+      feed: [P('M3 12h4l2.5-6 4 12L16 12h5')],
+      board: [P('M3 20h18'), P('M7 20v-6'), P('M12 20V6'), P('M17 20v-9')],
+      loop: [P('M20 12a8 8 0 1 1-2.3-5.6'), P('M20 3v4h-4')],
+      book: [P('M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z'), P('M4 19a2 2 0 0 0 2 2h13')],
+      shield: [P('M12 3l7 3v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z'), P('M9 12l2 2 4-4')],
+      chip: [P('M7 7h10v10H7z'), P('M10 2v3'), P('M14 2v3'), P('M10 19v3'), P('M14 19v3'), P('M2 10h3'), P('M2 14h3'), P('M19 10h3'), P('M19 14h3')],
+      window: [P('M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5z'), P('M4 9h16'), P('M12 17l4-4'), P('M12 13h4v4')],
+      changes: [P('M7 4L3 8l4 4'), P('M3 8h14'), P('M17 20l4-4-4-4'), P('M21 16H7')],
+      findings: [C(11, 11, 6), P('M20 20l-3.8-3.8')],
+      system: [C(12, 12, 3.2), P('M12 2v3'), P('M12 19v3'), P('M2 12h3'), P('M19 12h3'), P('M4.9 4.9l2.1 2.1'), P('M17 17l2.1 2.1'), P('M19.1 4.9L17 7'), P('M7 17l-2.1 2.1')],
+      list: [P('M8 6h12'), P('M8 12h12'), P('M8 18h12'), P('M4 6h.01'), P('M4 12h.01'), P('M4 18h.01')],
+    };
+    const icon = (name) => el('svg', { class: 'kb-dash-icon', viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+      ...(ICONS[name] || []).map(([tag, attrs]) => el(tag, attrs)));
+
+    // Collapsible section: a real button header with aria-expanded. The
+    // collapse state lives in kbDashOpen, so a live re-render keeps the
+    // reader's place. The intro is one plain sentence a visitor can
+    // follow; no em-dash characters anywhere in this copy.
+    const section = (id, title, iconName, intro, kids) => {
+      const open = kbDashOpen[id] !== false;
+      const body = el('div', { class: 'kb-dash-section-body' },
+        el('p', { class: 'kb-dash-intro' }, intro), ...kids);
+      body.hidden = !open;
+      const head = el('button', {
+        type: 'button', class: 'kb-dash-section-head', 'aria-expanded': open ? 'true' : 'false',
+        onclick: () => {
+          const nowOpen = body.hidden;
+          body.hidden = !nowOpen;
+          kbDashOpen[id] = nowOpen;
+          head.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+        },
+      }, icon(iconName), el('span', { class: 'kb-dash-section-title' }, title));
+      return el('section', { class: 'kb-dash-section' }, head, body);
+    };
 
     dash.append(el('h3', {}, 'How the brain works, right now'));
 
-    dash.append(el('div', { class: 'kb-dash-flow' }, ...m.flow.map((s) => el('div', { class: 'kb-dash-stage' },
-      el('div', { class: 'kb-dash-stage-label' }, s.label),
-      s.stat ? el('div', { class: 'kb-dash-stat' },
-        s.stat.map((seg) => nf.format(seg.n) + ' ' + seg.text).join(' · ')) : null,
-      el('div', { class: 'kb-dash-note' }, s.note)))));
+    // ---- Flow: the five stages, glowing only on fresh real signals ----
+    dash.append(section('flow', 'Flow', 'flow',
+      'Every note takes the same journey a letter takes through a good post office: received, checked, filed, shelved, then quoted back to you.',
+      [el('div', { class: 'kb-dash-flow' + (m.flowActive ? ' kb-dash-flow-live' : '') },
+        el('div', { class: 'kb-dash-pipeline', 'aria-hidden': 'true' },
+          el('div', { class: 'kb-dash-pipeline-move' })),
+        ...m.flow.map((s) => el('div', { class: 'kb-dash-stage' + (s.active ? ' kb-dash-stage-active' : '') },
+          el('div', { class: 'kb-dash-stage-label' }, icon(s.id), s.label),
+          s.stat ? el('div', { class: 'kb-dash-stat' },
+            s.stat.map((seg) => nf.format(seg.n) + ' ' + seg.text).join(' · ')) : null,
+          el('div', { class: 'kb-dash-note' }, s.note))))]));
 
-    if (kbLiveState) {
-      if (m.loop) {
-        const parts = ['beat ' + m.loop.beat];
-        const think = m.loop.lastThink ? ageOf(m.loop.lastThink) : null;
-        if (think) parts.push('last think ' + think);
-        if (m.loop.openQuestions !== null) parts.push(nf.format(m.loop.openQuestions) + ' open questions');
-        const data = m.loop.ts ? ageOf(m.loop.ts) : null;
-        if (data) parts.push('data ' + data);
-        dash.append(block('The loop',
-          el('div', { class: 'kb-dash-line' }, 'Reading · Flagging · Traversing · Updating'),
-          el('div', { class: 'kb-dash-line' }, parts.join(' · '))));
-      } else {
-        dash.append(block('The loop',
-          el('div', { class: 'kb-dash-line' }, 'Loop state is not in the saved state.')));
-      }
+    // ---- The Loop: the ring advances one step per real beat ----
+    const loopKids = [];
+    const stepNames = ['Reading', 'Flagging', 'Traversing', 'Updating'];
+    loopKids.push(el('div', { class: 'kb-dash-loop-steps' },
+      ...stepNames.map((w, i) => el('span', {
+        class: 'kb-dash-loop-step' + (m.loopStep === i ? ' kb-dash-loop-on' : ''),
+      }, w))));
+    if (kbLiveState && m.loop) {
+      const parts = ['beat ' + m.loop.beat];
+      const think = m.loop.lastThink ? ageOf(m.loop.lastThink) : null;
+      if (think) parts.push('last think ' + think);
+      const data = m.loop.ts ? ageOf(m.loop.ts) : null;
+      if (data) parts.push('data ' + data);
+      loopKids.push(line(parts.join(' · ')));
+    } else if (kbLiveState) {
+      loopKids.push(line('Loop state is not in the saved state.'));
+    } else {
+      loopKids.push(line('Loop state travels with the live connection; it is not part of the saved state.'));
     }
+    // ---- Live Feed: the latest real events, in and out, newest first ----
+    const feedKids = [];
+    if (m.feed.length) {
+      const lastF = m.feed[m.feed.length - 1];
+      const sigF = m.feed.length + '|' + (lastF.t || '') + '|' + lastF.label;
+      const gainedF = !!kbDashFeedSig && kbDashFeedSig !== sigF;
+      kbDashFeedSig = sigF;
+      const rows = m.feed.slice().reverse();
+      feedKids.push(el('div', { class: 'kb-dash-feed' + (rows.length > 8 ? ' kb-dash-feed-scroll' : '') },
+        el('div', { class: 'kb-dash-feed-track' },
+          ...rows.map((entry, i) => el('div', { class: 'kb-dash-feed-row' + (gainedF && i === 0 ? ' kb-dash-log-new' : '') },
+            el('span', { class: 'kb-dash-feed-kind' }, entry.kind || 'event'),
+            el('span', { class: 'kb-dash-feed-label' }, (entry.t ? entry.t.slice(11, 16) + ' · ' : '') + entry.label))))));
+    } else {
+      feedKids.push(line('Nothing has flowed past yet. The first capture, merge or answer will appear here.'));
+    }
+    dash.append(section('feed', 'Live Feed', 'feed',
+      'The front window of the brain: everything coming in and going out walks past here first.', feedKids));
 
+    dash.append(section('loop', 'The Loop', 'loop',
+      'Between answers, the brain does its housekeeping rounds: read a little, flag what is off, walk the shelves, tidy what changed.', loopKids));
+
+    // ---- Facts & Relations: census, kinds, dictionaries, skills ----
+    const factKids = [];
     if (m.facts) {
       const f = m.facts;
       const pair = (k, v) => el('span', {}, el('span', { class: 'kb-dash-k' }, k), nf.format(v));
-      const stats = [pair('Total', f.total), pair('Live', f.live),
-        pair('Superseded', f.superseded), pair('Dormant', f.dormant)];
-      if (f.contested !== null) stats.push(pair('Contested', f.contested));
+      factKids.push(el('div', { class: 'kb-dash-stats' }, pair('Total', f.total), pair('Live', f.live)));
       const extra = [];
       if (f.factsInThings !== null && f.things !== null) {
         extra.push(nf.format(f.factsInThings) + ' facts inside ' + nf.format(f.things) + ' things');
       }
       if (f.coreFacts !== null) extra.push('core holds ' + nf.format(f.coreFacts) + ' facts');
-      dash.append(block('Facts',
-        el('div', { class: 'kb-dash-stats' }, ...stats),
-        extra.length ? el('div', { class: 'kb-dash-line' }, extra.join(' · ')) : null));
+      if (extra.length) factKids.push(line(extra.join(' · ')));
+    } else {
+      factKids.push(line('Fact counts arrive with the paired census.'));
     }
-
     const chips = m.relations.kinds.map((k) => el('span', { class: 'kb-dash-chip' }, k.type + ' ' + nf.format(k.n)));
     if (m.relations.untyped > 0) {
       chips.push(el('span', { class: 'kb-dash-chip' }, 'untyped ' + nf.format(m.relations.untyped)));
     }
-    dash.append(block('Relations by kind', el('div', { class: 'kb-dash-chips' }, ...chips)));
+    factKids.push(el('div', { class: 'kb-dash-chips' }, ...chips));
+    factKids.push(line(nf.format(m.library.dictionaries) + ' dictionaries · ' + nf.format(m.library.dictTerms)
+      + ' terms · ' + nf.format(m.library.skills) + ' skills'));
+    dash.append(section('facts', 'Facts & Relations', 'book',
+      'The whole library, counted once: every fact lives inside exactly one thing, like one book on one shelf.', factKids));
 
-    if (kbLiveState) {
-      if (m.health) {
-        const h = m.health;
-        const rows = [];
-        if (h.backendUptimeS !== null) {
-          let up = 'Backend up ' + fmtFreshAge(h.backendUptimeS * 1000).replace(/ old$/, '');
-          const asOf = (m.loop && m.loop.ts) ? ageOf(m.loop.ts) : null;
-          if (asOf) up += ' · as of data ' + asOf;
-          rows.push(up);
-        }
-        if (h.syncKnown) {
-          rows.push(h.syncAgeS === null ? 'Sync: no relay contact yet'
-            : 'Sync: last relay ' + fmtFreshAge(h.syncAgeS * 1000));
-        }
-        if (h.training) {
-          const g = h.training.gate;
-          // The payload carries the run's real moment (training.at, an
-          // ISO stamp from the backend); the face shows that calendar
-          // date, never the raw build stamp ("2026-11-16d"). UTC keeps
-          // the shown date the same on every screen.
-          const atMs = h.training.at ? Date.parse(h.training.at) : NaN;
-          const when = Number.isFinite(atMs)
-            ? new Date(atMs).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
-            : h.training.stamp;
-          rows.push('GPU training: last run ' + when + (g
-            ? ' · gate ' + g + (h.training.wired ? ' · wired live' : g === 'pass' ? '' : ' · incumbent kept')
-            : ''));
-        }
-        dash.append(block('System health', ...rows.map((r) => el('div', { class: 'kb-dash-line' }, r))));
-      } else {
-        dash.append(block('System health',
-          el('div', { class: 'kb-dash-line' }, 'System health detail travels with the live connection; it is not part of the saved state.')));
+    // ---- Findings: demands, contradictions, open questions ----
+    const findKids = [];
+    if (m.findings.demands.length) {
+      for (const d of m.findings.demands) findKids.push(line(d));
+      if (m.findings.demandsOpen !== null) {
+        findKids.push(line(nf.format(m.findings.demandsOpen) + ' open demands'));
       }
+    } else {
+      findKids.push(line('No demands right now.'));
     }
+    if (m.findings.openQuestions !== null) {
+      findKids.push(line(nf.format(m.findings.openQuestions) + ' open questions'));
+    }
+    if (m.findings.contested !== null) {
+      findKids.push(line('Contested facts: ' + nf.format(m.findings.contested)));
+    }
+    dash.append(section('findings', 'Findings', 'findings',
+      "The brain's honest scratchpad: what it is still chewing on, arguing with, or waiting to be told.", findKids));
+
+    // ---- Changes: consolidation, gate, retirements (never deletions) ----
+    const changeKids = [];
+    if (m.merge) {
+      const parts = [];
+      const when = m.merge.at ? (ageOf(m.merge.at) || fmtDay(m.merge.at)) : null;
+      if (when) parts.push('last run ' + when);
+      if (m.merge.merged !== null) parts.push(nf.format(m.merge.merged) + ' merged');
+      if (m.merge.rejected !== null) parts.push(nf.format(m.merge.rejected) + ' rejected');
+      if (m.merge.duplicates !== null) parts.push(nf.format(m.merge.duplicates) + ' duplicates');
+      if (m.merge.facts !== null) parts.push(nf.format(m.merge.facts) + ' facts in the run');
+      if (parts.length) changeKids.push(line('Consolidation: ' + parts.join(' · ')));
+    } else {
+      changeKids.push(line('Consolidation detail arrives with the next backend update.'));
+    }
+    if (m.gateFeed) {
+      const parts = [];
+      if (m.gateFeed.rejectedLastRun !== null) parts.push(nf.format(m.gateFeed.rejectedLastRun) + ' rejected in the last run');
+      if (m.gateFeed.pile !== null) parts.push(nf.format(m.gateFeed.pile) + ' waiting in the rejected pile');
+      if (parts.length) changeKids.push(line('Write gate: ' + parts.join(' · ')));
+    } else {
+      changeKids.push(line('Write gate detail arrives with the next backend update.'));
+    }
+    if (m.facts) {
+      changeKids.push(line('Retirements: ' + nf.format(m.facts.superseded) + ' Superseded · '
+        + nf.format(m.facts.dormant) + ' Dormant. They stay stored in the backend and can be read again.'));
+    }
+    dash.append(section('changes', 'Changes', 'changes',
+      'Stored facts are never deleted. They retire like old editions to the back room, still on record, just no longer the copy on display.', changeKids));
+
+    // ---- System: backend, sync, semantic corpus, ask, processes, GPU ----
+    const sysKids = [];
+    if (kbLiveState && m.health) {
+      const h = m.health;
+      if (h.backendUptimeS !== null) {
+        let up = 'Backend up ' + fmtFreshAge(h.backendUptimeS * 1000).replace(/ old$/, '');
+        const asOf = (m.loop && m.loop.ts) ? ageOf(m.loop.ts) : null;
+        if (asOf) up += ' · as of data ' + asOf;
+        sysKids.push(line(up));
+      }
+      if (h.syncKnown) {
+        sysKids.push(line(h.syncAgeS === null ? 'Sync: no relay contact yet'
+          : 'Sync: last relay ' + fmtFreshAge(h.syncAgeS * 1000)));
+      }
+    } else if (kbLiveState) {
+      sysKids.push(line('System health detail travels with the live connection; it is not part of the saved state.'));
+    }
+    if (m.semanticFeed && m.semanticFeed.rows !== null && m.semanticFeed.facts !== null) {
+      let s = 'Semantic index: ' + nf.format(m.semanticFeed.rows) + ' rows over ' + nf.format(m.semanticFeed.facts) + ' facts';
+      if (m.semanticFeed.stamp) s += ' · ' + m.semanticFeed.stamp;
+      const sd = m.semanticFeed.at ? fmtDay(m.semanticFeed.at) : null;
+      if (sd) s += ' · indexed ' + sd;
+      sysKids.push(line(s));
+    } else {
+      sysKids.push(line('Semantic corpus detail arrives with the next backend update.'));
+    }
+    if (m.askFeed && (m.askFeed.lastTotalMs !== null || m.askFeed.today !== null)) {
+      const parts = [];
+      if (m.askFeed.lastTotalMs !== null) parts.push('Last answer ' + nf.format(m.askFeed.lastTotalMs) + ' ms');
+      if (m.askFeed.lastRetrievalMs !== null) parts.push('retrieval ' + nf.format(m.askFeed.lastRetrievalMs) + ' ms');
+      if (m.askFeed.today !== null) parts.push(nf.format(m.askFeed.today) + ' asks today');
+      sysKids.push(line(parts.join(' · ')));
+    } else {
+      sysKids.push(line('Ask timing detail arrives with the next backend update.'));
+    }
+    if (m.processes && m.processes.total !== null) {
+      let p = nf.format(m.processes.total) + ' pipeline events';
+      if (m.processes.lastKind) p += ' · latest ' + m.processes.lastKind;
+      sysKids.push(line(p));
+      if (m.processes.byKind.length) {
+        sysKids.push(line(m.processes.byKind.map((e) => e.kind + ' ' + nf.format(e.n)).join(' · ')));
+      }
+    } else {
+      sysKids.push(line('Pipeline event detail arrives with the next backend update.'));
+    }
+    sysKids.push(line('Audit results are not stored yet. When the brain starts saving audit runs, they will appear here.'));
+    const training = m.health && m.health.training;
+    if (training) {
+      const parts = [];
+      const when = fmtDay(training.at) || training.stamp;
+      parts.push('GPU training: last run ' + when);
+      if (training.gate) {
+        parts.push('gate ' + training.gate);
+        if (training.wired) parts.push('wired live');
+        else if (training.gate !== 'pass') parts.push('incumbent kept');
+      }
+      if (m.trainingFeed) {
+        const outer = m.trainingFeed.nextOuterDate ? fmtDay(m.trainingFeed.nextOuterDate) : null;
+        if (m.trainingFeed.factsSinceRefresh !== null) {
+          parts.push('next refresh at 50 new facts (' + nf.format(m.trainingFeed.factsSinceRefresh)
+            + ' since last run)' + (outer ? ' or by ' + outer : ''));
+        } else if (outer) {
+          parts.push('next refresh by ' + outer);
+        }
+      }
+      sysKids.push(line(parts.join(' · ')));
+    } else {
+      sysKids.push(line('GPU training detail arrives with the next backend update.'));
+    }
+    sysKids.push(el('div', { class: 'kb-dash-chips' },
+      ...['Node.js', 'Three.js', 'Ollama', 'all-MiniLM-L6-v2', 'Kaggle', 'GitHub', 'GitHub Actions', 'Vercel', 'Tailscale']
+        .map((name) => el('span', { class: 'kb-dash-chip' }, name))));
+    dash.append(section('system', 'System', 'system',
+      'Under the floorboards: the engine room gauges, read straight off the machines, nothing estimated.', sysKids));
+
+    // ---- Outward Window: permission, pulls, question queue ----
+    const winKids = [];
+    if (m.windowFeed) {
+      const w = m.windowFeed;
+      const stateWord = w.enabled === false ? 'Off'
+        : w.state === 'active' ? 'Active' : w.state === 'idle' ? 'Idle' : 'Reported';
+      winKids.push(line('State: ' + stateWord + (w.enabled === true ? ' · window open' : w.enabled === false ? ' · window closed' : '')));
+      if (w.why) winKids.push(line(w.why));
+      if (w.lastPull && w.lastPull.source) {
+        let lp = 'Last pull: ' + w.lastPull.source;
+        const ld = w.lastPull.at ? fmtDay(w.lastPull.at) : null;
+        if (ld) lp += ' · ' + ld;
+        if (w.lastPull.outcome) lp += ' · ' + w.lastPull.outcome;
+        winKids.push(line(lp));
+      } else {
+        winKids.push(line('No pull has landed yet.'));
+      }
+      if (w.pullsToday !== null) winKids.push(line(nf.format(w.pullsToday) + ' pulls today'));
+      if (w.queued !== null) winKids.push(line('Queued questions: ' + nf.format(w.queued) + ' open'));
+    } else {
+      winKids.push(line('The outward window has not reported yet. Its state will appear here when the live connection brings it.'));
+    }
+    dash.append(section('window', 'Outward Window', 'window',
+      'One guarded window to the public library of the web: facts may come in, personal context never goes out.', winKids));
+
+    // ---- Log: rows enter only when the activity array really gains ----
+    const logKids = [];
+    if (m.log.length) {
+      const last = m.log[m.log.length - 1];
+      const sig = m.log.length + '|' + (last.t || '') + '|' + last.label;
+      const gained = !!kbDashLogSig && kbDashLogSig !== sig;
+      kbDashLogSig = sig;
+      const rows = m.log.slice().reverse();
+      rows.forEach((entry, i) => {
+        const when = entry.t ? entry.t.slice(0, 10) + ' ' + entry.t.slice(11, 16) : '';
+        logKids.push(line((when ? when + ' · ' : '') + entry.label,
+          'kb-dash-line kb-dash-log-row' + (gained && i === 0 ? ' kb-dash-log-new' : '')));
+      });
+    } else {
+      logKids.push(line('No activity has been recorded in this state yet.'));
+    }
+    dash.append(section('log', 'Log', 'list',
+      "The ship's log: the last few entries, newest first, written only when something actually happened.", logKids));
+
+    // ---- The Build: the project tracker, snapshot-honest ----
+    const buildKids = [];
+    if (m.tracker) {
+      const tr = m.tracker;
+      const snap = tr.snapshotDate ? fmtDay(tr.snapshotDate) : null;
+      buildKids.push(line('Freshness: snapshot of ' + (snap || 'an unrecorded date')
+        + ' · render copy of the scope tracker · the graph copy updates on consolidation, not in real time.'));
+      if (tr.projectFacts !== null) {
+        buildKids.push(line('The project node in this graph holds ' + nf.format(tr.projectFacts) + ' facts'
+          + (tr.projectLatest ? ', latest dated ' + fmtDay(tr.projectLatest) : '') + '.'));
+      }
+      for (const ph of tr.phases) {
+        buildKids.push(line(ph.name + ' · ' + (ph.status || 'status unrecorded')
+          + (ph.gate ? ' · gate ' + ph.gate : '')));
+      }
+      if (tr.blocks.length) {
+        buildKids.push(el('div', { class: 'kb-dash-chips' },
+          ...tr.blocks.map((b) => el('span', { class: 'kb-dash-chip' }, b.name + (b.status ? ' · ' + b.status : '')))));
+      }
+      const tc = tr.taskCounts;
+      if (tc.total) {
+        buildKids.push(line('Tasks: ' + tc.done + ' done · ' + tc.running + ' running · '
+          + tc.next + ' next · ' + tc.parked + ' parked of ' + tc.total));
+      }
+    } else {
+      buildKids.push(line('The build tracker render copy has not landed with this portal build yet.'));
+    }
+    dash.append(section('build', 'The Build', 'board',
+      'The workshop board: what has been built, what is on the bench, and what is still on the drawing board.', buildKids));
 
     dash.append(el('div', { class: 'kb-dash-source' }, kbLiveState
       ? 'Every number here comes from the graph, the census and the live state this portal already loaded.'
@@ -4869,6 +5282,33 @@ function expandQueryVariants(q, groups) {
     line.textContent = Number.isFinite(t)
       ? 'live · data ' + fmtFreshAge(Date.now() - t)
       : 'live status unavailable';
+    kbLiveState = st;
+    if (!kbPhases) kbLoadPhases();
+    kbRenderDashboard();
+  }
+
+  // The Build tracker render copy: portal/phases.json is the committed
+  // render copy of the scope lane's phases.json. It loads once per
+  // session; while it is missing the tracker section keeps its absence
+  // line. The copy is a snapshot, and the section says so.
+  async function kbLoadPhases() {
+    try {
+      const res = await guardedFetch('phases.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const body = await res.json();
+      if (body && Array.isArray(body.building_blocks)) {
+        kbPhases = body;
+        kbRenderDashboard();
+      }
+    } catch { /* absence line stands */ }
+  }
+
+  // SSE states land here while the KB panel is open, so the Live Feed
+  // and the rest of the dashboard move as real events arrive. A closed
+  // panel costs nothing.
+  function kbOnLiveState(st) {
+    const panel = $('#kb-panel');
+    if (!panel || panel.hidden || !st) return;
     kbLiveState = st;
     kbRenderDashboard();
   }
