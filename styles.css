@@ -1338,12 +1338,19 @@ body.view-3d .node-panel { display: none; }
 .kb-chart-legend { font-size: 13px; margin-top: 4px; }
 .kb-chart-caption { font-size: 12px; color: var(--text-3); margin-top: 2px; overflow-wrap: anywhere; }
 .kb-circuit { margin-bottom: 4px; border: 1px solid var(--line-glow); border-radius: var(--radius); background: var(--surface); padding: 10px 14px 12px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28); scroll-margin-top: 54px; }
-.kb-circuit-scroll { overflow-x: auto; }
-.kb-circuit-svg { width: 100%; height: auto; display: block; min-width: 780px; }
+/* The board scales to the panel width: no scroll well at laptop width, so
+   the circuit reads as one flowchart, not a cut-off strip. Only below
+   700px does the well return, so phone labels stay legible instead of
+   shrinking below readable size. */
+.kb-circuit-svg { width: 100%; height: auto; display: block; }
 .kb-circuit-zoneband { fill: var(--surface-2); }
 .kb-flowview { margin-top: 14px; border: 1px solid var(--line-glow); border-radius: var(--radius); background: var(--surface); padding: 10px 14px 12px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28); scroll-margin-top: 54px; }
-.kb-flowview-scroll { overflow-x: auto; }
-.kb-flowview-svg { width: 100%; height: auto; display: block; min-width: 720px; }
+.kb-flowview-svg { width: 100%; height: auto; display: block; }
+@media (max-width: 700px) {
+  .kb-circuit-scroll, .kb-flowview-scroll { overflow-x: auto; }
+  .kb-circuit-svg { min-width: 640px; }
+  .kb-flowview-svg { min-width: 600px; }
+}
 .kb-flow-track { fill: none; stroke: var(--line-glow); stroke-width: 2; }
 .kb-flow-chev { fill: none; stroke: var(--text-3); stroke-width: 1.6; stroke-linecap: round; }
 .kb-flow-node { cursor: pointer; }

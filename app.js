@@ -198,12 +198,29 @@ function expandQueryVariants(q, groups) {
   // ---------------------------------------------------------------------------
   // Small helpers
   // ---------------------------------------------------------------------------
+  // SVG elements must be created in the SVG namespace. document.createElement
+  // builds HTML-namespace nodes: <svg>, <circle>, <path> and friends render as
+  // unknown inline elements (no shapes at all) and <text> children flow as
+  // plain sentences. That is the defect the KB circuit board showed in print
+  // (zone and component labels running together as one dense line) and the
+  // blank donut and growth chart from UI check run #12. createElementNS fixes
+  // every SVG the portal builds: circuit, flow view, growth chart, donut,
+  // tile sparklines and dashboard icons. className is a plain string on HTML
+  // elements but a read-only SVGAnimatedString on SVG elements, and assigning
+  // to it throws in strict mode, so SVG class goes through setAttribute.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const SVG_TAGS = new Set(['svg', 'g', 'circle', 'rect', 'path', 'text',
+    'polyline', 'line', 'ellipse', 'polygon', 'animateMotion', 'mpath',
+    'animate', 'defs', 'clipPath', 'marker', 'use', 'title', 'desc']);
   function el(tag, attrs = {}, ...children) {
-    const node = document.createElement(tag);
+    const isSvg = SVG_TAGS.has(tag);
+    const node = isSvg ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
       if (v == null || v === false) continue;
-      if (k === 'class') node.className = v;
-      else if (k === 'text') node.textContent = v;
+      if (k === 'class') {
+        if (isSvg) node.setAttribute('class', v);
+        else node.className = v;
+      } else if (k === 'text') node.textContent = v;
       else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
       else node.setAttribute(k, v === true ? '' : v);
     }
@@ -718,8 +735,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=4bbaccb');
-        await loadScriptOnce('universe.js?v=4bbaccb');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=e44a408');
+        await loadScriptOnce('universe.js?v=e44a408');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1573,6 +1590,7 @@ function expandQueryVariants(q, groups) {
           const b = JSON.parse(ev.data);
           if (b && typeof b.beat === 'number' && (!liveSseState || fresherLiveState(liveSseState.st, b) === b)) {
             liveSseState = { st: b, at: Date.now() };
+            try { kbOnBeat(b); } catch (err) {}
           }
         } catch (e) {}
       });
@@ -4511,7 +4529,12 @@ function expandQueryVariants(q, groups) {
   let kbDashFeedSig = '';  // last feed signature rendered (feed rows enter on real gains only)
   let kbPhases = null;     // tracker render copy (portal/phases.json), in memory only
   let kbHistory = null;    // growth snapshots (portal/graph-history.jsonl), in memory only
+  let kbHistoryState = 'idle'; // growth history load: idle, loading, ready, failed
   let kbCircuitSig = '';   // last feed signature the circuit diagram pulsed for
+  let kbBeatPulse = 0;     // beat number of the latest awake-loop beat not yet pulsed
+  let kbBeatCircuit = 0;   // beat number the circuit diagram already pulsed for
+  let kbBeatFlow = 0;      // beat number the data flow view already travelled for
+  let kbAgeTimer = null;   // the 5 s freshness tick, created once per session
   let kbExampleStep = 0;   // worked-example step position, in memory only
   let kbStageOpen = null;  // stage drawer component id, in memory only
   let kbTilePrev = {};     // headline tile values at last render (tick on real change)
@@ -4530,6 +4553,10 @@ function expandQueryVariants(q, groups) {
     kbDashFeedSig = '';
     kbPhases = null;
     kbHistory = null;
+    kbHistoryState = 'idle';
+    kbBeatPulse = 0;
+    kbBeatCircuit = 0;
+    kbBeatFlow = 0;
     kbCircuitSig = '';
     kbExampleStep = 0;
     kbStageOpen = null;
@@ -5049,6 +5076,10 @@ function expandQueryVariants(q, groups) {
         : null;
     };
     const line = (txt, cls) => el('div', { class: cls || 'kb-dash-line' }, txt);
+    // An age that ticks live: the span carries its timestamp, and the
+    // 5 s tick re-reads it. The initial text is the same ageOf value the
+    // tick computes, so the label never jumps on the first tick.
+    const ageSpan = (iso) => el('span', { class: 'kb-age', 'data-ts': iso }, ageOf(iso) || '');
 
     // One inline SVG icon set, drawn for this dashboard: single weight
     // line icons in currentColor, so they inherit the registry colours.
@@ -5183,12 +5214,10 @@ function expandQueryVariants(q, groups) {
         class: 'kb-dash-loop-step' + (m.loopStep === i ? ' kb-dash-loop-on' : ''),
       }, w))));
     if (kbLiveState && m.loop) {
-      const parts = ['beat ' + m.loop.beat];
-      const think = m.loop.lastThink ? ageOf(m.loop.lastThink) : null;
-      if (think) parts.push('last think ' + think);
-      const data = m.loop.ts ? ageOf(m.loop.ts) : null;
-      if (data) parts.push('data ' + data);
-      loopKids.push(line(parts.join(' · ')));
+      const kids = ['beat ' + m.loop.beat];
+      if (m.loop.lastThink) kids.push(' · last think ', ageSpan(m.loop.lastThink));
+      if (m.loop.ts) kids.push(' · data ', ageSpan(m.loop.ts));
+      loopKids.push(el('div', { class: 'kb-dash-line' }, ...kids));
     } else if (kbLiveState) {
       loopKids.push(line('Loop state is not in the saved state.'));
     } else {
@@ -5361,10 +5390,9 @@ function expandQueryVariants(q, groups) {
     if (kbLiveState && m.health) {
       const h = m.health;
       if (h.backendUptimeS !== null) {
-        let up = 'Backend up ' + fmtFreshAge(h.backendUptimeS * 1000).replace(/ old$/, '');
-        const asOf = (m.loop && m.loop.ts) ? ageOf(m.loop.ts) : null;
-        if (asOf) up += ' · as of data ' + asOf;
-        sysKids.push(line(up));
+        const upKids = ['Backend up ' + fmtFreshAge(h.backendUptimeS * 1000).replace(/ old$/, '')];
+        if (m.loop && m.loop.ts) upKids.push(' · as of data ', ageSpan(m.loop.ts));
+        sysKids.push(el('div', { class: 'kb-dash-line' }, ...upKids));
       }
       if (h.syncKnown) {
         sysKids.push(line(h.syncAgeS === null ? 'Sync: no relay contact yet'
@@ -5548,9 +5576,10 @@ function expandQueryVariants(q, groups) {
   // snapshot with its own counts. Loaded once per session like phases;
   // the model validates every row before the chart may draw it.
   async function kbLoadHistory() {
+    kbHistoryState = 'loading';
     try {
       const res = await guardedFetch('graph-history.jsonl', { cache: 'no-store' });
-      if (!res.ok) return;
+      if (!res.ok) { kbHistoryState = 'failed'; kbRenderDashboard(); return; }
       const text = await res.text();
       const rows = [];
       for (const line of text.split('\n')) {
@@ -5560,8 +5589,13 @@ function expandQueryVariants(q, groups) {
           if (j && j.counts) rows.push({ at: j.at, nodes: j.counts.nodes, edges: j.counts.edges });
         } catch { /* a torn snapshot line is skipped, never repaired */ }
       }
-      if (rows.length) { kbHistory = rows; kbRenderDashboard(); }
-    } catch { /* the chart keeps its absence until the file loads */ }
+      if (rows.length) { kbHistory = rows; kbHistoryState = 'ready'; kbRenderDashboard(); }
+      else { kbHistoryState = 'failed'; kbRenderDashboard(); }
+    } catch {
+      // The chart keeps its absence line until the file loads.
+      kbHistoryState = 'failed';
+      kbRenderDashboard();
+    }
   }
 
   // Headline numbers strip: the dashboard board from the KB console spec.
@@ -5801,7 +5835,20 @@ function expandQueryVariants(q, groups) {
   // caption names the source and explains the restructure drop that is
   // visible in the series itself.
   function kbRenderChart(m) {
-    if (!m || !Array.isArray(m.history) || m.history.length < 2) return null;
+    // The slot renders even before the history file lands, so the board
+    // does not pop in late and shove the sections below it. While the file
+    // loads the slot says so; if it fails, the slot says the history is
+    // absent. Only a real validated series draws a chart.
+    const slot = (txt) => el('div', { class: 'kb-chart', id: 'kb-sec-growth' },
+      el('div', { class: 'kb-dash-block-title' }, 'Growth'),
+      el('div', { class: 'kb-dash-line' }, txt));
+    if (!m || !Array.isArray(m.history) || m.history.length < 2) {
+      if (kbHistoryState === 'loading') return slot('Growth history is loading…');
+      if (kbHistoryState === 'failed' || kbHistoryState === 'idle') {
+        return slot('Growth history is not available in this portal build yet.');
+      }
+      return null;
+    }
     const rows = m.history;
     const W = 600, H = 170, PL = 8, PR = 8, PT = 10, PB = 18;
     const series = (key) => {
@@ -6027,6 +6074,15 @@ function expandQueryVariants(q, groups) {
       if (hit) { pulseTrace = hit[0]; pulseNode = hit[1]; }
     }
     if (sig) kbCircuitSig = sig;
+    // The heartbeat: one pulse per real awake-loop beat, travelling the
+    // loop trace into the Think Loop. A beat already spent by an earlier
+    // render, or a render that already pulsed for a feed event, stays
+    // quiet; between beats the board does not move.
+    if (!pulseTrace && kbBeatPulse && kbBeatPulse !== kbBeatCircuit && !reducedMotion) {
+      pulseTrace = 'kb-tr-loop';
+      pulseNode = 'think';
+      kbBeatCircuit = kbBeatPulse;
+    }
 
     const trace = (id, d, from, to) => el('path', {
       id, d, class: 'kb-circuit-trace', 'data-from': from, 'data-to': to,
@@ -6169,6 +6225,14 @@ function expandQueryVariants(q, groups) {
       else if (flashes[newest.kind]) touched = flashes[newest.kind];
     }
     if (sig) kbFlowSig = sig;
+    // The heartbeat: one dot per real awake-loop beat, travelling the whole
+    // track from Capture to Ask. A beat already travelled, or a render that
+    // already travelled for a feed event, stays quiet; between beats the
+    // strip does not move.
+    if (!hop && !touched && kbBeatPulse && kbBeatPulse !== kbBeatFlow && !reducedMotion) {
+      hop = ['capture', 'ask'];
+      kbBeatFlow = kbBeatPulse;
+    }
     const compOf = { capture: 'capture', gate: 'gate', merge: 'consolidation', graph: 'graph', ask: 'ask' };
     const kids = [
       el('path', { d: 'M' + X[0] + ' 34 H' + X[X.length - 1], class: 'kb-flow-track' }),
@@ -6210,7 +6274,8 @@ function expandQueryVariants(q, groups) {
       el('div', { class: 'kb-flowview-scroll' }, svg),
       el('div', { class: 'kb-flow-cap' },
         'The circuit board above is the structure; this strip is the traffic on it. A travelling dot is one real event '
-        + 'moving to the next stage, and a lit ring means that stage count really changed or an event just touched it. '
+        + 'moving to the next stage, or one awake-loop heartbeat crossing the whole track, and a lit ring means that '
+        + 'stage count really changed or an event just touched it. '
         + 'Click a stage for its detail. When nothing happens, this view is quiet.'));
   }
 
@@ -6220,11 +6285,9 @@ function expandQueryVariants(q, groups) {
     let st = null;
     try { st = await loadLiveStateLive(); } catch { st = null; }
     if (gen !== kbGen) return;
-    const t = (st && st.ts) ? Date.parse(st.ts) : NaN;
-    line.textContent = Number.isFinite(t)
-      ? 'live · data ' + fmtFreshAge(Date.now() - t)
-      : 'live status unavailable';
     kbLiveState = st;
+    line.textContent = kbLiveLine();
+    if (!kbAgeTimer) kbAgeTimer = setInterval(kbTickAges, 5000);
     if (!kbPhases) kbLoadPhases();
     if (!kbHistory) kbLoadHistory();
     kbRenderDashboard();
@@ -6253,6 +6316,51 @@ function expandQueryVariants(q, groups) {
     const panel = $('#kb-panel');
     if (!panel || panel.hidden || !st) return;
     kbLiveState = st;
+    kbRenderDashboard();
+  }
+
+  // The #kb-live line names the connection truth: the mode word (LIVE,
+  // FALLBACK or BAKED, the same word the header badge carries), the awake
+  // loop's current beat, and the age of the data it carries.
+  function kbLiveLine() {
+    const st = kbLiveState;
+    if (!st || !st.ts) return 'live status unavailable';
+    const t = Date.parse(st.ts);
+    if (!Number.isFinite(t)) return 'live status unavailable';
+    return liveModeWord() + ' · beat ' + (st.beat != null ? st.beat : '?')
+      + ' · data ' + fmtFreshAge(Date.now() - t);
+  }
+
+  // Freshness labels tick live: the #kb-live line and every .kb-age span
+  // re-read their stored timestamp every 5 s, so data age counts up between
+  // refreshes and resets the moment fresh data lands. Text only, no motion,
+  // and nothing runs while the panel is closed. One timer per session, never
+  // a timer inside a renderer.
+  function kbTickAges() {
+    const panel = $('#kb-panel');
+    if (!panel || panel.hidden) return;
+    const line = $('#kb-live');
+    if (line) line.textContent = kbLiveLine();
+    const spans = document.querySelectorAll('#kb-panel .kb-age');
+    for (const s of spans) {
+      const t = s.dataset && s.dataset.ts ? Date.parse(s.dataset.ts) : NaN;
+      if (Number.isFinite(t)) s.textContent = fmtFreshAge(Date.now() - t);
+    }
+  }
+
+  // SSE beats land here while the KB panel is open. A beat carries the full
+  // live state, so it merges into kbLiveState (never wiping the feed) and
+  // re-renders once; the circuit and the flow view each spend the beat as
+  // one pulse and then stay quiet until the next one. A beat the panel
+  // already spent, or one that arrives while the panel is closed, costs
+  // nothing.
+  function kbOnBeat(st) {
+    const panel = $('#kb-panel');
+    if (!panel || panel.hidden || !st) return;
+    const beat = (st && typeof st.beat === 'number') ? st.beat : null;
+    if (beat === null || beat === kbBeatPulse) return;
+    kbBeatPulse = beat;
+    kbLiveState = Object.assign({}, kbLiveState, st);
     kbRenderDashboard();
   }
 
