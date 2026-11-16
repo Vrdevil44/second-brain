@@ -718,8 +718,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=37a96bb');
-        await loadScriptOnce('universe.js?v=37a96bb');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=b70ebda');
+        await loadScriptOnce('universe.js?v=b70ebda');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4515,6 +4515,8 @@ function expandQueryVariants(q, groups) {
   let kbExampleStep = 0;   // worked-example step position, in memory only
   let kbStageOpen = null;  // stage drawer component id, in memory only
   let kbTilePrev = {};     // headline tile values at last render (tick on real change)
+  let kbFlowSig = '';      // last feed signature the data flow view travelled for
+  let kbFlowPrev = {};     // flow stage count signatures at last render
   let kbDocsHidden = false; // docs panel collapsed for board room, in memory only
   let kbDocsWired = false;  // docs toggle listener attached once
 
@@ -4532,6 +4534,8 @@ function expandQueryVariants(q, groups) {
     kbExampleStep = 0;
     kbStageOpen = null;
     kbTilePrev = {};
+    kbFlowSig = '';
+    kbFlowPrev = {};
     kbDocsHidden = false;
     const docBtn = $('#kb-docs-toggle');
     if (docBtn) {
@@ -5109,6 +5113,7 @@ function expandQueryVariants(q, groups) {
     // on the way. A chip appears only for a board this render produced.
     const railDefs = [
       ['circuit', 'The System, Live', typeof kbRenderCircuit === 'function'],
+      ['flowview', 'Data Flow', typeof kbRenderFlowView === 'function'],
       ['flow', 'Flow', true],
       ['feed', 'Live Feed', true],
       ['loop', 'The Loop', true],
@@ -5149,6 +5154,12 @@ function expandQueryVariants(q, groups) {
     if (typeof kbRenderCircuit === 'function') {
       const circuit = kbRenderCircuit(m);
       if (circuit) dash.append(circuit);
+    }
+
+    // ---- Data Flow: the movement to the circuit board's structure ----
+    if (typeof kbRenderFlowView === 'function') {
+      const flowView = kbRenderFlowView(m);
+      if (flowView) dash.append(flowView);
     }
 
     // ---- Flow: the five stages, glowing only on fresh real signals ----
@@ -5909,9 +5920,11 @@ function expandQueryVariants(q, groups) {
     const thingsN = m.facts ? m.facts.things : null;
     const queueN = m.windowFeed ? m.windowFeed.queued : null;
 
+    const band = (y) => el('rect', { x: '0', y: String(y), width: '980', height: '25', rx: '6', class: 'kb-circuit-zoneband' });
     const svgKids = [
-      zone(8, 20, 'Ingest'), zone(150, 20, 'Validation'), zone(318, 20, 'Storage'), zone(734, 20, 'Retrieval'),
-      zone(8, 202, 'Outward'), zone(318, 202, 'Mind'),
+      band(1), band(188),
+      zone(8, 18, 'Ingest'), zone(150, 18, 'Validation'), zone(318, 18, 'Storage'), zone(734, 18, 'Retrieval'),
+      zone(8, 205, 'Outward'), zone(318, 205, 'Mind'),
       trace('kb-tr-arrive', 'M136 63 H158', 'capture', 'gate'),
       trace('kb-tr-accept', 'M266 63 H318', 'gate', 'consolidation'),
       trace('kb-tr-file', 'M466 63 H526', 'consolidation', 'graph'),
@@ -5921,8 +5934,8 @@ function expandQueryVariants(q, groups) {
       trace('kb-tr-index', 'M600 92 V216', 'graph', 'semantic'),
       trace('kb-tr-questions', 'M136 245 H318', 'window', 'think'),
       trace('kb-tr-wake', 'M392 274 V306 H798 V274', 'think', 'localmax'),
-      tlabel(280, 54, 'accept'), tlabel(220, 170, 'reject'), tlabel(608, 160, 'index'),
-      tlabel(400, 160, 'loops'), tlabel(180, 236, 'questions'),
+      tlabel(274, 54, 'accept'), tlabel(220, 170, 'reject'), tlabel(608, 160, 'index'),
+      tlabel(400, 160, 'loops'), tlabel(140, 294, 'questions'),
       comp('capture', box(8, 34, 128, 29), 72, 'Capture', fmt(inboxN, 'waiting'),
         inboxN !== null && inboxN > 0),
       comp('gate', el('polygon', { points: '212,14 266,63 212,112 158,63', class: 'kb-circuit-shape' }), 212,
@@ -5958,11 +5971,101 @@ function expandQueryVariants(q, groups) {
       'aria-label': 'Circuit diagram of the whole system' }, ...svgKids);
     return el('div', { class: 'kb-circuit', id: 'kb-sec-circuit' },
       el('div', { class: 'kb-dash-block-title' }, 'The System, Live'),
-      svg,
+      el('div', { class: 'kb-circuit-scroll' }, svg),
       el('div', { class: 'kb-circuit-legend' },
         'Rounded ends: where data enters or leaves. Diamond: a decision. A pulse is one real event travelling its path. '
         + 'Counters change only when their source changes. Click any component for its stage detail. '
         + 'When nothing happens, this board is quiet.'));
+  }
+
+  // Data Flow view: the movement half of the circuit board's story.
+  // The circuit shows the structure; this strip shows items travelling
+  // it. A dot travels only for a real new feed event, on the hop its
+  // kind belongs to, and a stage ring lights only when that stage's
+  // real count changed since the last render or an event touched it.
+  // No timers, no idle motion: when nothing happens, nothing moves.
+  function kbRenderFlowView(m) {
+    if (!m || !Array.isArray(m.flow) || !m.flow.length) return null;
+    const stages = m.flow;
+    const X = [90, 290, 490, 690, 890];
+    const idxOf = (id) => stages.findIndex((s) => s.id === id);
+    const countText = (s) => {
+      if (s.stat && s.stat.length) return nf.format(s.stat[0].n) + ' ' + s.stat[0].text;
+      if (s.id === 'capture') {
+        const a = (m.stages || []).find((x) => x.id === 'arrive');
+        if (a && a.count) return nf.format(a.count.n) + ' ' + a.count.text;
+      }
+      return '';
+    };
+    const sigOf = (s) => (s.stat || []).map((seg) => seg.n + ' ' + seg.text).join('+')
+      + '|' + countText(s);
+    const changed = {};
+    for (const s of stages) {
+      const sig = sigOf(s);
+      if (Object.prototype.hasOwnProperty.call(kbFlowPrev, s.id) && kbFlowPrev[s.id] !== sig) {
+        changed[s.id] = true;
+      }
+      kbFlowPrev[s.id] = sig;
+    }
+    // One journey per real event: the newest feed entry, if new.
+    const newest = m.feed && m.feed.length ? m.feed[m.feed.length - 1] : null;
+    const sig = newest ? (newest.t || '') + '|' + (newest.kind || '') + '|' + newest.label : '';
+    let hop = null;
+    let touched = null;
+    if (newest && kbFlowSig && kbFlowSig !== sig && !reducedMotion) {
+      const hops = {
+        arrival: ['capture', 'gate'], merge: ['gate', 'merge'],
+        birth: ['merge', 'graph'], promotion: ['merge', 'graph'],
+        ask: ['graph', 'ask'],
+      };
+      const flashes = { training: 'graph', pipeline: 'graph', council: 'graph' };
+      if (hops[newest.kind]) hop = hops[newest.kind];
+      else if (flashes[newest.kind]) touched = flashes[newest.kind];
+    }
+    if (sig) kbFlowSig = sig;
+    const compOf = { capture: 'capture', gate: 'gate', merge: 'consolidation', graph: 'graph', ask: 'ask' };
+    const kids = [
+      el('path', { d: 'M' + X[0] + ' 34 H' + X[X.length - 1], class: 'kb-flow-track' }),
+    ];
+    for (let i = 0; i < X.length - 1; i++) {
+      const mid = (X[i] + X[i + 1]) / 2;
+      kids.push(el('path', { d: 'M' + (mid - 5) + ' 28 L' + (mid + 5) + ' 34 L' + (mid - 5) + ' 40', class: 'kb-flow-chev' }));
+    }
+    stages.forEach((s, i) => {
+      const hit = changed[s.id] || touched === s.id
+        || (hop && (hop[0] === s.id || hop[1] === s.id));
+      kids.push(el('g', {
+        class: 'kb-flow-node' + (s.active ? ' kb-flow-on' : '') + (hit ? ' kb-flow-hit' : ''),
+        tabindex: '0', role: 'button', 'aria-label': s.label + ': open stage details',
+        onclick: () => kbOpenStage(compOf[s.id] || s.id),
+        onkeydown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kbOpenStage(compOf[s.id] || s.id); }
+        },
+      },
+        el('circle', { cx: String(X[i]), cy: '34', r: '17', class: 'kb-flow-ring' }),
+        el('circle', { cx: String(X[i]), cy: '34', r: '4', class: 'kb-flow-core' }),
+        el('text', { x: String(X[i]), y: '72', class: 'kb-flow-name', 'text-anchor': 'middle' }, s.label),
+        el('text', { x: String(X[i]), y: '90', class: 'kb-flow-count', 'text-anchor': 'middle' }, countText(s))));
+    });
+    if (hop) {
+      const a = idxOf(hop[0]);
+      const b = idxOf(hop[1]);
+      if (a !== -1 && b !== -1 && a !== b) {
+        kids.push(el('path', { id: 'kb-flow-hop', d: 'M' + X[a] + ' 34 H' + X[b], fill: 'none', stroke: 'none' }));
+        kids.push(el('circle', { r: '5', class: 'kb-flow-dot' },
+          el('animateMotion', { dur: '1.2s', repeatCount: '1' },
+            el('mpath', { href: '#kb-flow-hop' }))));
+      }
+    }
+    const svg = el('svg', { class: 'kb-flowview-svg', viewBox: '0 0 980 104', role: 'group',
+      'aria-label': 'Data flow between the five pipeline stages' }, ...kids);
+    return el('div', { class: 'kb-flowview', id: 'kb-sec-flowview' },
+      el('div', { class: 'kb-dash-block-title' }, 'Data Flow, Live'),
+      el('div', { class: 'kb-flowview-scroll' }, svg),
+      el('div', { class: 'kb-flow-cap' },
+        'The circuit board above is the structure; this strip is the traffic on it. A travelling dot is one real event '
+        + 'moving to the next stage, and a lit ring means that stage count really changed or an event just touched it. '
+        + 'Click a stage for its detail. When nothing happens, this view is quiet.'));
   }
 
   async function kbRefreshLive(gen) {
