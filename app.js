@@ -718,8 +718,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=4bc16e2');
-        await loadScriptOnce('universe.js?v=4bc16e2');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=37a96bb');
+        await loadScriptOnce('universe.js?v=37a96bb');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4514,6 +4514,9 @@ function expandQueryVariants(q, groups) {
   let kbCircuitSig = '';   // last feed signature the circuit diagram pulsed for
   let kbExampleStep = 0;   // worked-example step position, in memory only
   let kbStageOpen = null;  // stage drawer component id, in memory only
+  let kbTilePrev = {};     // headline tile values at last render (tick on real change)
+  let kbDocsHidden = false; // docs panel collapsed for board room, in memory only
+  let kbDocsWired = false;  // docs toggle listener attached once
 
   function kbReset() {
     kbGen++;
@@ -4528,12 +4531,22 @@ function expandQueryVariants(q, groups) {
     kbCircuitSig = '';
     kbExampleStep = 0;
     kbStageOpen = null;
+    kbTilePrev = {};
+    kbDocsHidden = false;
+    const docBtn = $('#kb-docs-toggle');
+    if (docBtn) {
+      docBtn.textContent = 'Hide docs';
+      if (docBtn.setAttribute) docBtn.setAttribute('aria-expanded', 'true');
+    }
     const drawer = $('#kb-stage-drawer');
     if (drawer) { drawer.textContent = ''; drawer.hidden = true; }
     const dash = $('#kb-dash');
     if (dash) { dash.textContent = ''; dash.hidden = true; }
     const panel = $('#kb-panel');
-    if (panel) panel.hidden = true;
+    if (panel) {
+      panel.hidden = true;
+      if (panel.classList) panel.classList.remove('kb-docs-hidden');
+    }
     const body = $('#kb-body');
     if (body) body.textContent = '';
     const nav = $('#kb-nav');
@@ -5077,16 +5090,60 @@ function expandQueryVariants(q, groups) {
           head.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
         },
       }, icon(iconName), el('span', { class: 'kb-dash-section-title' }, title));
-      return el('section', { class: 'kb-dash-section' }, head, body);
+      return el('section', { class: 'kb-dash-section', id: 'kb-sec-' + id }, head, body);
     };
 
-    dash.append(el('h3', {}, 'How the brain works, right now'));
+    const dashTitle = el('h3', {});
+    dashTitle.append(el('span', {
+      class: 'kb-live-dot' + (m.liveness && m.liveness.beat !== null ? ' kb-live-dot-on' : ''),
+    }), 'How the brain works, right now');
+    dash.append(dashTitle);
 
     // ---- Headline numbers: one number, one name, one source ----
     if (typeof kbRenderHeadlines === 'function') {
       const headlines = kbRenderHeadlines(m);
       if (headlines) dash.append(headlines);
     }
+
+    // ---- Anchor rail: one tap to any board; a collapsed board opens
+    // on the way. A chip appears only for a board this render produced.
+    const railDefs = [
+      ['circuit', 'The System, Live', typeof kbRenderCircuit === 'function'],
+      ['flow', 'Flow', true],
+      ['feed', 'Live Feed', true],
+      ['loop', 'The Loop', true],
+      ['lifecycle', 'Data Lifecycle', typeof kbRenderLifecycle === 'function'],
+      ['facts', 'Facts & Relations', true],
+      ['growth', 'Growth', !!(m.history && m.history.length >= 2)],
+      ['findings', 'Findings', true],
+      ['changes', 'Changes', true],
+      ['system', 'System', true],
+      ['activity', 'Activity', typeof kbRenderActivity === 'function'],
+      ['window', 'Outward Window', true],
+      ['log', 'Log', true],
+      ['build', 'The Build', true],
+    ];
+    const rail = el('nav', { class: 'kb-rail', 'aria-label': 'Dashboard boards' });
+    for (const [rid, rlabel, present] of railDefs) {
+      if (!present) continue;
+      const chip = el('a', { class: 'kb-rail-chip', href: '#kb-sec-' + rid }, rlabel);
+      if (chip.addEventListener) {
+        chip.addEventListener('click', (e) => {
+          e.preventDefault();
+          const target = document.getElementById('kb-sec-' + rid);
+          if (!target) return;
+          if (kbDashOpen[rid] === false) {
+            const head = target.querySelector('button');
+            if (head) head.click();
+          }
+          const reduced = typeof window !== 'undefined' && window.matchMedia
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          target.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+        });
+      }
+      rail.append(chip);
+    }
+    dash.append(rail);
 
     // ---- The living circuit board: the whole system on one board ----
     if (typeof kbRenderCircuit === 'function') {
@@ -5421,21 +5478,45 @@ function expandQueryVariants(q, groups) {
   function kbRenderHeadlines(m) {
     if (!m) return null;
     const tiles = [];
-    const tile = (value, label, source) => {
+    // Sparkline from a real series only (the growth history rows); no
+    // series, no sparkline. Purely graphical: it adds no new number.
+    const sparkline = (values, colorVar) => {
+      if (!Array.isArray(values) || values.length < 2) return null;
+      let min = Infinity, max = -Infinity;
+      for (const v of values) { if (v < min) min = v; if (v > max) max = v; }
+      if (max === min) max = min + 1;
+      const pts = values.map((v, i) => {
+        const x = (i / (values.length - 1)) * 100;
+        const y = 18 - ((v - min) / (max - min)) * 15;
+        return x.toFixed(1) + ',' + y.toFixed(1);
+      });
+      const linePath = 'M' + pts.join(' L');
+      return el('svg', { class: 'kb-tile-spark', viewBox: '0 0 100 20',
+          preserveAspectRatio: 'none', 'aria-hidden': 'true' },
+        el('path', { d: linePath + ' L100,20 L0,20 Z', style: 'fill:var(' + colorVar + ');opacity:.14' }),
+        el('path', { d: linePath, fill: 'none', style: 'stroke:var(' + colorVar + ')', 'stroke-width': '1.6' }));
+    };
+    const tile = (value, label, source, spark) => {
       if (value === null || value === undefined) return;
-      tiles.push(el('div', { class: 'kb-tile' },
-        el('div', { class: 'kb-tile-value' }, value),
+      const tick = Object.prototype.hasOwnProperty.call(kbTilePrev, label)
+        && kbTilePrev[label] !== value;
+      kbTilePrev[label] = value;
+      const kids = [el('div', { class: 'kb-tile-value' }, value),
         el('div', { class: 'kb-tile-label' }, label),
-        el('div', { class: 'kb-tile-source' }, source)));
+        el('div', { class: 'kb-tile-source' }, source)];
+      if (spark) kids.push(spark);
+      tiles.push(el('div', { class: 'kb-tile' + (tick ? ' kb-tile-tick' : '') }, ...kids));
     };
     if (m.facts) {
       tile(nf.format(m.facts.total), 'facts in total', 'the census paired with the graph');
       tile(nf.format(m.facts.live), 'facts live on the face', 'the census paired with the graph');
       if (m.facts.things !== null) {
-        tile(nf.format(m.facts.things), 'things on the graph', 'the census paired with the graph');
+        tile(nf.format(m.facts.things), 'things on the graph', 'the census paired with the graph',
+          sparkline(Array.isArray(m.history) ? m.history.map((h) => h.nodes) : null, '--accent'));
       }
     }
-    tile(nf.format(m.relations.total), 'relations', 'the loaded graph');
+    tile(nf.format(m.relations.total), 'relations', 'the loaded graph',
+      sparkline(Array.isArray(m.history) ? m.history.map((h) => h.edges) : null, '--accent-glow'));
     const arrive = m.stages ? m.stages.find((s) => s.id === 'arrive') : null;
     if (arrive && arrive.count) tile(nf.format(arrive.count.n), 'in the inbox now', 'live state from the host');
     if (m.merge && m.merge.merged !== null) {
@@ -5471,7 +5552,7 @@ function expandQueryVariants(q, groups) {
         head.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
       },
     }, el('span', { class: 'kb-dash-section-title' }, title));
-    return el('section', { class: 'kb-dash-section' }, head, body);
+    return el('section', { class: 'kb-dash-section', id: 'kb-sec-' + id }, head, body);
   }
 
   // The worked example: one real fact traced through all eight stages.
@@ -5597,7 +5678,7 @@ function expandQueryVariants(q, groups) {
       'aria-label': 'Graph growth chart: nodes and relations per snapshot' },
       el('polyline', { points: series('edges'), fill: 'none', style: 'stroke:var(--accent)', 'stroke-width': '1.5' }),
       el('polyline', { points: series('nodes'), fill: 'none', style: 'stroke:var(--text-2)', 'stroke-width': '1.5' }));
-    return el('div', { class: 'kb-chart' },
+    return el('div', { class: 'kb-chart', id: 'kb-sec-growth' },
       el('div', { class: 'kb-dash-block-title' }, 'Growth'),
       svg,
       el('div', { class: 'kb-chart-legend' },
@@ -5875,7 +5956,7 @@ function expandQueryVariants(q, groups) {
     }
     const svg = el('svg', { class: 'kb-circuit-svg', viewBox: '0 0 980 330', role: 'group',
       'aria-label': 'Circuit diagram of the whole system' }, ...svgKids);
-    return el('div', { class: 'kb-circuit' },
+    return el('div', { class: 'kb-circuit', id: 'kb-sec-circuit' },
       el('div', { class: 'kb-dash-block-title' }, 'The System, Live'),
       svg,
       el('div', { class: 'kb-circuit-legend' },
@@ -5926,10 +6007,31 @@ function expandQueryVariants(q, groups) {
     kbRenderDashboard();
   }
 
+  // Docs collapse: the boards get the whole panel while the docs are
+  // hidden; the toggle lives in the panel head and is wired once.
+  function kbWireDocsToggle() {
+    if (kbDocsWired) return;
+    const btn = $('#kb-docs-toggle');
+    if (!btn || !btn.addEventListener) return;
+    kbDocsWired = true;
+    btn.addEventListener('click', () => {
+      kbDocsHidden = !kbDocsHidden;
+      const panel = $('#kb-panel');
+      if (panel && panel.classList) {
+        panel.classList.toggle('kb-docs-hidden', kbDocsHidden);
+      }
+      btn.textContent = kbDocsHidden ? 'Show docs' : 'Hide docs';
+      if (btn.setAttribute) {
+        btn.setAttribute('aria-expanded', kbDocsHidden ? 'false' : 'true');
+      }
+    });
+  }
+
   async function openKb() {
     if (!graphData) return; // locked: nothing to open
     const gen = kbGen;
     const panel = $('#kb-panel');
+    kbWireDocsToggle();
     if (!kbSections) {
       let list;
       try { list = await kbLoadSections(); } catch { list = false; }
