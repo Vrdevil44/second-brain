@@ -718,8 +718,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c281d22');
-        await loadScriptOnce('universe.js?v=c281d22');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=4bbaccb');
+        await loadScriptOnce('universe.js?v=4bbaccb');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -5202,11 +5202,15 @@ function expandQueryVariants(q, groups) {
       const gainedF = !!kbDashFeedSig && kbDashFeedSig !== sigF;
       kbDashFeedSig = sigF;
       const rows = m.feed.slice().reverse();
+      feedKids.push(el('div', { class: 'kb-dash-feed-cap' },
+        rows.length + (rows.length === 1 ? ' latest event' : ' latest events') + ' · newest first · live activity stream'));
       feedKids.push(el('div', { class: 'kb-dash-feed' + (rows.length > 8 ? ' kb-dash-feed-scroll' : '') },
         el('div', { class: 'kb-dash-feed-track' },
           ...rows.map((entry, i) => el('div', { class: 'kb-dash-feed-row' + (gainedF && i === 0 ? ' kb-dash-log-new' : '') },
+            el('span', { class: 'kb-dash-feed-dot kb-feed-dot-' + (entry.kind || 'event').replace(/[^a-z0-9-]/gi, '') }),
             el('span', { class: 'kb-dash-feed-kind' }, entry.kind || 'event'),
-            el('span', { class: 'kb-dash-feed-label' }, (entry.t ? entry.t.slice(11, 16) + ' · ' : '') + entry.label))))));
+            el('span', { class: 'kb-dash-feed-time' }, entry.t ? entry.t.slice(11, 19) + ' · ' : ''),
+            el('span', { class: 'kb-dash-feed-label' }, entry.label))))));
     } else {
       feedKids.push(line('Nothing has flowed past yet. The first capture, merge or answer will appear here.'));
     }
