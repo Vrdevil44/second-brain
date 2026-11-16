@@ -1302,6 +1302,11 @@ body.view-3d .node-panel { display: none; }
 .kb-live { margin: 0; flex: 1; min-width: 0; font-size: 14px; opacity: 0.85; overflow-wrap: anywhere; }
 .kb-dash { flex: none; max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; padding: 12px 0; border-bottom: 1px solid var(--line-glow); }
 .kb-dash h3 { margin: 0 0 10px; font-size: 16px; }
+.kb-headlines { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.kb-tile { flex: 1 1 130px; min-width: 120px; border: 1px solid var(--line-glow); border-radius: 10px; padding: 8px 10px; background: var(--surface); }
+.kb-tile-value { font-size: 20px; font-weight: 700; line-height: 1.15; }
+.kb-tile-label { font-size: 13px; color: var(--text); margin-top: 2px; }
+.kb-tile-source { font-size: 11px; color: var(--text-3); margin-top: 2px; overflow-wrap: anywhere; }
 .kb-dash-section { margin-top: 14px; }
 .kb-dash-section-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; font: inherit; font-weight: 600; font-size: 14px; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 8px; cursor: pointer; text-align: left; transition: background-color .18s ease, border-color .18s ease; }
 .kb-dash-section-head:hover { background: var(--surface); border-color: var(--line-glow); }

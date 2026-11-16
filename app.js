@@ -121,7 +121,7 @@ function expandQueryVariants(q, groups) {
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json, census.json, kind-slots.json, mfa.json, live-state.json, knowledge-base.json and phases.json, only GET.
+      // Same origin: only graph.json, census.json, kind-slots.json, mfa.json, live-state.json, knowledge-base.json, phases.json and graph-history.jsonl, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
       const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
       const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
@@ -129,7 +129,8 @@ function expandQueryVariants(q, groups) {
       const isCensus = u.pathname.endsWith('/census.json') || u.pathname === '/census.json';
       const isKindSlots = u.pathname.endsWith('/kind-slots.json') || u.pathname === '/kind-slots.json';
       const isPhases = u.pathname.endsWith('/phases.json') || u.pathname === '/phases.json';
-      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus || isKindSlots || isPhases) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      const isGraphHistory = u.pathname.endsWith('/graph-history.jsonl') || u.pathname === '/graph-history.jsonl';
+      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus || isKindSlots || isPhases || isGraphHistory) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       // R3: aliases.json (public subset) is also readable, GET only.
       const isAliases = u.pathname.endsWith('/aliases.json') || u.pathname === '/aliases.json';
       if (m === 'GET' && isAliases) return;
@@ -717,8 +718,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=1a6c567');
-        await loadScriptOnce('universe.js?v=1a6c567');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7053c1b');
+        await loadScriptOnce('universe.js?v=7053c1b');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4509,6 +4510,10 @@ function expandQueryVariants(q, groups) {
   let kbDashLogSig = '';   // last log signature rendered (log rows enter on real gains only)
   let kbDashFeedSig = '';  // last feed signature rendered (feed rows enter on real gains only)
   let kbPhases = null;     // tracker render copy (portal/phases.json), in memory only
+  let kbHistory = null;    // growth snapshots (portal/graph-history.jsonl), in memory only
+  let kbCircuitSig = '';   // last feed signature the circuit diagram pulsed for
+  let kbExampleStep = 0;   // worked-example step position, in memory only
+  let kbStageOpen = null;  // stage drawer component id, in memory only
 
   function kbReset() {
     kbGen++;
@@ -4519,6 +4524,12 @@ function expandQueryVariants(q, groups) {
     kbDashLogSig = '';
     kbDashFeedSig = '';
     kbPhases = null;
+    kbHistory = null;
+    kbCircuitSig = '';
+    kbExampleStep = 0;
+    kbStageOpen = null;
+    const drawer = $('#kb-stage-drawer');
+    if (drawer) { drawer.textContent = ''; drawer.hidden = true; }
     const dash = $('#kb-dash');
     if (dash) { dash.textContent = ''; dash.hidden = true; }
     const panel = $('#kb-panel');
@@ -4702,7 +4713,7 @@ function expandQueryVariants(q, groups) {
   }
 
   // Pure view model for the dashboard: reads each value from its one source.
-  function kbDashboardModel(graph, census, st, phases) {
+  function kbDashboardModel(graph, census, st, phases, historyRows) {
     const num = (x) => (typeof x === 'number' && Number.isFinite(x)) ? x : null;
     if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
     const total = graph.edges.length;
@@ -4918,17 +4929,95 @@ function expandQueryVariants(q, groups) {
 
     const loopStep = (st && num(st.beat) !== null) ? num(st.beat) % 4 : null;
 
+    // Liveness for the Activity Monitoring board: the awake loop's own
+    // counters, carried by fields the live state already has. Absent
+    // without a live state, never zeroed into a fake calm.
+    const liveness = st ? {
+      beat: num(st.beat), ts: str(st.ts),
+      throughput1h: num(st.throughput_1h), queueDepth: num(st.queue_depth),
+    } : null;
+
+    // The data lifecycle: eight stages, each with its one count from its
+    // one source. A stage whose source is batch states its schedule in
+    // words instead of wearing a live-looking number.
+    const stageCount = (n, text) => (n !== null ? { n, text } : null);
+    const fc = faceCounts(graph);
+    const stages = [
+      { id: 'arrive', name: 'Arrive', component: 'capture', kinds: ['arrival'],
+        inLine: 'A note, capture or proposal lands in the inbox.',
+        transform: 'It is timestamped and queued, untouched.',
+        outLine: 'A waiting inbox item, ready for the gate.',
+        count: stageCount(inboxN, 'waiting in the inbox'), schedule: null },
+      { id: 'validate', name: 'Validate', component: 'gate', kinds: ['merge'],
+        inLine: 'The queued item, with its source attached.',
+        transform: 'The write gate checks specificity, source, relations, secrets and private data.',
+        outLine: 'An accepted item, or a rejected one with its reason recorded.',
+        count: gateFeed ? stageCount(gateFeed.pile, 'in the rejected pile') : null, schedule: null },
+      { id: 'merge', name: 'Merge or supersede', component: 'consolidation', kinds: ['merge'],
+        inLine: 'Accepted items from the gate.',
+        transform: 'Consolidation resolves entities, merges duplicates and files each fact into its one thing.',
+        outLine: 'Facts placed inside nodes, duplicates folded, stale facts superseded.',
+        count: merge ? stageCount(merge.merged, 'merged last run') : null, schedule: null },
+      { id: 'graph', name: 'Graph placement', component: 'graph', kinds: ['birth'],
+        inLine: 'Filed facts and their relations.',
+        transform: 'The graph keeps one node per thing, with every fact about it inside that node.',
+        outLine: 'A node the portal can draw and the ask path can cite.',
+        count: fc ? stageCount(fc.things, 'things on the graph') : null, schedule: null },
+      { id: 'semantic', name: 'Semantic indexing', component: 'semantic', kinds: ['training'],
+        inLine: 'Fact texts from the graph.',
+        transform: 'The embedding model turns each fact text into a vector in the search index, after a candidate index passes its quality gate.',
+        outLine: 'Index rows the retrieval leg can rank by meaning, not only by words.',
+        count: semanticFeed ? stageCount(semanticFeed.rows, 'index rows') : null,
+        schedule: 'Batch by design: a refresh runs at 50 new facts or 7 days, and only a candidate that matches or beats the live index is wired in.' },
+      { id: 'retrieval', name: 'Retrieval', component: 'ask', kinds: ['ask'],
+        inLine: 'A question from the owner.',
+        transform: 'Pulse-first word retrieval, then the meaning leg, rank the fact pool; the local model composes the answer under citation discipline.',
+        outLine: 'An answer that cites the facts it used.',
+        count: askFeed ? stageCount(askFeed.today, 'asks today') : null, schedule: null },
+      { id: 'enhancement', name: 'Enhancement', component: 'think', kinds: ['pipeline', 'council'],
+        inLine: 'Nodes whose facts changed, and open questions the loops are working on.',
+        transform: 'The think loop refreshes node summaries under a freshness stamp, and turns gaps into demands the owner can answer.',
+        outLine: 'Sharper nodes, and questions that raise confidence in the data.',
+        count: stageCount(findings.openQuestions, 'open questions'), schedule: null },
+      { id: 'restructure', name: 'Restructure', component: 'consolidation', kinds: ['merge', 'promotion'],
+        inLine: 'A newer fact about the same thing.',
+        transform: 'The older fact is superseded, never deleted: it stays readable in the backend while the face shows the current one.',
+        outLine: 'One current fact per claim, with its history kept.',
+        count: facts ? stageCount(facts.superseded, 'superseded and kept') : null, schedule: null },
+    ];
+
+    // Growth history: validated snapshot rows only (a real date, real
+    // counts), oldest first. Until rows are handed in, the series is
+    // null and the chart keeps its absence, never an invented line.
+    let history = null;
+    if (Array.isArray(historyRows)) {
+      const rows = [];
+      for (const r of historyRows) {
+        if (!r || typeof r !== 'object') continue;
+        const t = str(r.at);
+        const n = num(r.nodes);
+        const e2 = num(r.edges);
+        if (t === null || n === null || e2 === null) continue;
+        if (Number.isNaN(Date.parse(t))) continue;
+        rows.push({ at: t, nodes: n, edges: e2 });
+      }
+      rows.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+      if (rows.length) history = rows.slice(-200);
+    }
+
     return {
       flow, flowActive, loop, loopStep, facts, relations, health, hasLiveState: !!st,
       merge, gateFeed, semanticFeed, askFeed, processes, trainingFeed, windowFeed,
       findings, log, feed: feedEntries, tracker, library, audit: null,
+      liveness, stages, history,
     };
   }
 
   function kbRenderDashboard() {
     const dash = $('#kb-dash');
     if (!dash) return;
-    const m = kbDashboardModel(graphData, pairedCensus, kbLiveState, kbPhases);
+    const m = kbDashboardModel(graphData, pairedCensus, kbLiveState, kbPhases,
+      (typeof kbHistory !== 'undefined') ? kbHistory : null);
     dash.textContent = '';
     if (!m) { dash.hidden = true; return; }
     dash.hidden = false;
@@ -4993,6 +5082,18 @@ function expandQueryVariants(q, groups) {
 
     dash.append(el('h3', {}, 'How the brain works, right now'));
 
+    // ---- Headline numbers: one number, one name, one source ----
+    if (typeof kbRenderHeadlines === 'function') {
+      const headlines = kbRenderHeadlines(m);
+      if (headlines) dash.append(headlines);
+    }
+
+    // ---- The living circuit board: the whole system on one board ----
+    if (typeof kbRenderCircuit === 'function') {
+      const circuit = kbRenderCircuit(m);
+      if (circuit) dash.append(circuit);
+    }
+
     // ---- Flow: the five stages, glowing only on fresh real signals ----
     dash.append(section('flow', 'Flow', 'flow',
       'Every note takes the same journey a letter takes through a good post office: received, checked, filed, shelved, then quoted back to you.',
@@ -5046,6 +5147,12 @@ function expandQueryVariants(q, groups) {
     dash.append(section('loop', 'The Loop', 'loop',
       'Between answers, the brain does its housekeeping rounds: read a little, flag what is off, walk the shelves, tidy what changed.', loopKids));
 
+    // ---- Data Lifecycle: the eight stages, shown with a traced fact ----
+    if (typeof kbRenderLifecycle === 'function') {
+      const life = kbRenderLifecycle(m);
+      if (life) dash.append(life);
+    }
+
     // ---- Facts & Relations: census, kinds, dictionaries, skills ----
     const factKids = [];
     if (m.facts) {
@@ -5070,6 +5177,12 @@ function expandQueryVariants(q, groups) {
       + ' terms · ' + nf.format(m.library.skills) + ' skills'));
     dash.append(section('facts', 'Facts & Relations', 'book',
       'The whole library, counted once: every fact lives inside exactly one thing, like one book on one shelf.', factKids));
+
+    // ---- Growth chart: the graph history snapshots, nothing invented ----
+    if (typeof kbRenderChart === 'function') {
+      const chart = kbRenderChart(m);
+      if (chart) dash.append(chart);
+    }
 
     // ---- Findings: demands, contradictions, open questions ----
     const findKids = [];
@@ -5194,6 +5307,12 @@ function expandQueryVariants(q, groups) {
     dash.append(section('system', 'System', 'system',
       'Under the floorboards: the engine room gauges, read straight off the machines, nothing estimated.', sysKids));
 
+    // ---- Activity Monitoring: liveness and what the loops have done ----
+    if (typeof kbRenderActivity === 'function') {
+      const activity = kbRenderActivity(m);
+      if (activity) dash.append(activity);
+    }
+
     // ---- Outward Window: permission, pulls, question queue ----
     const winKids = [];
     if (m.windowFeed) {
@@ -5271,6 +5390,68 @@ function expandQueryVariants(q, groups) {
     dash.append(el('div', { class: 'kb-dash-source' }, kbLiveState
       ? 'Every number here comes from the graph, the census and the live state this portal already loaded.'
       : 'Live state unavailable. The counts here come from the loaded graph and its paired census.'));
+
+    // The stage drawer rides along: a re-render keeps an open drawer fresh.
+    if (typeof kbRenderStageDrawer === 'function') kbRenderStageDrawer(m);
+  }
+
+  // Growth snapshots: portal/graph-history.jsonl, one JSON row per graph
+  // snapshot with its own counts. Loaded once per session like phases;
+  // the model validates every row before the chart may draw it.
+  async function kbLoadHistory() {
+    try {
+      const res = await guardedFetch('graph-history.jsonl', { cache: 'no-store' });
+      if (!res.ok) return;
+      const text = await res.text();
+      const rows = [];
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const j = JSON.parse(line);
+          if (j && j.counts) rows.push({ at: j.at, nodes: j.counts.nodes, edges: j.counts.edges });
+        } catch { /* a torn snapshot line is skipped, never repaired */ }
+      }
+      if (rows.length) { kbHistory = rows; kbRenderDashboard(); }
+    } catch { /* the chart keeps its absence until the file loads */ }
+  }
+
+  // Headline numbers strip: the dashboard board from the KB console spec.
+  // One tile per number; every tile names its source in small text; a
+  // number with no source in this state does not get a tile.
+  function kbRenderHeadlines(m) {
+    if (!m) return null;
+    const tiles = [];
+    const tile = (value, label, source) => {
+      if (value === null || value === undefined) return;
+      tiles.push(el('div', { class: 'kb-tile' },
+        el('div', { class: 'kb-tile-value' }, value),
+        el('div', { class: 'kb-tile-label' }, label),
+        el('div', { class: 'kb-tile-source' }, source)));
+    };
+    if (m.facts) {
+      tile(nf.format(m.facts.total), 'facts in total', 'the census paired with the graph');
+      tile(nf.format(m.facts.live), 'facts live on the face', 'the census paired with the graph');
+      if (m.facts.things !== null) {
+        tile(nf.format(m.facts.things), 'things on the graph', 'the census paired with the graph');
+      }
+    }
+    tile(nf.format(m.relations.total), 'relations', 'the loaded graph');
+    const arrive = m.stages ? m.stages.find((s) => s.id === 'arrive') : null;
+    if (arrive && arrive.count) tile(nf.format(arrive.count.n), 'in the inbox now', 'live state from the host');
+    if (m.merge && m.merge.merged !== null) {
+      tile(nf.format(m.merge.merged), 'merged at the last consolidation', 'the last merge record');
+    }
+    if (m.askFeed && m.askFeed.today !== null) {
+      tile(nf.format(m.askFeed.today), 'asks answered today', 'the ask log on the host');
+    }
+    if (m.semanticFeed && m.semanticFeed.rows !== null) {
+      tile(nf.format(m.semanticFeed.rows), 'rows in the semantic index', 'the semantic index census');
+    }
+    if (m.findings && m.findings.openQuestions !== null) {
+      tile(nf.format(m.findings.openQuestions), 'open questions', 'the core question store');
+    }
+    if (!tiles.length) return null;
+    return el('div', { class: 'kb-headlines' }, ...tiles);
   }
 
   async function kbRefreshLive(gen) {
@@ -5285,6 +5466,7 @@ function expandQueryVariants(q, groups) {
       : 'live status unavailable';
     kbLiveState = st;
     if (!kbPhases) kbLoadPhases();
+    if (!kbHistory) kbLoadHistory();
     kbRenderDashboard();
   }
 
