@@ -1,10 +1,10 @@
 {
   "v": 1,
-  "beat": 2253,
-  "ts": "2026-11-16T00:38:24Z",
-  "head": "ec3b07f9",
+  "beat": 2268,
+  "ts": "2026-11-16T04:38:24Z",
+  "head": "80191470",
   "nodes": 121,
-  "inbox": 0,
+  "inbox": 2,
   "fail": 0,
   "echo_c": 0,
   "echo_d": 0,
@@ -33,111 +33,6 @@
     "last_think": "2026-11-16T00:08:27.520Z"
   },
   "activity": [
-    {
-      "t": "2026-11-15T20:08:24Z",
-      "kind": "beat",
-      "beat": 2235,
-      "label": "beat 2235 \u2014 1093 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T20:23:24Z",
-      "kind": "beat",
-      "beat": 2236,
-      "label": "beat 2236 \u2014 1093 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T20:38:24Z",
-      "kind": "beat",
-      "beat": 2237,
-      "label": "beat 2237 \u2014 1093 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T20:53:24Z",
-      "kind": "beat",
-      "beat": 2238,
-      "label": "beat 2238 \u2014 1093 facts, inbox 6",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:08:24Z",
-      "kind": "beat",
-      "beat": 2239,
-      "label": "beat 2239 \u2014 1143 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:08:24Z",
-      "kind": "demand_resolved",
-      "beat": 2239,
-      "label": "inbox cleared 6 \u2192 0 \u2014 demands settled",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:08:24Z",
-      "kind": "merge",
-      "beat": 2239,
-      "label": "mesh grew 1093 \u2192 1143 \u2014 new knowledge settled in",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:23:24Z",
-      "kind": "beat",
-      "beat": 2240,
-      "label": "beat 2240 \u2014 1143 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:38:24Z",
-      "kind": "beat",
-      "beat": 2241,
-      "label": "beat 2241 \u2014 1143 facts, inbox 2",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:53:24Z",
-      "kind": "beat",
-      "beat": 2242,
-      "label": "beat 2242 \u2014 1177 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:53:24Z",
-      "kind": "demand_resolved",
-      "beat": 2242,
-      "label": "inbox cleared 2 \u2192 0 \u2014 demands settled",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T21:53:24Z",
-      "kind": "merge",
-      "beat": 2242,
-      "label": "mesh grew 1143 \u2192 1177 \u2014 new knowledge settled in",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T22:08:24Z",
-      "kind": "beat",
-      "beat": 2243,
-      "label": "beat 2243 \u2014 1160 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T22:23:24Z",
-      "kind": "beat",
-      "beat": 2244,
-      "label": "beat 2244 \u2014 1160 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T22:38:24Z",
-      "kind": "beat",
-      "beat": 2245,
-      "label": "beat 2245 \u2014 121 facts, inbox 0 \u2014 checks failing",
-      "fids": []
-    },
     {
       "t": "2026-11-15T22:53:24Z",
       "kind": "beat",
@@ -200,6 +95,111 @@
       "beat": 2253,
       "label": "beat 2253 \u2014 121 facts, inbox 0",
       "fids": []
+    },
+    {
+      "t": "2026-11-16T00:53:24Z",
+      "kind": "beat",
+      "beat": 2254,
+      "label": "beat 2254 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T01:08:24Z",
+      "kind": "beat",
+      "beat": 2255,
+      "label": "beat 2255 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T01:23:24Z",
+      "kind": "beat",
+      "beat": 2256,
+      "label": "beat 2256 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T01:38:24Z",
+      "kind": "beat",
+      "beat": 2257,
+      "label": "beat 2257 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T01:53:24Z",
+      "kind": "beat",
+      "beat": 2258,
+      "label": "beat 2258 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T02:08:24Z",
+      "kind": "beat",
+      "beat": 2259,
+      "label": "beat 2259 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T02:23:24Z",
+      "kind": "beat",
+      "beat": 2260,
+      "label": "beat 2260 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T02:38:24Z",
+      "kind": "beat",
+      "beat": 2261,
+      "label": "beat 2261 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T02:53:24Z",
+      "kind": "beat",
+      "beat": 2262,
+      "label": "beat 2262 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T03:08:24Z",
+      "kind": "beat",
+      "beat": 2263,
+      "label": "beat 2263 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T03:23:24Z",
+      "kind": "beat",
+      "beat": 2264,
+      "label": "beat 2264 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T03:38:24Z",
+      "kind": "beat",
+      "beat": 2265,
+      "label": "beat 2265 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T04:08:24Z",
+      "kind": "beat",
+      "beat": 2266,
+      "label": "beat 2266 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T04:23:24Z",
+      "kind": "beat",
+      "beat": 2267,
+      "label": "beat 2267 \u2014 121 facts, inbox 2",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T04:38:24Z",
+      "kind": "beat",
+      "beat": 2268,
+      "label": "beat 2268 \u2014 121 facts, inbox 2",
+      "fids": []
     }
   ],
   "formation": {
@@ -212,7 +212,7 @@
   },
   "sync": {
     "v": 2,
-    "at": "2026-11-16T00:38:14Z",
+    "at": "2026-11-16T04:38:29Z",
     "state": "idle",
     "words": "All synced \u2014 watching for new arrivals",
     "dial": {
@@ -225,7 +225,7 @@
       "peek": []
     },
     "last": {
-      "at": "2026-11-16T00:38:14Z",
+      "at": "2026-11-16T04:38:29Z",
       "captures": 0,
       "bytes": 0,
       "duration_s": 1
