@@ -744,8 +744,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c4a1ea2');
-        await loadScriptOnce('universe.js?v=c4a1ea2');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=26d4d1d');
+        await loadScriptOnce('universe.js?v=26d4d1d');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4625,6 +4625,11 @@ function expandQueryVariants(q, groups) {
     body.textContent = '';
     body.append(kbRenderMarkdown(sec.body));
     body.scrollTop = 0;
+    const docAccent = (typeof KB_DOC_ACCENTS === 'object' && KB_DOC_ACCENTS) ? KB_DOC_ACCENTS[sec.id] : undefined;
+    if (body.style && typeof body.style.setProperty === 'function') {
+      if (docAccent) body.style.setProperty('--sec', 'var(' + docAccent + ')');
+      else if (typeof body.style.removeProperty === 'function') body.style.removeProperty('--sec');
+    }
     for (const b of $('#kb-nav').children) {
       const on = b.dataset.id === sec.id;
       b.classList.toggle('active', on);
@@ -4739,6 +4744,10 @@ function expandQueryVariants(q, groups) {
       b.type = 'button';
       b.className = 'kb-nav-item';
       b.dataset.id = sec.id;
+      const docAccent = (typeof KB_DOC_ACCENTS === 'object' && KB_DOC_ACCENTS) ? KB_DOC_ACCENTS[sec.id] : undefined;
+      if (docAccent && b.style && typeof b.style.setProperty === 'function') {
+        b.style.setProperty('--sec', 'var(' + docAccent + ')');
+      }
       b.textContent = sec.title;
       b.addEventListener('click', () => kbShowSection(sec.id));
       nav.append(b);
@@ -5190,7 +5199,10 @@ function expandQueryVariants(q, groups) {
     const rail = el('nav', { class: 'kb-rail', 'aria-label': 'Dashboard boards' });
     for (const [rid, rlabel, present] of railDefs) {
       if (!present) continue;
-      const chip = el('a', { class: 'kb-rail-chip', href: '#kb-sec-' + rid }, rlabel);
+      const chipAccent = (typeof KB_SECTION_ACCENTS === 'object' && KB_SECTION_ACCENTS)
+        ? KB_SECTION_ACCENTS[rid] : undefined;
+      const chip = el('a', { class: 'kb-rail-chip', href: '#kb-sec-' + rid,
+        style: chipAccent ? '--sec:var(' + chipAccent + ')' : '' }, rlabel);
       if (chip.addEventListener) {
         chip.addEventListener('click', (e) => {
           e.preventDefault();
@@ -5595,6 +5607,9 @@ function expandQueryVariants(q, groups) {
       ? 'Every number here comes from the graph, the census and the live state this portal already loaded.'
       : 'Live state unavailable. The counts here come from the loaded graph and its paired census.'));
 
+    // Section accents land last, over whatever this render produced.
+    if (typeof kbApplySectionAccents === 'function') kbApplySectionAccents(dash);
+
     // The stage drawer rides along: a re-render keeps an open drawer fresh.
     if (typeof kbRenderStageDrawer === 'function') kbRenderStageDrawer(m);
   }
@@ -5646,6 +5661,26 @@ function expandQueryVariants(q, groups) {
     'open questions': '--kb-yellow',
   };
 
+  const KB_SECTION_ACCENTS = {
+    circuit: '--kb-cyan', flowview: '--kb-teal', flow: '--kb-blue',
+    feed: '--kb-green', loop: '--kb-violet', lifecycle: '--kb-indigo',
+    facts: '--kb-orchid', growth: '--kb-lime', findings: '--kb-yellow',
+    changes: '--kb-fuchsia', system: '--kb-steel', activity: '--kb-amber',
+    window: '--kb-sky', log: '--kb-grey', build: '--kb-orange',
+    standing: '--kb-rose',
+  };
+
+  const KB_BAR_ACCENTS = {
+    arrival: '--kb-amber', merge: '--kb-pink', birth: '--kb-green', training: '--kb-lime',
+  };
+
+  const KB_DOC_ACCENTS = {
+    overview: '--kb-blue', architecture: '--kb-cyan', 'how-it-works': '--kb-teal',
+    algorithms: '--kb-violet', 'log-feed': '--kb-green', 'plan-and-gates': '--kb-orange',
+    accomplishments: '--kb-lime', dictionary: '--kb-orchid', faq: '--kb-yellow',
+    'tech-stack': '--kb-steel', 'what-the-parts-are': '--kb-indigo', manifest: '--kb-grey',
+  };
+
   const KB_RANGE_DAYS = { '3w': 21, '3m': 90, 'all': 0 };
 
   // Rows inside the selected range, anchored on the NEWEST row so the
@@ -5688,6 +5723,25 @@ function expandQueryVariants(q, groups) {
     }
     out[n - 1] = v; // ends exactly at today's true value
     return out;
+  }
+
+  // Section accents as a post-pass: every dashboard child whose id is
+  // kb-sec-<section> gets that section's colour as --sec, which the
+  // section head icons and framed boards read. Section renderers stay
+  // untouched; fully guarded so an odd tree can never break a render.
+  function kbApplySectionAccents(dash) {
+    try {
+      if (!dash || !dash.children) return;
+      for (const child of dash.children) {
+        if (!child || typeof child !== 'object') continue;
+        const id = child.id || (child.attrs && child.attrs.id) || '';
+        if (typeof id !== 'string' || !id.startsWith('kb-sec-')) continue;
+        const accent = KB_SECTION_ACCENTS[id.slice(7)];
+        if (accent && child.style && typeof child.style.setProperty === 'function') {
+          child.style.setProperty('--sec', 'var(' + accent + ')');
+        }
+      }
+    } catch { /* accents are decoration; never break the dashboard */ }
   }
 
   function kbRenderRangeControl() {
@@ -5909,11 +5963,13 @@ function expandQueryVariants(q, groups) {
       if (m.processes.byKind.length) {
         kids.push(line(m.processes.byKind.map((e) => e.kind + ' ' + nf.format(e.n)).join(' · ')));
         const maxN = Math.max(...m.processes.byKind.map((e) => e.n));
+        const barAccent = (kind) => ((typeof KB_BAR_ACCENTS === 'object' && KB_BAR_ACCENTS && KB_BAR_ACCENTS[kind])
+          ? ';--bar:var(' + KB_BAR_ACCENTS[kind] + ')' : '');
         kids.push(el('div', { class: 'kb-bars' },
           ...m.processes.byKind.map((e) => el('div', { class: 'kb-bar-row' },
             el('span', { class: 'kb-bar-k' }, e.kind),
             el('span', { class: 'kb-bar-track' },
-              el('span', { class: 'kb-bar-fill', style: 'width:' + Math.max(2, Math.round((e.n / maxN) * 100)) + '%' })),
+              el('span', { class: 'kb-bar-fill', style: 'width:' + Math.max(2, Math.round((e.n / maxN) * 100)) + '%' + barAccent(e.kind) })),
             el('span', { class: 'kb-bar-n' }, nf.format(e.n))))));
       }
     } else {
