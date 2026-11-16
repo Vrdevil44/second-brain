@@ -619,6 +619,7 @@ function matchScore(text, query) {
       })
       .linkDirectionalParticles((l) => particleCount(l));
     sparksRefreshVisibility(); // U2: focus neighbourhood lines solid, the rest hidden
+    syncOrbit(); // item 12: the focus ring follows the selection (both branches below)
     // Halo dimming rides alongside the core's colour-alpha dimming.
     // The per-frame painter owns the halos (breathing core,
     // echo glows); node/link colour accessors above still run.
@@ -638,6 +639,264 @@ function matchScore(text, query) {
       const fresh = isFresh(n.id) ? 1.9 : 1;
       setHaloOpacity(n._halo, Math.min(0.5, HALO_OPACITY * a * boost * fresh));
     }
+  }
+
+  // ---- Focus orbit (item 12, portal-face design §3 + owner FOCUS DEPTH) ----
+  // ONE prototype node (topic-money, "Money"): when it becomes the focused
+  // node through the existing tap/pinch focus path, up to 12 of its facts
+  // (8 at the phone breakpoint) render as small chips on a slow ring around
+  // the node in the live layer. WHICH facts show is data (most recent by
+  // fact date, deterministic); the revolving itself is presentation only.
+  // CAMERA-FACING RESOLUTION (the THREE constraint): the portal's THREE
+  // exposes Group only — Sprite/ShaderMaterial are not available in the
+  // live layer (see haloGroup) — so real THREE sprites cannot be built.
+  // The chips are instead real DOM elements in a stage overlay layer:
+  // screen-space DOM faces the viewer by construction (a billboard with no
+  // THREE dependency), positioned each frame by projecting ring positions
+  // computed in the camera-facing plane through the node, with plain
+  // perspective math off the live camera (position/target/fov). Chip text
+  // comes only from node.facts[] (label + date, one source with the panel).
+  // Legibility gate: chips never render below ORBIT_MIN_SPRITE_SCALE, and
+  // beyond ORBIT_MAX_CAM_DIST the ring is suppressed rather than rendering
+  // chips too small to read. Removal/extension is one line: change
+  // ORBIT_PROTOTYPE_ID. The prototype does not spread (owner judges first).
+  const ORBIT_PROTOTYPE_ID = 'topic-money';
+  const ORBIT_MAX_CHIPS = 12;
+  const ORBIT_MOBILE_MAX_CHIPS = 8;
+  const ORBIT_MIN_SPRITE_SCALE = 1; // floor: a sprite never renders below base size
+  const ORBIT_REF_DIST = 400; // camera distance at which the floor binds (tap focus)
+  const ORBIT_MAX_CAM_DIST = 600; // beyond this the ring no longer reads — suppress, don't shrink
+  const ORBIT_ROT_SPEED = (Math.PI * 2) / 120; // one slow revolution per 120 s
+  const ORBIT_RING_MIN_R = 20; // ring radius floor (world units; clears node + halo)
+  const ORBIT_CHIP_FONT_PX = 12; // chip text size at scale 1
+
+  function freshOrbit() {
+    return { nodeId: null, chips: [], rotation: 0, suppressed: false, sig: '',
+      layer: null, els: [], raf: 0, last: 0 };
+  }
+  function orb() { return S && S.orbit ? S.orbit : null; }
+
+  // Most recent first by fact date (ISO dates compare lexicographically);
+  // ties break by fact id so re-focus always picks the same set.
+  function pickOrbitFacts(facts, cap) {
+    const list = (Array.isArray(facts) ? facts : []).filter((f) => f && f.id != null);
+    list.sort((a, b) => {
+      const da = String(a.date || ''), db = String(b.date || '');
+      if (da !== db) return da < db ? 1 : -1;
+      const ia = String(a.id), ib = String(b.id);
+      return ia < ib ? -1 : ia > ib ? 1 : 0;
+    });
+    return list.slice(0, cap);
+  }
+
+  function orbitRadius(node) {
+    const val = (node && Number(node.val)) || 1;
+    return Math.max(ORBIT_RING_MIN_R, 3 * 4 * Math.cbrt(Math.max(1, val)));
+  }
+
+  // Sprite scale: the floor binds at the reference (phone focus) distance;
+  // farther out the sprite grows so its screen size stays legible.
+  function orbitScale() {
+    const d = cameraDistToTarget();
+    if (!isFinite(d) || d <= 0) return ORBIT_MIN_SPRITE_SCALE;
+    return ORBIT_MIN_SPRITE_SCALE * Math.max(1, d / ORBIT_REF_DIST);
+  }
+
+  // Chips ride the existing focus dimming rules: full-bright while their
+  // node is the focus anchor, DIM_HOVER while another node anchors a hover.
+  // Hover is not defocus — the ring stays up, dimmed.
+  function orbitOpacity() {
+    return (S && S.hovered && S.hovered !== ORBIT_PROTOTYPE_ID) ? DIM_HOVER : 1;
+  }
+
+  function orbitAngle(chip) {
+    const o = orb();
+    const r = o ? o.rotation : 0;
+    return (((chip.base + r) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  }
+
+  function clearOrbitLayer() {
+    const o = orb();
+    if (!o) return;
+    if (o.layer) { try { o.layer.remove(); } catch (e) { /* already gone */ } o.layer = null; }
+    o.els = [];
+  }
+
+  function teardownOrbit() {
+    const o = orb();
+    if (!o) return;
+    clearOrbitLayer();
+    o.nodeId = null; o.chips = []; o.suppressed = false; o.sig = '';
+  }
+
+  function buildOrbitLayer(picked) {
+    const o = orb();
+    clearOrbitLayer();
+    if (!S || !S.stage) return;
+    const layer = h('div', 'u-orbit');
+    layer.style.position = 'absolute';
+    layer.style.inset = '0';
+    layer.style.overflow = 'hidden';
+    layer.style.pointerEvents = 'none';
+    layer.setAttribute('aria-hidden', 'true');
+    o.layer = layer;
+    o.chips = picked.map((f, i) => {
+      const label = String(f.label || '');
+      const date = String(f.date || '');
+      return {
+        factId: String(f.id),
+        text: date ? label + ' · ' + date : label,
+        date,
+        base: picked.length ? (i * Math.PI * 2) / picked.length : 0,
+      };
+    });
+    o.els = o.chips.map((c) => {
+      const el = h('div', 'u-orbit-chip', c.text);
+      el.style.position = 'absolute';
+      el.style.transform = 'translate(-50%, -50%)';
+      el.style.whiteSpace = 'nowrap';
+      el.style.pointerEvents = 'none';
+      layer.append(el);
+      return el;
+    });
+    S.stage.append(layer);
+  }
+
+  // The funnel every focus-state change already flows through (tap, pinch,
+  // clear, hover, engine stop): keep the ring in step with S.selected.
+  function syncOrbit() {
+    if (!S) return;
+    if (!S.orbit) S.orbit = freshOrbit();
+    const o = S.orbit;
+    if (S.selected !== ORBIT_PROTOTYPE_ID) { teardownOrbit(); return; }
+    // Legibility gate: too far out and the floor-scale chips would be
+    // illegible — suppress the ring instead of rendering it.
+    const dist = cameraDistToTarget();
+    if (!isFinite(dist) || dist > ORBIT_MAX_CAM_DIST) {
+      o.nodeId = ORBIT_PROTOTYPE_ID;
+      o.suppressed = true;
+      o.chips = []; o.sig = '';
+      clearOrbitLayer();
+      return;
+    }
+    o.suppressed = false;
+    o.nodeId = ORBIT_PROTOTYPE_ID;
+    const node = nodeById(ORBIT_PROTOTYPE_ID)
+      || (S.data && S.data.byId.get(ORBIT_PROTOTYPE_ID));
+    const facts = (node && Array.isArray(node.facts)) ? node.facts : [];
+    const cap = motion.mobile ? ORBIT_MOBILE_MAX_CHIPS : ORBIT_MAX_CHIPS;
+    const picked = pickOrbitFacts(facts, cap);
+    const sig = picked.map((f) => String(f.id)).join(',');
+    if (o.sig !== sig || !o.layer) { buildOrbitLayer(picked); o.sig = sig; }
+    updateOrbitDom();
+  }
+
+  // Refresh the live DOM chips (opacity + position) from current state.
+  function updateOrbitDom() {
+    const o = orb();
+    if (!o || !o.layer || !o.els.length) return;
+    const op = orbitOpacity();
+    for (const el of o.els) { if (el) el.style.opacity = String(op); }
+    layoutOrbit();
+  }
+
+  // Project the ring (camera-facing plane through the node) to screen with
+  // plain perspective math off the live camera — no THREE projection call.
+  function layoutOrbit() {
+    const o = orb();
+    if (!S || !o || !o.nodeId || o.suppressed || !o.layer || !o.els.length) return;
+    let cam = null, tgt = null;
+    try { cam = S.graph.camera(); tgt = S.graph.controls().target; } catch (e) { return; }
+    if (!cam || !cam.position || !tgt) return;
+    const node = nodeById(o.nodeId);
+    const cx = (node && node.x) || 0, cy = (node && node.y) || 0, cz = (node && node.z) || 0;
+    let fx = tgt.x - cam.position.x, fy = tgt.y - cam.position.y, fz = tgt.z - cam.position.z;
+    const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+    let rx = -fz, ry = 0, rz = fx; // forward x up(0,1,0)
+    let rl = Math.hypot(rx, ry, rz);
+    if (rl < 1e-6) { rx = 1; ry = 0; rz = 0; rl = 1; } // looking straight down Y
+    rx /= rl; ry /= rl; rz /= rl;
+    const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx; // right x forward
+    const fov = (cam.fov && isFinite(cam.fov) && cam.fov > 0) ? cam.fov : 60;
+    const d = size();
+    const f = (d.h / 2) / Math.tan((fov * Math.PI / 180) / 2);
+    const R = orbitRadius(node);
+    const scale = orbitScale();
+    const op = orbitOpacity();
+    for (let i = 0; i < o.els.length; i++) {
+      const chip = o.chips[i], el = o.els[i];
+      if (!chip || !el) continue;
+      const a = orbitAngle(chip);
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const wx = cx + R * ca * rx + R * sa * ux;
+      const wy = cy + R * ca * ry + R * sa * uy;
+      const wz = cz + R * ca * rz + R * sa * uz;
+      const dx = wx - cam.position.x, dy = wy - cam.position.y, dz = wz - cam.position.z;
+      const zc = dx * fx + dy * fy + dz * fz;
+      if (zc <= 1) { el.style.visibility = 'hidden'; continue; }
+      const xc = dx * rx + dy * ry + dz * rz;
+      const yc = dx * ux + dy * uy + dz * uz;
+      el.style.visibility = '';
+      el.style.left = (d.w / 2 + (xc * f) / zc) + 'px';
+      el.style.top = (d.h / 2 - (yc * f) / zc) + 'px';
+      el.style.opacity = String(op);
+      el.style.fontSize = (ORBIT_CHIP_FONT_PX * scale) + 'px';
+    }
+  }
+
+  // Slow presentational rotation; the chip SET never moves while it turns.
+  function orbitFrame(now) {
+    const o = orb();
+    if (!S || !o) return; // engine gone — do not re-arm
+    o.raf = requestAnimationFrame(orbitFrame);
+    if (o.last) {
+      const dt = Math.max(0, Math.min(100, now - o.last));
+      if (o.nodeId && !o.suppressed && S.selected === ORBIT_PROTOTYPE_ID) {
+        o.rotation = (o.rotation + (ORBIT_ROT_SPEED * dt) / 1000) % (Math.PI * 2);
+      }
+    }
+    o.last = now;
+    if (o.nodeId && !o.suppressed) {
+      try { layoutOrbit(); } catch (e) { /* never break the frame */ }
+    }
+  }
+
+  function orbitStart() {
+    if (!S) return;
+    if (!S.orbit) S.orbit = freshOrbit();
+    if (S.orbit.raf) return;
+    S.orbit.last = 0;
+    S.orbit.raf = requestAnimationFrame(orbitFrame);
+  }
+
+  function orbitStop() {
+    const o = orb();
+    if (o && o.raf) cancelAnimationFrame(o.raf);
+    if (o) o.raf = 0;
+  }
+
+  // The probed data contract (D1–D10): constants + live ring state.
+  function getOrbitState() {
+    const o = orb();
+    const mobile = motion.mobile;
+    if (!o || !o.nodeId || o.suppressed) {
+      return { active: false, nodeId: o && o.nodeId ? o.nodeId : null,
+        chips: [], mobile, suppressed: !!(o && o.suppressed),
+        rotation: o ? o.rotation : 0 };
+    }
+    const scale = orbitScale();
+    const op = orbitOpacity();
+    return {
+      active: true,
+      nodeId: o.nodeId,
+      chips: o.chips.map((c) => ({
+        factId: c.factId, text: c.text, date: c.date,
+        angle: orbitAngle(c), scale, opacity: op, facing: 'camera',
+      })),
+      mobile,
+      suppressed: false,
+      rotation: o.rotation,
+    };
   }
 
   // Tap semantics: new node -> focus 1-hop; same selected node -> toggle 2-hop.
@@ -1513,6 +1772,7 @@ function matchScore(text, query) {
     // Design §5.5: renderer pixel ratio capped at 2 (phones report 3x). Re-applied on resize.
     applyPixelRatio3D();
     motionStart();
+    orbitStart(); // item 12: the focus ring's slow rotation + chip layout
 
     // ---- Force tuning: the living-brain layout (his vision 2026-10-16) ----
     // Stronger repulsion -> neurons disperse evenly, the 3D space feels full
@@ -1778,6 +2038,7 @@ function matchScore(text, query) {
   function destroy() {
     if (!S) return;
     motionStop();
+    orbitStop();
     sparksStop(true);
     stopLiving(); // clears timers, fx meshes, ticker/HUD; S still set
     const s = S;
@@ -2796,6 +3057,13 @@ function matchScore(text, query) {
     destroy,
     selectNode: (id) => tapNode(id),
     clearSelection: () => closePanel(),
+    // Focus-orbit prototype (item 12, portal-face design §3): one constant
+    // gates it — ORBIT_PROTOTYPE_ID is the only node that ever gets a ring.
+    ORBIT_PROTOTYPE_ID,
+    ORBIT_MAX_CHIPS,
+    ORBIT_MOBILE_MAX_CHIPS,
+    ORBIT_MIN_SPRITE_SCALE,
+    getOrbitState,
     // DYNAMIC UI v1: the sync button shows the harvest happening. syncSweep
     // fires when the sync starts (a sweep leaves the core); syncDone fires
     // when it lands — new arrivals flash onto their nodes, the ticker tells the truth.
