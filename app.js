@@ -716,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=10fff0a');
-        await loadScriptOnce('universe.js?v=10fff0a');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=13acd53');
+        await loadScriptOnce('universe.js?v=13acd53');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1422,10 +1422,61 @@ function expandQueryVariants(q, groups) {
     chip.hidden = !graphData;
   }
 
+  // Sparks on real work (tonight chain item 6): the newest live-state
+  // activity entry names the facts a beat actually processed; those facts'
+  // things earn one packet each on their strongest real edge (at most
+  // two). Pure picker: BrainUniverse.eventPacket does the rendered-set
+  // validation and enforces the calm caps downstream.
+  const activitySparkEdges = (state, graph) => {
+    const acts = state && Array.isArray(state.activity) ? state.activity : [];
+    let latest = null;
+    for (const a of acts) {
+      if (!a || !Array.isArray(a.fids) || !a.fids.length) continue;
+      if (!latest || Date.parse(a.t || 0) >= Date.parse(latest.t || 0)) latest = a;
+    }
+    if (!latest || !graph || !Array.isArray(graph.nodes)) return [];
+    const fidToNode = new Map();
+    for (const n of graph.nodes) {
+      for (const f of (n.facts || [])) if (f && f.id) fidToNode.set(f.id, String(n.id));
+    }
+    const out = [];
+    const seen = new Set();
+    for (const fid of latest.fids) {
+      const nid = fidToNode.get(fid);
+      if (!nid || seen.has(nid)) continue;
+      seen.add(nid);
+      const e = strongestEdgeFor(nid);
+      if (e) out.push(e);
+      if (out.length >= 2) break;
+    }
+    return out;
+  };
+  let lastActivitySparkKey = '';
+
   function storeSseState(b) {
     if (b && typeof b.beat === 'number' && (!liveSseState || fresherLiveState(liveSseState.st, b) === b)) {
       liveSseState = { st: b, at: Date.now() };
     }
+    // Fire the activity packets once per new entry (state re-deliveries
+    // must not refire). Doorbell events carry no node or fid, so they
+    // honestly earn no packet — inventing an edge for them would be fake.
+    try {
+      if (b && Array.isArray(b.activity) && window.BrainUniverse && typeof BrainUniverse.eventPacket === 'function') {
+        let latest = null;
+        for (const a of b.activity) {
+          if (!a || !Array.isArray(a.fids) || !a.fids.length) continue;
+          if (!latest || Date.parse(a.t || 0) >= Date.parse(latest.t || 0)) latest = a;
+        }
+        const key = latest ? String(latest.t || '') + '|' + String(latest.beat || '') : '';
+        if (key && key !== lastActivitySparkKey) {
+          const edges = activitySparkEdges(b, graphData);
+          if (edges.length) {
+            lastActivitySparkKey = key;
+            for (const e of edges) { try { BrainUniverse.eventPacket(e); } catch (err) {} }
+          }
+        }
+      }
+    } catch (err) {}
   }
 
   function doorbellArrival(d) {

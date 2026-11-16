@@ -3129,6 +3129,7 @@ function matchScore(text, query) {
   // ==== A3:end ====
 
   const eventPacketLastAt = new Map(); // edge key -> Date.now() of last event packet (survives re-init)
+  let eventPacketsFiredTotal = 0; // scripted proof counter, published on window.__sparks (survives re-init)
 
   // ==== U2-SPARKS:begin ====
   const SPARKS_MAX_ACTIVE = 180;  // concurrent sparks (v4: owner asked 150-200)
@@ -3602,7 +3603,8 @@ function matchScore(text, query) {
 
   function sparksPublishIdle() {
     window.__sparks = { active: 0, cap: 0, poolMain: 0, poolCore: 0, poolReach: 0, frameMsEMA: 0,
-      nodesSparked: 0, nodesTotal: 0, coveragePct: 0, cycle: 0, boltsRun: 0, strikesRun: 0 };
+      nodesSparked: 0, nodesTotal: 0, coveragePct: 0, cycle: 0, boltsRun: 0, strikesRun: 0,
+      eventPackets: eventPacketsFiredTotal };
   }
 
   function sparksStop(tearDown) {
@@ -3770,6 +3772,7 @@ function matchScore(text, query) {
         glowPut(SP, SP.glowNodes, t, BOLT_FLASH_MS, 1);
         if (SP.reachable.has(t)) SP.sparked.add(t);
       } });
+    eventPacketsFiredTotal++;
     return true;
   }
 
@@ -3944,7 +3947,8 @@ function matchScore(text, query) {
         frameMsEMA: Math.round(SP.ema * 10) / 10,
         nodesSparked: sparked, nodesTotal: total, nodesUnreachable: SP.unreachable,
         coveragePct: total ? Math.round((sparked / total) * 1000) / 10 : 0,
-        cycle: SP.state.bagCycle, boltsRun: SP.boltsRun, strikesRun: SP.strikesRun };
+        cycle: SP.state.bagCycle, boltsRun: SP.boltsRun, strikesRun: SP.strikesRun,
+        eventPackets: eventPacketsFiredTotal };
     }
     SP.raf = requestAnimationFrame(sparksFrame);
   }
