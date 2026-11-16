@@ -716,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c03232a');
-        await loadScriptOnce('universe.js?v=c03232a');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=10fff0a');
+        await loadScriptOnce('universe.js?v=10fff0a');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1066,6 +1066,15 @@ function expandQueryVariants(q, groups) {
   let liveSseState = null;   // freshest beat pushed over SSE: { st, at }
   let liveSseOpen = false;
   let liveSseRetryAt = 0;
+  // Connection ladder (portal-face D3): consecutive failures climb
+  // 2s -> 5s -> 15s -> 60s instead of one flat minute, and a stream that
+  // was constructed but never delivered an event is supervised, not
+  // trusted. Delivery of any event resets the ladder.
+  let liveSseFailures = 0;
+  let liveSseConstructedAt = 0;
+  let liveSseDelivered = false;
+  const SSE_RETRY_LADDER = [2000, 5000, 15000, 60000];
+  const sseRetryDelay = (failures) => SSE_RETRY_LADDER[Math.min(Math.max(failures, 0), SSE_RETRY_LADDER.length - 1)];
   let liveStateFloor = null; // freshest live-state payload ever returned (monotonic)
   let liveFetchOkAt = 0;     // last successful fetchLiveState() contact (ms epoch)
 
@@ -1395,7 +1404,14 @@ function expandQueryVariants(q, groups) {
   let pageGraphHash = null;  // hash of the graph the page currently shows
   let convergeInFlight = false;
   let convergeRetry = 0;
-  const sseHealthy = () => !!(liveSseOpen && lastPingAt && Date.now() - lastPingAt <= 45000);
+  // Healthy = the stream delivered within the ping window, or it is still
+  // inside its 10s first-ping window. A constructed stream that has never
+  // delivered is NOT healthy once that window passes (it read as LIVE for
+  // up to 45s before, which hid the FALLBACK stall).
+  const sseHealthy = () => !!(liveSseOpen && (
+    (lastPingAt && Date.now() - lastPingAt <= 45000)
+    || (!liveSseDelivered && liveSseConstructedAt && Date.now() - liveSseConstructedAt <= 10000)
+  ));
   const liveModeWord = () => (sseHealthy() ? 'LIVE' : ((!graphData || !liveApiBase()) ? 'BAKED' : 'FALLBACK'));
   function renderModeChip() {
     const chip = $('#mode-chip');
@@ -1438,8 +1454,11 @@ function expandQueryVariants(q, groups) {
       const es = new EventSource(base + '/stream');
       liveSseEs = es;
       liveSseOpen = true;
-      lastPingAt = Date.now(); // grace window for a fresh connection
+      liveSseConstructedAt = Date.now();
+      liveSseDelivered = false;
+      const noteAlive = () => { liveSseDelivered = true; liveSseFailures = 0; lastPingAt = Date.now(); };
       es.addEventListener('beat', (ev) => {
+        noteAlive();
         try {
           const b = JSON.parse(ev.data);
           if (b && typeof b.beat === 'number' && (!liveSseState || fresherLiveState(liveSseState.st, b) === b)) {
@@ -1448,6 +1467,7 @@ function expandQueryVariants(q, groups) {
         } catch (e) {}
       });
       es.addEventListener('state', (ev) => {
+        noteAlive();
         try {
           const b = JSON.parse(ev.data);
           storeSseState(b);
@@ -1456,11 +1476,13 @@ function expandQueryVariants(q, groups) {
           }
         } catch (e) {}
       });
-      es.addEventListener('ping', () => { lastPingAt = Date.now(); });
+      es.addEventListener('ping', () => { noteAlive(); });
       es.addEventListener('doorbell', (ev) => {
+        noteAlive();
         try { doorbellArrival(JSON.parse(ev.data)); } catch (e) {}
       });
       es.addEventListener('graph', (ev) => {
+        noteAlive();
         try {
           const g = JSON.parse(ev.data);
           if (!g || !g.hash || g.hash === pageGraphHash) return;
@@ -1471,15 +1493,31 @@ function expandQueryVariants(q, groups) {
         try { es.close(); } catch (e) {}
         if (liveSseEs === es) liveSseEs = null;
         liveSseOpen = false;
-        liveSseRetryAt = Date.now() + 60000; // retry at most once a minute
+        liveSseDelivered = false;
+        liveSseRetryAt = Date.now() + sseRetryDelay(liveSseFailures); // ladder: 2s, 5s, 15s, then 60s
+        liveSseFailures++;
       };
-    } catch (e) { liveSseRetryAt = Date.now() + 60000; }
+    } catch (e) {
+      liveSseRetryAt = Date.now() + sseRetryDelay(liveSseFailures);
+      liveSseFailures++;
+    }
   }
 
   // Watchdog: a stream that stopped pinging is dropped and reconnected.
+  // A stream that was constructed but never delivered gets the same
+  // supervision on the shorter first-ping window: it is dropped and
+  // redialled through the ladder instead of sitting "open" forever.
   setInterval(() => {
     try {
-      if (liveSseOpen && lastPingAt && Date.now() - lastPingAt > 45000) {
+      if (liveSseOpen && !liveSseDelivered && liveSseConstructedAt && Date.now() - liveSseConstructedAt > 10000) {
+        try { if (liveSseEs) liveSseEs.close(); } catch (e) {}
+        liveSseOpen = false;
+        liveSseEs = null;
+        liveSseRetryAt = Date.now() + sseRetryDelay(liveSseFailures);
+        liveSseFailures++;
+        renderFreshness();
+        ensureLiveStream();
+      } else if (liveSseOpen && lastPingAt && Date.now() - lastPingAt > 45000) {
         try { if (liveSseEs) liveSseEs.close(); } catch (e) {}
         liveSseOpen = false;
         liveSseEs = null;
