@@ -221,6 +221,15 @@ function expandQueryVariants(q, groups) {
         if (isSvg) node.setAttribute('class', v);
         else node.className = v;
       } else if (k === 'text') node.textContent = v;
+      // The page CSP (style-src 'self', no 'unsafe-inline') refuses style
+      // ATTRIBUTES: setAttribute('style', ...) records the declarations but
+      // the browser never applies them, so every width handed over as a
+      // style string silently vanished (the KB activity bars all rendered
+      // at full width, the meter and mix fills with them). CSSOM assignment
+      // is governed by script-src, which this script already satisfies, so
+      // a style goes through the property whenever the node has one; the
+      // attribute remains only as a fallback for stub nodes without one.
+      else if (k === 'style' && node.style) node.style.cssText = v;
       else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
       else node.setAttribute(k, v === true ? '' : v);
     }
@@ -735,8 +744,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=e44a408');
-        await loadScriptOnce('universe.js?v=e44a408');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=48f91ed');
+        await loadScriptOnce('universe.js?v=48f91ed');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
