@@ -2479,6 +2479,28 @@
       ]
     },
     {
+      "id": "person-milan",
+      "label": "Milan Nenadic (Cartech)",
+      "domain": "people",
+      "kind": "person",
+      "node": "person-milan",
+      "status": "active",
+      "date": "2026-11-15",
+      "factCount": 1,
+      "path": "knowledge/people/milan.md",
+      "size": 3,
+      "gravity": 0.1,
+      "facts": [
+        {
+          "id": "F-2358",
+          "label": "Milan Nenadic is a Cartech contact for Vibhu's 2018 Chrysler 300, one of the car people in the owner's 2026-11-15…",
+          "text": "Milan Nenadic is a Cartech contact for Vibhu's 2018 Chrysler 300, one of the car people in the owner's 2026-11-15 grouping; his earlier facts on this page were retired to pointer stubs in the Oct 30 merge, which made the page invisible in the graph — this fact restores his identity here, with the canonical car facts living on proj-car",
+          "date": "2026-11-15",
+          "relations": []
+        }
+      ]
+    },
+    {
       "id": "person-mother",
       "label": "Mother",
       "domain": "people",
@@ -3405,7 +3427,7 @@
       "date": "2026-11-15",
       "factCount": 11,
       "path": "knowledge/places/chandigarh.md",
-      "size": 7,
+      "size": 8,
       "gravity": 0.1,
       "facts": [
         {
@@ -3511,7 +3533,7 @@
       "date": "2026-11-15",
       "factCount": 10,
       "path": "knowledge/places/delhi.md",
-      "size": 7,
+      "size": 8,
       "gravity": 0.1,
       "facts": [
         {
@@ -3942,6 +3964,64 @@
       ]
     },
     {
+      "id": "place-haryana",
+      "label": "Haryana",
+      "domain": "places",
+      "kind": "place",
+      "node": "place-haryana",
+      "status": "active",
+      "date": "2026-11-15",
+      "factCount": 3,
+      "path": "knowledge/places/haryana.md",
+      "size": 7,
+      "gravity": 0.1,
+      "facts": [
+        {
+          "id": "F-2355",
+          "label": "Mention harvest, node content lane 2026-11-15: this page held zero facts while the brain names Haryana on other pages.…",
+          "text": "Mention harvest, node content lane 2026-11-15: this page held zero facts while the brain names Haryana on other pages. This capture wires the brain's OWN existing mentions of Haryana into this page so the knowledge lands inside the node (essay model). No new external content; every fact ID named below already exists in the knowledge tree and names Haryana in its own text",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2356",
+          "label": "Existing brain mentions of Haryana: F-2056 (Rohtak is a city and the administrative headquarters of Rohtak district in…",
+          "text": "Existing brain mentions of Haryana: F-2056 (Rohtak is a city and the administrative headquarters of Rohtak district in the Indian state of Haryana, on place-rohtak), F-2059 (Rohtak was the third most populous city in Haryana in the 2011 census), F-1971 (Delhi borders the state of Haryana, on place-delhi), F-2011 and F-2013 (Chandigarh serves as the shared capital of the states of Punjab and Haryana, and Panchkula is in Haryana, on place-chandigarh); place-rohtak's intro also records Rohtak as a city in Haryana, the hometown of his close friend Manan",
+          "date": "2026-11-15",
+          "relations": [
+            {
+              "type": "CONTEXT",
+              "target": "F-2056"
+            },
+            {
+              "type": "CONTEXT",
+              "target": "F-2011"
+            }
+          ]
+        },
+        {
+          "id": "F-2357",
+          "label": "Haryana is the Indian state containing Rohtak, the hometown of Vibhu's close friend Manan (place-rohtak records Rohtak…",
+          "text": "Haryana is the Indian state containing Rohtak, the hometown of Vibhu's close friend Manan (place-rohtak records Rohtak as a city and the administrative headquarters of Rohtak district in Haryana); Chandigarh serves as the shared capital of the states of Punjab and Haryana, and Delhi borders Haryana in the remaining directions",
+          "date": "2026-11-15",
+          "relations": [
+            {
+              "type": "CONTEXT",
+              "target": "F-2056"
+            },
+            {
+              "type": "CONTEXT",
+              "target": "F-2011"
+            },
+            {
+              "type": "CONTEXT",
+              "target": "F-1971"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "place-rohtak",
       "label": "Rohtak",
       "domain": "places",
@@ -3951,7 +4031,7 @@
       "date": "2026-11-15",
       "factCount": 8,
       "path": "knowledge/places/rohtak.md",
-      "size": 4,
+      "size": 6,
       "gravity": 0.1,
       "facts": [
         {
@@ -6616,7 +6696,7 @@
       "node": "proj-second-brain",
       "status": "active",
       "date": "2026-11-15",
-      "factCount": 173,
+      "factCount": 191,
       "path": "knowledge/projects/second-brain.md",
       "size": 12,
       "gravity": 0.866,
@@ -6638,9 +6718,21 @@
           ]
         },
         {
-          "id": "F-2125",
-          "label": "Dream-brain Tests workflow kept failing on master from Oct 26 through Nov 13, 2026: 92 run-failed mails across six…",
-          "text": "Dream-brain Tests workflow kept failing on master from Oct 26 through Nov 13, 2026: 92 run-failed mails across six daily records (11 to 36 a day), consolidated into this one fact on 2026-11-15; the daily records stay readable as superseded. Each failure was the test job failing in about 3 to 5 minutes while acceptance and empty-mode succeeded in the latest stretch; same signature throughout, and the failure mails give no annotation detail beyond a failed test job. The failing, re-running Tests runs are what burned the free GitHub Actions quota (90% warning, Nov 14).",
+          "id": "F-2361",
+          "label": "Dream-brain Publish portal workflow failed 23 times on master on Nov 15, 2026, every run failing in seconds without…",
+          "text": "Dream-brain Publish portal workflow failed 23 times on master on Nov 15, 2026, every run failing in seconds without deploying (including retries attempt #2 and #3 for commit 49c2c66) — the free Actions quota hit 100% the same day, so the portal stayed frozen on the Nov 14 build.",
+          "date": "2026-11-15",
+          "relations": [
+            {
+              "type": "CAUSED-BY",
+              "target": "F-1925"
+            }
+          ]
+        },
+        {
+          "id": "F-2363",
+          "label": "Dream-brain Tests workflow kept failing on master from Oct 26 through Nov 15, 2026: 164 run-failed mails in total (92…",
+          "text": "Dream-brain Tests workflow kept failing on master from Oct 26 through Nov 15, 2026: 164 run-failed mails in total (92 through Nov 13, 1 on Nov 14, 71 on Nov 15). The failure mode changed on Nov 15: only 15 of the 71 show the old signature (test job failing in minutes while acceptance and empty-mode succeed); the other 56 failed to start, all jobs failing in 1 to 3 seconds (one in 38 seconds), because the free Actions quota hit 100% the same day. The same billing gate refused Publish portal 23 times, morning-brief twice and watchdog once on Nov 15, so no CI or publish ran at all.",
           "date": "2026-11-15",
           "relations": [
             {
@@ -6652,6 +6744,125 @@
               "target": "F-1925"
             }
           ]
+        },
+        {
+          "id": "F-2365",
+          "label": "Phase process started 2026-11-15 under the project-manager playbook (charter, scene breakdown, a gate at every…",
+          "text": "Phase process started 2026-11-15 under the project-manager playbook (charter, scene breakdown, a gate at every transition, living risk register, honest status, retrospective); the phases and tasks dataset lives at files/phases.json in the goal workspace: 7 phases, 16 building blocks, 38 task cards with stable ids and phase links, 11 risks; gate states carry an enum (passed, partial, pending) beside the prose note",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2366",
+          "label": "Phase 0 Foundation and Body (2026-10-12 to 2026-10-26) DONE, gate passed: live portal on one link, governed writes…",
+          "text": "Phase 0 Foundation and Body (2026-10-12 to 2026-10-26) DONE, gate passed: live portal on one link, governed writes only, the box is the brain's home and body",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2367",
+          "label": "Phase 1 Consciousness Core (2026-10-17 to 2026-11-12) DONE, gate passed with residuals (gravity layout unfinished, core…",
+          "text": "Phase 1 Consciousness Core (2026-10-17 to 2026-11-12) DONE, gate passed with residuals (gravity layout unfinished, core pages thin): core capsule live, heartbeat and think loops running, births governed, UI programme approved on 61 items",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2368",
+          "label": "Phase 2 Wiring and Consistency, Wave A (2026-11-12 to 2026-11-15) DONE, gate passed for the wiring in its scope:…",
+          "text": "Phase 2 Wiring and Consistency, Wave A (2026-11-12 to 2026-11-15) DONE, gate passed for the wiring in its scope: dictionaries live as things (229 terms), skills registry truthful, NN mimic functions bound (scan, gate, propagate, step), relations depth landed, KB dashboard seed live; the outward window's first pull and skill-node facts belong to Phase 5 by the owner's ordering",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2369",
+          "label": "Phase 3 God Thread and Node Content, Wave B (2026-11-13 to 2026-11-20) RUNNING, gate partial: the god thread half…",
+          "text": "Phase 3 God Thread and Node Content, Wave B (2026-11-13 to 2026-11-20) RUNNING, gate partial: the god thread half passed 2026-11-15 (persistence, quote-reply, demand attach, honest timings, governed node ops for add and create); node content rollout batches landed across patterns, projects, topics, library, people and places; Haryana summary and refresher hardening remain",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2370",
+          "label": "Phase 4 Aliveness and Health, Wave C (2026-11-15 to 2026-11-22) RUNNING, gate partial: tonight chain items 0 to 7…",
+          "text": "Phase 4 Aliveness and Health, Wave C (2026-11-15 to 2026-11-22) RUNNING, gate partial: tonight chain items 0 to 7 landed (burn cuts, dual-mind fold-in, quick wins, thread expansion v1, domain clusters with checker first, history slider verified live, connection ladder, sparks on real events, outward node clickable); items 9, 10 and 12 plus the v2 amendments (thread natural chat, main page rearrange, outward live flow, focus depth) remain",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2371",
+          "label": "Phase 5 Deep Brain and Self-Growth, Wave D (2026-11-16 to 2026-12-15, planned) NEXT, gate pending: recursive research…",
+          "text": "Phase 5 Deep Brain and Self-Growth, Wave D (2026-11-16 to 2026-12-15, planned) NEXT, gate pending: recursive research under governance (design reviewed, GO WITH CHANGES, 19 fold-ins), skill operational layer, learning-law distillation, dictionaries per domain; builds queue behind Phase 4",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2372",
+          "label": "Phase 6 Presentation and Handover Readiness (2026-11-16 to 2026-11-30, planned) NEXT, gate pending: owner presents the…",
+          "text": "Phase 6 Presentation and Handover Readiness (2026-11-16 to 2026-11-30, planned) NEXT, gate pending: owner presents the working model live on 2026-11-16; security gate re-enabled before go-live (hard deadline 2026-11-20 about 11:25 PT); system-only handover package ready for the owner's call; the empty-brain apple test is the closing proof and is not yet proven",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2373",
+          "label": "Flow standing 2026-11-15 late evening: the build is on Phase 3 gate closing plus Phase 4 mid-flight; the flow says…",
+          "text": "Flow standing 2026-11-15 late evening: the build is on Phase 3 gate closing plus Phase 4 mid-flight; the flow says next, in order: chain item 9 (KB dashboard build-out plus presentation layer), item 10 (self-growth plus distillation), item 11 (pre-demo ask check), item 12 (focus-orbit prototype, stops for the owner's judgment); the chain's order and the master scope agree, and any disagreement is fixed in the document the same night, update-and-add only",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2374",
+          "label": "Dynamic tracker design (owner expansion 2026-11-15 22:54 PT): tracker state (phases, tasks, statuses) lives in the…",
+          "text": "Dynamic tracker design (owner expansion 2026-11-15 22:54 PT): tracker state (phases, tasks, statuses) lives in the brain as governed content on proj-second-brain, filed through the same capture to consolidation to graph path the build already uses, so the Knowledge Base view reflects the current plan without manual re-publishing; the web board stays a labelled snapshot of 2026-11-15 and points at the KB as the live tracker; tracker wording is governed-pipeline freshness (state as of the last consolidation), never real-time, a wording set by the Jev review verdict of the same night",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2375",
+          "label": "Presentation surface built 2026-11-15: the Space \"Second Brain — Project Scope & Build Board\" is the project's full web…",
+          "text": "Presentation surface built 2026-11-15: the Space \"Second Brain — Project Scope & Build Board\" is the project's full web presentation in the owner's order (overview, architecture and building blocks, pipelines, validations, data stores, structure, functions and features, project status with Gantt and task cards, tutorials and FAQ, spec sheet); layout follows the GitBook pattern for documentation (left sidebar navigation, clean reading column, guides section) and status-coloured phase rows plus card columns by status for the tracker, from the owner's Lazyweb research",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2376",
+          "label": "The presentation documentation lives in the Knowledge Base inside its EXISTING structure, not a parallel one: the KB…",
+          "text": "The presentation documentation lives in the Knowledge Base inside its EXISTING structure, not a parallel one: the KB tab's own navigation (Overview, Architecture, Algorithms and Methods, Tech Stack, Plan and Gates, Accomplishments, Dictionary, Log Feed, FAQ, How the brain works, Docs Bundle Manifest) is the home; the scope summary, phase plan and tracker state filed 2026-11-15 feed the Plan and Gates and Overview sections through consolidation",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2377",
+          "label": "Pipelines, as documented for an outsider: the knowledge loop is Reading, Flagging, Traversing, Updating (capture,…",
+          "text": "Pipelines, as documented for an outsider: the knowledge loop is Reading, Flagging, Traversing, Updating (capture, understand, relate, consolidate with merge, classify, entity, taxonomy and pattern passes, self-report, govern); the ask pipeline is pulse-first lexical retrieval, then the local model composing under citation discipline, then an extractive fallback, with measured timings on every answer; sync and publish are event-driven only; the training refresh is criteria-driven (50 or more new facts or 7 days) behind a frozen golden-set gate",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2378",
+          "label": "Validations, as documented: zero unvalidated writes; births only through inbox, validate, secret scan, merge, doctor;…",
+          "text": "Validations, as documented: zero unvalidated writes; births only through inbox, validate, secret scan, merge, doctor; builds verified by solo test runs compared against a pristine baseline failing set; semantic candidates wire only when top1 and top5 both meet or beat the incumbent (the 2026-11-16d index passed as a conditional pass and is labelled that way); rollback rests on hourly bundles, pre-change snapshots and rollback tags; research scope can only ever be tightened and an entity linked to personal context is never researched publicly",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2379",
+          "label": "Spec essence: one public web frontend (static, git-deployed), one backend on the owner's own Windows 11 Pro machine,…",
+          "text": "Spec essence: one public web frontend (static, git-deployed), one backend on the owner's own Windows 11 Pro machine, one private repository as pipeline base; 3D by default on a pure void (#05070b), kind colours from a dynamic registry with no cap; local model qwen2.5:1.5b as the everyday mind, embeddings all-MiniLM-L6-v2 at 384 dimensions (index build 2026-11-16d, 2,380 rows, 1,376 facts), external AI seat as escalation only, capped at 30 calls per day, tool-less; cadences: consolidation on arrival with nightly safety net, resident wake every 30 minutes, health driver every 30 minutes, UI check about every 2 hours; caps: free GPU 30 hours per week with a plan cap of 10, CI budget 5 dollars to the Dec 1 reset (CI minutes only, not model inference)",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2380",
+          "label": "Review round held before the scope was finalised (owner order 2026-11-15 22:54 PT): Claude chat, Claude Code, the…",
+          "text": "Review round held before the scope was finalised (owner order 2026-11-15 22:54 PT): Claude chat, Claude Code, the Claude API seat and the Gemini API seat all reviewed the scope, phases and presentation plan, and Jev was attempted once through the existing Vercel AI Gateway route and ANSWERED (correcting the record that had it down as 401 since Oct 26); Jev's typed verdicts: biggest presentation risk is a silent failure (0.44, ask quality 0.40), scope completeness 3.3 of 6 at low confidence, and only 0.33 probability that calling tracker v1 dynamic and live is honest, which set the tracker wording to governed-pipeline freshness everywhere",
+          "date": "2026-11-15",
+          "relations": []
+        },
+        {
+          "id": "F-2381",
+          "label": "Screenshot pass 2026-11-15 on the live portal: 5 of 6 tutorial views captured as reusable page PDFs (graph home with…",
+          "text": "Screenshot pass 2026-11-15 on the live portal: 5 of 6 tutorial views captured as reusable page PDFs (graph home with the live header 103 things, 1,369 facts, 247 relations; Core node panel with 31 core facts; KB dashboard; growth history panel at Beat 2268; outward panel open, IDLE, 5 open questions); the god thread shot captured a system demand message instead of a Q&A turn, so it serves as the demands-in-thread example and the Q&A-with-facts shot stays a named placeholder to be re-captured",
+          "date": "2026-11-15",
+          "relations": []
         },
         {
           "id": "F-1928",
@@ -9006,15 +9217,27 @@
       "node": "topic-github",
       "status": "active",
       "date": "2026-11-15",
-      "factCount": 10,
+      "factCount": 11,
       "path": "knowledge/topics/github.md",
-      "size": 9,
+      "size": 10,
       "gravity": 0.163,
       "facts": [
         {
-          "id": "F-2121",
-          "label": "GitHub Actions: the dream-brain Tests workflow failed on master 74 times from Nov 1 to Nov 12, 2026 — ten daily…",
-          "text": "GitHub Actions: the dream-brain Tests workflow failed on master 74 times from Nov 1 to Nov 12, 2026 — ten daily Gmail-digest records (3 to 12 failed runs a day, test job failing) consolidated into this one fact on 2026-11-15; the daily records stay readable as superseded. Pattern from those records: the stale-INDEX fix was confirmed green Nov 8 ~01:50 PT (only the 8 registered known failures left), yet the test job kept failing on later commits — commit-dependent, not a blanket outage; green runs also landed on the morning of Nov 10 before failures resumed the same day.",
+          "id": "F-2359",
+          "label": "GitHub usage Nov 15, 2026, 11:26 PT: the Vrdevil44 account has used 100% of the 2,000 free Actions minutes included per…",
+          "text": "GitHub usage Nov 15, 2026, 11:26 PT: the Vrdevil44 account has used 100% of the 2,000 free Actions minutes included per month (2,000 of 2,000), up from the 90% warning Nov 14. Usage resets Dec 1, 2026; the $0 Actions budget blocks further runs until then, which is why Tests, Publish portal, morning-brief and watchdog runs all failed to start on Nov 15.",
+          "date": "2026-11-15",
+          "relations": [
+            {
+              "type": "UPDATES",
+              "target": "F-1925"
+            }
+          ]
+        },
+        {
+          "id": "F-2362",
+          "label": "GitHub Actions: the dream-brain Tests workflow failed on master 157 times from Nov 1 to Nov 15, 2026 (74 Nov 1-12, 11…",
+          "text": "GitHub Actions: the dream-brain Tests workflow failed on master 157 times from Nov 1 to Nov 15, 2026 (74 Nov 1-12, 11 Nov 13, 1 Nov 14, 71 Nov 15). Nov 15 changed the pattern: only 15 of the 71 are the old test-job failure; the other 56 are runs refused at start, all jobs failing in seconds, after the account hit 100% of its 2,000 free Actions minutes. The stale-INDEX green of Nov 8 and the green runs on the morning of Nov 10 remain the only breaks in the streak.",
           "date": "2026-11-15",
           "relations": [
             {
@@ -9994,12 +10217,36 @@
       "kind": "topic",
       "node": "topic-money",
       "status": "active",
-      "date": "2026-11-14",
-      "factCount": 101,
+      "date": "2026-11-15",
+      "factCount": 103,
       "path": "knowledge/topics/money.md",
       "size": 12,
       "gravity": 0.874,
       "facts": [
+        {
+          "id": "F-2360",
+          "label": "ICICI Bank replied Nov 15, 2026 (Anushiya M, ref 0016GaNF979K1X8W) to his dormant-account follow-up: account ending…",
+          "text": "ICICI Bank replied Nov 15, 2026 (Anushiya M, ref 0016GaNF979K1X8W) to his dormant-account follow-up: account ending 4830 is still Dormant, email activation is refused, and the bank requires BOTH account holders' physical presence to activate — on its face, his father Papa, joint holder in India, cannot activate it alone at the Etawah branch; Vibhu must also visit a branch. The PoA (Oct 2026), documents list, Canadian mobile-number change and nominee questions remain unanswered.",
+          "date": "2026-11-15",
+          "relations": [
+            {
+              "type": "UPDATES",
+              "target": "F-1873"
+            }
+          ]
+        },
+        {
+          "id": "F-2364",
+          "label": "Wealthsimple Visa statement Oct 15 - Nov 14, 2026: balance $5,271.94, minimum payment $103.07, due Dec 7, 2026. The…",
+          "text": "Wealthsimple Visa statement Oct 15 - Nov 14, 2026: balance $5,271.94, minimum payment $103.07, due Dec 7, 2026. The scheduled minimum $103.07 was paid Nov 15 from his chequing, leaving a remaining statement balance of $5,168.87. This replaces the Nov 14 picture ($2,809.30 left on the old past-due statement).",
+          "date": "2026-11-15",
+          "relations": [
+            {
+              "type": "UPDATES",
+              "target": "F-1929"
+            }
+          ]
+        },
         {
           "id": "F-1924",
           "label": "Scotia ABM cash withdrawals Nov 14, 2026, from account ending 7289: $270.00 at 12:07 pm ET (9:07 am PT), then $400.00…",
@@ -14039,6 +14286,24 @@
       "weight": 1
     },
     {
+      "source": "place-haryana",
+      "target": "place-rohtak",
+      "type": "CONTEXT",
+      "weight": 2
+    },
+    {
+      "source": "place-haryana",
+      "target": "place-chandigarh",
+      "type": "CONTEXT",
+      "weight": 2
+    },
+    {
+      "source": "place-haryana",
+      "target": "place-delhi",
+      "type": "CONTEXT",
+      "weight": 1
+    },
+    {
       "source": "place-summerland",
       "target": "person-anuj-bhaiya",
       "type": "CONTEXT",
@@ -14150,6 +14415,12 @@
       "source": "proj-second-brain",
       "target": "person-vibhu",
       "type": "SUPPORTS",
+      "weight": 1
+    },
+    {
+      "source": "proj-second-brain",
+      "target": "topic-github",
+      "type": "CAUSED-BY",
       "weight": 1
     },
     {
@@ -14299,6 +14570,13 @@
     {
       "source": "place-dps-etawah",
       "target": "place-etawah",
+      "type": "COMPONENT",
+      "weight": 1,
+      "derived": true
+    },
+    {
+      "source": "place-rohtak",
+      "target": "place-haryana",
       "type": "COMPONENT",
       "weight": 1,
       "derived": true
@@ -14761,6 +15039,11 @@
       "type": "DOMAIN"
     },
     {
+      "source": "person-milan",
+      "target": "domain-people",
+      "type": "DOMAIN"
+    },
+    {
       "source": "person-mother",
       "target": "domain-people",
       "type": "DOMAIN"
@@ -14887,6 +15170,11 @@
     },
     {
       "source": "place-fastrack-autobody",
+      "target": "domain-places",
+      "type": "DOMAIN"
+    },
+    {
+      "source": "place-haryana",
       "target": "domain-places",
       "type": "DOMAIN"
     },
@@ -15329,6 +15617,10 @@
       "kind": "person"
     },
     {
+      "node": "person-milan",
+      "kind": "person"
+    },
+    {
       "node": "person-mother",
       "kind": "person"
     },
@@ -15422,6 +15714,10 @@
     },
     {
       "node": "place-fastrack-autobody",
+      "kind": "place"
+    },
+    {
+      "node": "place-haryana",
       "kind": "place"
     },
     {
@@ -16050,9 +16346,6 @@
     "F-1032": "F-1188",
     "F-1033": "F-1188",
     "F-1034": "F-1188",
-    "F-1085": "F-2125",
-    "F-1095": "F-2125",
-    "F-1103": "F-2125",
     "F-1128": "F-1130",
     "F-1214": "F-1485",
     "F-1268": "F-1224",
@@ -16061,19 +16354,8 @@
     "F-1293": "F-1224",
     "F-1301": "F-1224",
     "F-1316": "F-1224",
-    "F-1680": "F-2125",
-    "F-1696": "F-2125",
-    "F-1713": "F-2121",
-    "F-1734": "F-2121",
-    "F-1746": "F-2121",
-    "F-1755": "F-2121",
-    "F-1769": "F-2121",
-    "F-1777": "F-2121",
-    "F-1799": "F-2121",
-    "F-1811": "F-2121",
-    "F-1850": "F-2121",
     "F-1862": "F-1872",
-    "F-1867": "F-2121",
-    "F-1910": "F-2125"
+    "F-2121": "F-2362",
+    "F-2125": "F-2363"
   }
 }
