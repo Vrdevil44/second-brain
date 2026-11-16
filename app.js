@@ -121,14 +121,15 @@ function expandQueryVariants(q, groups) {
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json, census.json, kind-slots.json, mfa.json, live-state.json and knowledge-base.json, only GET.
+      // Same origin: only graph.json, census.json, kind-slots.json, mfa.json, live-state.json, knowledge-base.json and phases.json, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
       const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
       const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
       const isKb = u.pathname.endsWith('/knowledge-base.json') || u.pathname === '/knowledge-base.json';
       const isCensus = u.pathname.endsWith('/census.json') || u.pathname === '/census.json';
       const isKindSlots = u.pathname.endsWith('/kind-slots.json') || u.pathname === '/kind-slots.json';
-      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus || isKindSlots) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      const isPhases = u.pathname.endsWith('/phases.json') || u.pathname === '/phases.json';
+      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus || isKindSlots || isPhases) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       // R3: aliases.json (public subset) is also readable, GET only.
       const isAliases = u.pathname.endsWith('/aliases.json') || u.pathname === '/aliases.json';
       if (m === 'GET' && isAliases) return;
@@ -716,8 +717,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=6615487');
-        await loadScriptOnce('universe.js?v=6615487');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=e538ac0');
+        await loadScriptOnce('universe.js?v=e538ac0');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
