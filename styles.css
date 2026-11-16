@@ -1488,6 +1488,20 @@ body.view-3d .node-panel { display: none; }
 .askbar-thread { max-height: 38vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
 .askbar-thread:empty { display: none; }
 .askbar-turn { border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+/* Thread expansion: kind tags on every turn; provenance + actions behind Details. */
+.askbar-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 4px; }
+.askbar-tag { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; }
+.askbar-tag-question { color: var(--accent-glow); border-color: var(--accent-glow); }
+.askbar-tag-reply { color: var(--accent-glow); border-color: var(--accent-glow); }
+.askbar-tag-demand { color: #e0a458; border-color: #e0a458; }
+.askbar-tag-update { color: #7fc97f; border-color: #7fc97f; }
+.askbar-details-btn { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; opacity: 0.75; font-size: 0.8em; padding: 2px 0; text-decoration: underline; }
+.askbar-details { margin-top: 4px; }
+.askbar-prov-title { margin: 0 0 4px; color: var(--text-3); font-size: 12px; }
+.askbar-prov { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 0 0 4px; }
+.askbar-prov-snippet { color: var(--text-2, var(--text-3)); font-size: 12px; overflow-wrap: anywhere; }
+.askbar-prov-conf { color: var(--text-3); font-size: 11px; }
+.askbar-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .askbar-turn-q,
 .askbar-question { margin: 0 0 4px; color: var(--text); font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
 .askbar-turn-caption { margin: 0 0 4px; color: var(--text-3); font-size: 12px; }

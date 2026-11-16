@@ -716,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=46a4a30');
-        await loadScriptOnce('universe.js?v=46a4a30');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=263d81f');
+        await loadScriptOnce('universe.js?v=263d81f');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -5254,6 +5254,21 @@ function expandQueryVariants(q, groups) {
   };
 
   // Returns a clean record or null. Only known fields survive.
+  // Thread expansion (owner spec 2026-11-15): the owner-facing kind tags
+  // of a turn, derived from kind + quote. The same derivation lives in
+  // backend/thread-store.mjs (deriveThreadTags) so the stored record
+  // format is identical on every device; the learning machinery groups
+  // turns by these tags. Vocabulary: question, answer, reply, update, demand.
+  askBar.turnTags = function (rec) {
+    if (!rec || typeof rec !== 'object') return [];
+    if (rec.kind === 'brain') return ['demand'];
+    if (rec.kind === 'op' || rec.kind === 'filed') return ['update'];
+    if (rec.kind === 'refusal') return ['answer'];
+    const tags = [rec.quote ? 'reply' : 'question'];
+    if (rec.answer) tags.push('answer');
+    return tags;
+  };
+
   askBar.validRecord = function (r) {
     if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
     if (typeof r.question !== 'string' || typeof r.answer !== 'string') return null;
@@ -5270,13 +5285,18 @@ function expandQueryVariants(q, groups) {
     };
     if (Array.isArray(r.cites)) {
       r.cites.forEach((c) => {
-        if (c && typeof c === 'object' && typeof c.fid === 'string') out.cites.push({ fid: c.fid, lit: c.lit === true, snippet: typeof c.snippet === 'string' ? c.snippet : '' });
+        if (c && typeof c === 'object' && typeof c.fid === 'string') out.cites.push({ fid: c.fid, lit: c.lit === true, snippet: typeof c.snippet === 'string' ? c.snippet : '', confidence: (typeof c.confidence === 'number' && isFinite(c.confidence)) ? c.confidence : null });
       });
     }
     const q = r.quote;
     if (q && typeof q === 'object' && typeof q.question === 'string' && typeof q.answer === 'string') {
       out.quote = { question: q.question.slice(0, QUOTE_TEXT_MAX), answer: q.answer.slice(0, QUOTE_TEXT_MAX) };
     }
+    // Tags are derived, never trusted from the wire (same rule as the box store).
+    out.tags = out.kind === 'brain' ? ['demand']
+      : (out.kind === 'op' || out.kind === 'filed') ? ['update']
+      : out.kind === 'refusal' ? ['answer']
+      : [out.quote ? 'reply' : 'question'].concat(out.answer ? ['answer'] : []);
     if (typeof r.commitHref === 'string' && /^https:\/\/github\.com\//.test(r.commitHref)) {
       out.commitHref = r.commitHref;
       out.commitLabel = typeof r.commitLabel === 'string' ? r.commitLabel : 'View commit on GitHub';
@@ -5520,10 +5540,11 @@ function expandQueryVariants(q, groups) {
       (Array.isArray(x.body.warnings) ? x.body.warnings : []).forEach((w) => { rec.warnings.push(askBar.warningWords(w)); });
       (Array.isArray(x.body.citations) ? x.body.citations : []).forEach((c) => {
         const fid = String((c && c.fid) || '');
-        rec.cites.push({ fid: fid, lit: !!(x.plan && x.plan.lit.indexOf(fid) !== -1), snippet: (c && c.snippet) ? String(c.snippet) : '' });
+        rec.cites.push({ fid: fid, lit: !!(x.plan && x.plan.lit.indexOf(fid) !== -1), snippet: (c && c.snippet) ? String(c.snippet) : '', confidence: (c && typeof c.confidence === 'number' && isFinite(c.confidence)) ? c.confidence : null });
       });
     }
     if (pending.quote) rec.quote = pending.quote;
+    rec.tags = askBar.turnTags(rec);
     askBar.thread.push(rec);
     askBar.saveThread();
     return rec;
@@ -5531,6 +5552,13 @@ function expandQueryVariants(q, groups) {
 
   // One archived turn, built from the record with text nodes only. Citation
   // buttons only focus the node; archives never change the lighting.
+  // One archived turn (thread expansion, owner spec 2026-11-15): the chat
+  // stays clean — kind tags, the quoted context, question, stage line and
+  // answer are all that show. Everything else lives behind one Details
+  // toggle: the answer's provenance (each cited fact's text, not just its
+  // id), warnings, the thinker, and the actions (Reply, File this).
+  // Built from the record with text nodes only. Citation buttons only
+  // focus the node; archives never change the lighting.
   askBar.buildArchivedTurn = function (rec) {
     const turn = document.createElement('div');
     turn.className = 'askbar-turn';
@@ -5541,6 +5569,43 @@ function expandQueryVariants(q, groups) {
       turn.appendChild(n);
       return n;
     };
+    const addTo = (parent, tag, cls, text) => {
+      const n = document.createElement(tag);
+      n.className = cls;
+      n.appendChild(document.createTextNode(text));
+      parent.appendChild(n);
+      return n;
+    };
+    // Kind tags: stored on the record; derived for legacy records.
+    const TAG_WORDS = { question: 'Question', answer: 'Answer', reply: 'Reply', update: 'Update', demand: 'Demand' };
+    const tags = (Array.isArray(rec.tags) && rec.tags.length) ? rec.tags : askBar.turnTags(rec);
+    if (tags.length) {
+      const row = document.createElement('div');
+      row.className = 'askbar-tags';
+      tags.forEach((t) => {
+        const s = document.createElement('span');
+        s.className = 'askbar-tag askbar-tag-' + t;
+        s.appendChild(document.createTextNode(TAG_WORDS[t] || t));
+        row.appendChild(s);
+      });
+      turn.appendChild(row);
+    }
+    // The details panel + its toggle; actions are appended into it below.
+    const details = document.createElement('div');
+    details.className = 'askbar-details';
+    details.hidden = true;
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'askbar-details-btn';
+    toggle.appendChild(document.createTextNode('Details'));
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Show the facts and actions for this turn');
+    toggle.addEventListener('click', () => {
+      details.hidden = !details.hidden;
+      toggle.setAttribute('aria-expanded', String(!details.hidden));
+    });
+    const actions = document.createElement('div');
+    actions.className = 'askbar-actions';
     const addQuoteBtn = () => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -5548,10 +5613,15 @@ function expandQueryVariants(q, groups) {
       b.appendChild(document.createTextNode('Reply'));
       b.setAttribute('aria-label', 'Reply to this turn');
       b.addEventListener('click', () => { askBar.setQuote(rec); });
-      turn.appendChild(b);
+      actions.appendChild(b);
+    };
+    const finish = () => {
+      if (actions.children.length) details.appendChild(actions);
+      turn.appendChild(toggle);
+      turn.appendChild(details);
+      return turn;
     };
     if (rec.quote) add('p', 'askbar-turn-quote', '↳ ' + askBar.snippet(rec.quote.question || rec.quote.answer, QUOTE_CHIP_MAX));
-    if (rec.kind === 'brain') add('p', 'askbar-turn-brain', 'Demand from the brain');
     if (rec.question) add('p', 'askbar-turn-q', rec.question);
     if (rec.caption) add('p', 'askbar-turn-caption', rec.caption);
     if (rec.kind === 'op' && rec.op) {
@@ -5560,25 +5630,20 @@ function expandQueryVariants(q, groups) {
       add('p', 'askbar-turn-caption', rec.answer);
       if (rec.op.state === 'proposed' && rec.ts) add('p', 'askbar-turn-caption', 'proposed ' + askBar.ageWords(rec.ts) + ' — waiting for the merge');
       addQuoteBtn();
-      return turn;
+      return finish();
     }
     if (rec.kind === 'filed') {
       const line = add('p', 'askbar-turn-answer', '');
       askBar.fillFiledLine(line, rec);
       addQuoteBtn();
-      return turn;
+      return finish();
     }
     if (rec.answer) add('p', 'askbar-turn-answer', rec.answer);
-    if (rec.warnings && rec.warnings.length) {
-      const wl = document.createElement('ul');
-      wl.className = 'askbar-warnings';
-      rec.warnings.forEach((w) => { const li = document.createElement('li'); li.appendChild(document.createTextNode(w)); wl.appendChild(li); });
-      turn.appendChild(wl);
-    }
     if (rec.cites && rec.cites.length) {
-      const cl = document.createElement('div');
-      cl.className = 'askbar-turn-cites';
+      addTo(details, 'p', 'askbar-prov-title', 'Facts used');
       rec.cites.forEach((c) => {
+        const row = document.createElement('div');
+        row.className = 'askbar-prov';
         if (c.lit) {
           const b = document.createElement('button');
           b.type = 'button';
@@ -5586,15 +5651,37 @@ function expandQueryVariants(q, groups) {
           b.appendChild(document.createTextNode(c.fid));
           b.setAttribute('aria-label', 'Show ' + c.fid + ' in the graph');
           b.addEventListener('click', () => { askBar.focusFid(c.fid); });
-          cl.appendChild(b);
+          row.appendChild(b);
         } else {
           const sp = document.createElement('span');
           sp.className = 'askbar-cite-meta';
           sp.appendChild(document.createTextNode(c.fid));
-          cl.appendChild(sp);
+          row.appendChild(sp);
         }
+        if (c.snippet) {
+          const sn = document.createElement('span');
+          sn.className = 'askbar-prov-snippet';
+          sn.appendChild(document.createTextNode(c.snippet));
+          row.appendChild(sn);
+        }
+        if (typeof c.confidence === 'number' && isFinite(c.confidence)) {
+          const cf = document.createElement('span');
+          cf.className = 'askbar-prov-conf';
+          cf.appendChild(document.createTextNode(Math.round(c.confidence * 100) + '%'));
+          row.appendChild(cf);
+        }
+        details.appendChild(row);
       });
-      turn.appendChild(cl);
+    }
+    if (rec.warnings && rec.warnings.length) {
+      const wl = document.createElement('ul');
+      wl.className = 'askbar-warnings';
+      rec.warnings.forEach((w) => { const li = document.createElement('li'); li.appendChild(document.createTextNode(w)); wl.appendChild(li); });
+      details.appendChild(wl);
+    }
+    if (rec.thinker) {
+      addTo(details, 'p', 'askbar-turn-caption',
+        'Answered by ' + (rec.thinker === 'localmind' ? "the brain's small local model" : rec.thinker));
     }
     addQuoteBtn();
     if (rec.kind === 'ask') {
@@ -5608,9 +5695,9 @@ function expandQueryVariants(q, groups) {
         fb.appendChild(document.createTextNode('File this'));
         fb.addEventListener('click', () => { askBar.fileThis(rec, fb); });
       }
-      turn.appendChild(fb);
+      actions.appendChild(fb);
     }
-    return turn;
+    return finish();
   };
 
   askBar.clearThread = function () {
