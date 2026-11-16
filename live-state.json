@@ -1,10 +1,10 @@
 {
   "v": 1,
-  "beat": 2268,
-  "ts": "2026-11-16T04:38:24Z",
-  "head": "80191470",
+  "beat": 2284,
+  "ts": "2026-11-16T08:38:24Z",
+  "head": "867b28d4",
   "nodes": 121,
-  "inbox": 2,
+  "inbox": 20,
   "fail": 0,
   "echo_c": 0,
   "echo_d": 0,
@@ -33,118 +33,6 @@
     "last_think": "2026-11-16T00:08:27.520Z"
   },
   "activity": [
-    {
-      "t": "2026-11-15T22:53:24Z",
-      "kind": "beat",
-      "beat": 2246,
-      "label": "beat 2246 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T23:08:24Z",
-      "kind": "beat",
-      "beat": 2247,
-      "label": "beat 2247 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T23:23:24Z",
-      "kind": "beat",
-      "beat": 2248,
-      "label": "beat 2248 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T23:38:24Z",
-      "kind": "beat",
-      "beat": 2249,
-      "label": "beat 2249 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-15T23:53:24Z",
-      "kind": "beat",
-      "beat": 2250,
-      "label": "beat 2250 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T00:08:24Z",
-      "kind": "beat",
-      "beat": 2251,
-      "label": "beat 2251 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T00:08:24Z",
-      "kind": "think",
-      "beat": 2251,
-      "label": "core-think: focus=none questions=+0/-0 proposals=0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T00:23:24Z",
-      "kind": "beat",
-      "beat": 2252,
-      "label": "beat 2252 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T00:38:24Z",
-      "kind": "beat",
-      "beat": 2253,
-      "label": "beat 2253 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T00:53:24Z",
-      "kind": "beat",
-      "beat": 2254,
-      "label": "beat 2254 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T01:08:24Z",
-      "kind": "beat",
-      "beat": 2255,
-      "label": "beat 2255 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T01:23:24Z",
-      "kind": "beat",
-      "beat": 2256,
-      "label": "beat 2256 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T01:38:24Z",
-      "kind": "beat",
-      "beat": 2257,
-      "label": "beat 2257 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T01:53:24Z",
-      "kind": "beat",
-      "beat": 2258,
-      "label": "beat 2258 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T02:08:24Z",
-      "kind": "beat",
-      "beat": 2259,
-      "label": "beat 2259 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T02:23:24Z",
-      "kind": "beat",
-      "beat": 2260,
-      "label": "beat 2260 \u2014 121 facts, inbox 0",
-      "fids": []
-    },
     {
       "t": "2026-11-16T02:38:24Z",
       "kind": "beat",
@@ -200,6 +88,118 @@
       "beat": 2268,
       "label": "beat 2268 \u2014 121 facts, inbox 2",
       "fids": []
+    },
+    {
+      "t": "2026-11-16T04:53:24Z",
+      "kind": "beat",
+      "beat": 2269,
+      "label": "beat 2269 \u2014 121 facts, inbox 2",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T05:08:24Z",
+      "kind": "beat",
+      "beat": 2270,
+      "label": "beat 2270 \u2014 121 facts, inbox 8",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T05:23:24Z",
+      "kind": "beat",
+      "beat": 2271,
+      "label": "beat 2271 \u2014 121 facts, inbox 14",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T05:38:24Z",
+      "kind": "beat",
+      "beat": 2272,
+      "label": "beat 2272 \u2014 121 facts, inbox 15",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T05:53:24Z",
+      "kind": "beat",
+      "beat": 2273,
+      "label": "beat 2273 \u2014 121 facts, inbox 15",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T06:08:24Z",
+      "kind": "beat",
+      "beat": 2274,
+      "label": "beat 2274 \u2014 121 facts, inbox 18",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T06:23:24Z",
+      "kind": "beat",
+      "beat": 2275,
+      "label": "beat 2275 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T06:38:24Z",
+      "kind": "beat",
+      "beat": 2276,
+      "label": "beat 2276 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T06:53:24Z",
+      "kind": "beat",
+      "beat": 2277,
+      "label": "beat 2277 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T07:08:24Z",
+      "kind": "beat",
+      "beat": 2278,
+      "label": "beat 2278 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T07:23:24Z",
+      "kind": "beat",
+      "beat": 2279,
+      "label": "beat 2279 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T07:38:24Z",
+      "kind": "beat",
+      "beat": 2280,
+      "label": "beat 2280 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T07:53:24Z",
+      "kind": "beat",
+      "beat": 2281,
+      "label": "beat 2281 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T08:08:24Z",
+      "kind": "beat",
+      "beat": 2282,
+      "label": "beat 2282 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T08:23:24Z",
+      "kind": "beat",
+      "beat": 2283,
+      "label": "beat 2283 \u2014 121 facts, inbox 20",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T08:38:24Z",
+      "kind": "beat",
+      "beat": 2284,
+      "label": "beat 2284 \u2014 121 facts, inbox 20",
+      "fids": []
     }
   ],
   "formation": {
@@ -212,7 +212,7 @@
   },
   "sync": {
     "v": 2,
-    "at": "2026-11-16T04:38:29Z",
+    "at": "2026-11-16T08:38:30Z",
     "state": "idle",
     "words": "All synced \u2014 watching for new arrivals",
     "dial": {
@@ -225,7 +225,7 @@
       "peek": []
     },
     "last": {
-      "at": "2026-11-16T04:38:29Z",
+      "at": "2026-11-16T08:38:30Z",
       "captures": 0,
       "bytes": 0,
       "duration_s": 1
