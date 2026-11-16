@@ -1,8 +1,8 @@
 {
   "v": 1,
-  "beat": 2300,
-  "ts": "2026-11-16T12:38:24Z",
-  "head": "9da1bbd3",
+  "beat": 2316,
+  "ts": "2026-11-16T16:38:24Z",
+  "head": "3c87b97d",
   "nodes": 123,
   "inbox": 0,
   "fail": 0,
@@ -33,118 +33,6 @@
     "last_think": "2026-11-16T00:08:27.520Z"
   },
   "activity": [
-    {
-      "t": "2026-11-16T07:23:24Z",
-      "kind": "beat",
-      "beat": 2279,
-      "label": "beat 2279 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T07:38:24Z",
-      "kind": "beat",
-      "beat": 2280,
-      "label": "beat 2280 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T07:53:24Z",
-      "kind": "beat",
-      "beat": 2281,
-      "label": "beat 2281 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T08:08:24Z",
-      "kind": "beat",
-      "beat": 2282,
-      "label": "beat 2282 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T08:23:24Z",
-      "kind": "beat",
-      "beat": 2283,
-      "label": "beat 2283 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T08:38:24Z",
-      "kind": "beat",
-      "beat": 2284,
-      "label": "beat 2284 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T08:53:24Z",
-      "kind": "beat",
-      "beat": 2285,
-      "label": "beat 2285 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T09:08:24Z",
-      "kind": "beat",
-      "beat": 2286,
-      "label": "beat 2286 \u2014 121 facts, inbox 20",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T09:23:24Z",
-      "kind": "beat",
-      "beat": 2287,
-      "label": "beat 2287 \u2014 123 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T09:23:24Z",
-      "kind": "demand_resolved",
-      "beat": 2287,
-      "label": "inbox cleared 20 \u2192 0 \u2014 demands settled",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T09:23:24Z",
-      "kind": "merge",
-      "beat": 2287,
-      "label": "mesh grew 121 \u2192 123 \u2014 new knowledge settled in",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T09:38:24Z",
-      "kind": "beat",
-      "beat": 2288,
-      "label": "beat 2288 \u2014 123 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T09:53:24Z",
-      "kind": "beat",
-      "beat": 2289,
-      "label": "beat 2289 \u2014 123 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T10:08:24Z",
-      "kind": "beat",
-      "beat": 2290,
-      "label": "beat 2290 \u2014 123 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T10:23:24Z",
-      "kind": "beat",
-      "beat": 2291,
-      "label": "beat 2291 \u2014 123 facts, inbox 0",
-      "fids": []
-    },
-    {
-      "t": "2026-11-16T10:38:24Z",
-      "kind": "beat",
-      "beat": 2292,
-      "label": "beat 2292 \u2014 123 facts, inbox 0",
-      "fids": []
-    },
     {
       "t": "2026-11-16T10:53:24Z",
       "kind": "beat",
@@ -200,6 +88,118 @@
       "beat": 2300,
       "label": "beat 2300 \u2014 123 facts, inbox 0",
       "fids": []
+    },
+    {
+      "t": "2026-11-16T12:53:24Z",
+      "kind": "beat",
+      "beat": 2301,
+      "label": "beat 2301 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T13:08:24Z",
+      "kind": "beat",
+      "beat": 2302,
+      "label": "beat 2302 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T13:23:24Z",
+      "kind": "beat",
+      "beat": 2303,
+      "label": "beat 2303 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T13:38:24Z",
+      "kind": "beat",
+      "beat": 2304,
+      "label": "beat 2304 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T13:53:24Z",
+      "kind": "beat",
+      "beat": 2305,
+      "label": "beat 2305 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T14:08:24Z",
+      "kind": "beat",
+      "beat": 2306,
+      "label": "beat 2306 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T14:23:24Z",
+      "kind": "beat",
+      "beat": 2307,
+      "label": "beat 2307 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T14:38:24Z",
+      "kind": "beat",
+      "beat": 2308,
+      "label": "beat 2308 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T14:53:24Z",
+      "kind": "beat",
+      "beat": 2309,
+      "label": "beat 2309 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T15:08:24Z",
+      "kind": "beat",
+      "beat": 2310,
+      "label": "beat 2310 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T15:23:24Z",
+      "kind": "beat",
+      "beat": 2311,
+      "label": "beat 2311 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T15:38:24Z",
+      "kind": "beat",
+      "beat": 2312,
+      "label": "beat 2312 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T15:53:24Z",
+      "kind": "beat",
+      "beat": 2313,
+      "label": "beat 2313 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T16:08:24Z",
+      "kind": "beat",
+      "beat": 2314,
+      "label": "beat 2314 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T16:23:24Z",
+      "kind": "beat",
+      "beat": 2315,
+      "label": "beat 2315 \u2014 123 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T16:38:24Z",
+      "kind": "beat",
+      "beat": 2316,
+      "label": "beat 2316 \u2014 123 facts, inbox 0",
+      "fids": []
     }
   ],
   "formation": {
@@ -212,7 +212,7 @@
   },
   "sync": {
     "v": 2,
-    "at": "2026-11-16T12:38:28Z",
+    "at": "2026-11-16T16:21:45Z",
     "state": "idle",
     "words": "All synced \u2014 watching for new arrivals",
     "dial": {
@@ -225,10 +225,10 @@
       "peek": []
     },
     "last": {
-      "at": "2026-11-16T12:38:28Z",
+      "at": "",
       "captures": 0,
       "bytes": 0,
-      "duration_s": 1
+      "duration_s": 0
     },
     "estimate": {
       "avg_bps": 68,
