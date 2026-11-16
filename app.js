@@ -680,7 +680,13 @@ function expandQueryVariants(q, groups) {
     // Meta line in the top bar.
     const c = portalGraphCounts();
     const parts = [];
-    if (c.nodes !== null) parts.push(nf.format(c.nodes) + ' nodes');
+    const nodes = graphData && Array.isArray(graphData.nodes) ? graphData.nodes : [];
+    if (nodes.some((n) => n && Array.isArray(n.facts))) {
+      // Thing graph: things are the nodes carrying facts[]; projected skill/dictionary/question nodes are not things.
+      let things = 0, facts = 0;
+      for (const n of nodes) if (n && Array.isArray(n.facts)) { things++; facts += n.facts.length; }
+      parts.push(nf.format(things) + ' things', nf.format(facts) + ' facts');
+    } else if (c.nodes !== null) parts.push(nf.format(c.nodes) + ' nodes');
     if (c.edges !== null) parts.push(nf.format(c.edges) + ' relations');
     if (graphData && graphData.generated) {
       const d = new Date(graphData.generated);
@@ -711,8 +717,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=358e263');
-        await loadScriptOnce('universe.js?v=358e263');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=59e2e31');
+        await loadScriptOnce('universe.js?v=59e2e31');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -781,18 +787,37 @@ function expandQueryVariants(q, groups) {
   // Search must work when the 3D universe is not initialized (e.g. 2D view); these scan
   // graphData directly with semantics mirroring BrainUniverse.searchNodes/searchRelations.
   function expandedSearch(q) {
+    // Dual-mode: thing graphs carry facts[] per page node + a redirects map; fact graphs one node per fact.
+    const wordRank = (t, q) => { t = String(t || '').toLowerCase(); const w = t.split(/[^a-z0-9]+/); return w.includes(q) ? 3 : w.some((x) => x.startsWith(q)) ? 2 : t.includes(q) ? 1 : 0; };
+    const thingOfFid = (id) => {
+      let fid = String(id);
+      for (let i = 0; i < 8 && graphData.redirects && graphData.redirects[fid] != null; i++) fid = String(graphData.redirects[fid]);
+      const host = (graphData.nodes || []).find((n) => Array.isArray(n.facts) && n.facts.some((f) => String(f.id) === fid));
+      return host ? String(host.id) : fid;
+    };
     function localSearchNodes(v) {
       if (!graphData || !Array.isArray(graphData.nodes)) return [];
       const query = v.toLowerCase().trim();
       if (query.length < 2) return [];
       const hits = [];
       for (const node of graphData.nodes) {
-        const text = ((node.label || node.name || '') + ' ' + (node.id || '')).toLowerCase();
-        const words = text.split(/[^a-z0-9]+/);
-        const weight = words.includes(query) ? 3 : words.some((w) => w.startsWith(query)) ? 2 : text.includes(query) ? 1 : 0;
+        // Label + id; thing mode adds each fact's label/text, legacy mode the full fact text.
+        let weight = wordRank((node.label || node.name || '') + ' ' + (node.id || ''), query);
+        let matchedFid = null;
+        if (Array.isArray(node.facts)) {
+          let best = 0;
+          for (const f of node.facts) {
+            const fs = wordRank((f.label || '') + ' ' + (f.text || '') + ' ' + (f.id || ''), query);
+            if (fs > best) { best = fs; matchedFid = String(f.id); }
+          }
+          weight = Math.max(weight, best);
+        } else if (node.text && weight < 3) {
+          weight = Math.max(weight, wordRank(node.text, query));
+        }
         if (weight > 0) {
           const out = { id: node.id, label: node.label || node.name || node.id };
           out.score = weight;
+          if (matchedFid) out.matchedFid = matchedFid;
           hits.push({ raw: node, out });
         }
       }
@@ -805,7 +830,8 @@ function expandQueryVariants(q, groups) {
       const query = v.toLowerCase().trim();
       if (query.length < 2) return [];
       const fm = query.match(/^f-?(\d+)$/);
-      const fid = fm ? 'F-' + fm[1] : null;
+      let fid = fm ? 'F-' + fm[1] : null;
+      if (fid) fid = thingOfFid(fid).toUpperCase();
       const labelOf = (id) => {
         const lid = String(id).toLowerCase();
         const n = (graphData.nodes || []).find((x) => String(x.id).toLowerCase() === lid);
@@ -965,6 +991,7 @@ function expandQueryVariants(q, groups) {
       pairedCensus = null;
     }
     renderRecordCard();
+    if (typeof kbRenderDashboard === 'function') kbRenderDashboard();
   }
 
   // Shared live-state with the paired census's active facts stamped on, so the HUD can trust st.facts.
@@ -1315,6 +1342,22 @@ function expandQueryVariants(q, groups) {
       init.body = JSON.stringify(body);
     }
     return fetch(base + '/thread', init);
+  }
+
+  // God-thread op transport: POST {op,node,title,text,order} stages a proposal; GET with an
+  // opId string reads its status. Same base and null-without-token rule as threadBox.
+  async function threadOpBox(method, body) {
+    if (!portalToken) return null;
+    const base = liveApiBase();
+    if (!base) return null;
+    const init = { credentials: 'omit', cache: 'no-store' };
+    if (method) init.method = method;
+    if (method === 'GET') return fetch(base + '/thread-op?id=' + encodeURIComponent(String(body || '')), init);
+    if (body !== undefined) {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify(body);
+    }
+    return fetch(base + '/thread-op', init);
   }
 
   async function fetchLiveState() {
@@ -4307,18 +4350,22 @@ function expandQueryVariants(q, groups) {
   }
 
   // ==== KB:begin ====
-  // Knowledge Base booklet view. Text only: sections render via textContent.
+  // Knowledge Base booklet view. Text only: sections render as DOM built with el() (textContent children).
   // Gate: the button is revealed after graphData = data in loadGraph; the
   // published knowledge-base.json wears the graph's AES-GCM envelope and is
   // decrypted here with sessionDataKey. Nothing is stored; wipeSession resets.
   let kbSections = null;   // cached [{id,title,body}], in memory only
   let kbLastId = null;     // last viewed section id, in memory only
   let kbGen = 0;           // bumped on reset so late async results are dropped
+  let kbLiveState = null;  // last live state seen by the dashboard, in memory only
 
   function kbReset() {
     kbGen++;
     kbSections = null;
     kbLastId = null;
+    kbLiveState = null;
+    const dash = $('#kb-dash');
+    if (dash) { dash.textContent = ''; dash.hidden = true; }
     const panel = $('#kb-panel');
     if (panel) panel.hidden = true;
     const body = $('#kb-body');
@@ -4353,14 +4400,114 @@ function expandQueryVariants(q, groups) {
     const sec = (kbSections || []).find((x) => x.id === id) || (kbSections || [])[0];
     if (!sec) return;
     kbLastId = sec.id;
+    const body = $('#kb-body');
+    body.textContent = '';
+    body.append(kbRenderMarkdown(sec.body));
+    body.scrollTop = 0;
     for (const b of $('#kb-nav').children) {
       const on = b.dataset.id === sec.id;
       b.classList.toggle('active', on);
       if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
     }
-    const body = $('#kb-body');
-    body.textContent = sec.body;
-    body.scrollTop = 0;
+  }
+
+  // Line-oriented markdown subset -> DOM via el(). Text children only; any
+  // construct left open at end of input is closed by the block that owns it.
+  function kbRenderMarkdown(src) {
+    const frag = document.createDocumentFragment();
+    // Strip HTML comments (a trailing unclosed comment drops to end of input).
+    const text = String(src).replace(/<!--[\s\S]*?-->/g, '').replace(/<!--[\s\S]*$/, '');
+    const lines = text.split(/\r?\n/);
+    const INLINE = /`([^`]+)`|\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*|\[([^\]]+)\]\(([^)\s]+)\)/;
+
+    // Only these URL schemes become links; anything else (javascript:, data:, ...) stays plain text.
+    function safeHref(u) {
+      const url = String(u).trim();
+      return /^(https:|http:|mailto:)/i.test(url) && !/^javascript:/i.test(url) ? url : null;
+    }
+
+    function inline(s) {
+      const out = [];
+      let rest = s;
+      while (rest) {
+        const m = INLINE.exec(rest);
+        if (!m) { out.push(rest); break; }
+        if (m.index) out.push(rest.slice(0, m.index));
+        if (m[1] !== undefined) out.push(el('code', {}, m[1]));
+        else if (m[2] !== undefined) out.push(el('strong', {}, ...inline(m[2])));
+        else if (m[3] !== undefined) out.push(el('em', {}, ...inline(m[3])));
+        else {
+          const href = safeHref(m[5]);
+          if (href) out.push(el('a', { href, rel: 'noopener noreferrer', target: '_blank' }, ...inline(m[4])));
+          else out.push(m[4] + ' (' + m[5] + ')');
+        }
+        rest = rest.slice(m.index + m[0].length);
+      }
+      return out;
+    }
+
+    const isFence = (l) => /^\s*```/.test(l);
+    const isHr = (l) => /^\s*([-*_])(\s*\1)+\s*$/.test(l) && l.replace(/\s/g, '').length > 2;
+    const isHead = (l) => /^#+\s+\S/.test(l);
+    const isQuote = (l) => /^\s*>/.test(l);
+    const isUl = (l) => /^\s*[-*+]\s+\S/.test(l);
+    const isOl = (l) => /^\s*\d+[.)]\s+\S/.test(l);
+    const isSep = (l) => /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(l) && l.includes('-') && l.includes('|');
+    const isTableStart = (i) => lines[i].includes('|') && i + 1 < lines.length && isSep(lines[i + 1]);
+    const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    const blockStart = (i) => {
+      const l = lines[i];
+      return isFence(l) || isHr(l) || isHead(l) || isQuote(l) || isUl(l) || isOl(l) || isTableStart(i);
+    };
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) { i++; continue; }
+      if (isFence(line)) {
+        const buf = [];
+        i++;
+        while (i < lines.length && !isFence(lines[i])) buf.push(lines[i++]);
+        i++; // closing fence, or past the end when it was never closed
+        frag.append(el('pre', { class: 'kb-pre' }, el('code', {}, buf.join('\n'))));
+      } else if (isHead(line)) {
+        const m = /^(#+)\s+(.*)$/.exec(line);
+        const kids = inline(m[2].replace(/\s+#+\s*$/, ''));
+        frag.append(m[1].length === 1 ? el('h1', {}, ...kids) : m[1].length === 2 ? el('h2', {}, ...kids) : el('h3', {}, ...kids));
+        i++;
+      } else if (isHr(line)) {
+        frag.append(el('hr'));
+        i++;
+      } else if (isTableStart(i)) {
+        const head = cells(line);
+        const tbody = el('tbody');
+        i += 2;
+        while (i < lines.length && lines[i].trim() && lines[i].includes('|')) {
+          const row = cells(lines[i++]);
+          tbody.append(el('tr', {}, ...head.map((_, c) => el('td', {}, ...inline(row[c] || '')))));
+        }
+        const thead = el('thead', {}, el('tr', {}, ...head.map((h) => el('th', {}, ...inline(h)))));
+        frag.append(el('div', { class: 'kb-table-wrap' }, el('table', { class: 'kb-table' }, thead, tbody)));
+      } else if (isQuote(line)) {
+        const buf = [];
+        while (i < lines.length && isQuote(lines[i])) buf.push(lines[i++].replace(/^\s*>\s?/, ''));
+        frag.append(el('blockquote', {}, ...inline(buf.join(' ').trim())));
+      } else if (isUl(line) || isOl(line)) {
+        const ordered = isOl(line);
+        const list = ordered ? el('ol') : el('ul');
+        while (i < lines.length && (ordered ? isOl(lines[i]) : isUl(lines[i]))) {
+          list.append(el('li', {}, ...inline(lines[i].replace(/^\s*(?:[-*+]|\d+[.)])\s+/, ''))));
+          i++;
+        }
+        frag.append(list);
+      } else {
+        const buf = [line.trim()];
+        i++;
+        while (i < lines.length && lines[i].trim() && !blockStart(i)) buf.push(lines[i++].trim());
+        frag.append(el('p', {}, ...inline(buf.join(' '))));
+      }
+    }
+    return frag;
   }
 
   function kbRenderNav() {
@@ -4380,6 +4527,169 @@ function expandQueryVariants(q, groups) {
   function kbUnavailable() {
     $('#kb-nav').textContent = '';
     $('#kb-body').textContent = 'Knowledge Base unavailable';
+    const d = $('#kb-dash');
+    if (d) { d.textContent = ''; d.hidden = true; }
+  }
+
+  // Pure view model for the dashboard: reads each value from its one source.
+  function kbDashboardModel(graph, census, st) {
+    const num = (x) => (typeof x === 'number' && Number.isFinite(x)) ? x : null;
+    if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return null;
+    const total = graph.edges.length;
+    const counts = new Map();
+    for (const edge of graph.edges) {
+      const t = (edge && typeof edge.type === 'string') ? edge.type : null;
+      if (t !== null) counts.set(t, (counts.get(t) || 0) + 1);
+    }
+    const kinds = Array.from(counts, ([type, n]) => ({ type, n }))
+      .sort((a, b) => (b.n - a.n) || (a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
+    const domain = counts.get('DOMAIN') || 0;
+    const semantic = kinds.reduce((s, k) => (k.type !== 'DOMAIN' ? s + k.n : s), 0);
+    const relations = { total, domain, semantic, untyped: total - domain - semantic, kinds };
+
+    let facts = null;
+    const cf = census && census.facts;
+    if (cf && num(cf.total) !== null && num(cf.live) !== null
+        && num(cf.superseded) !== null && num(cf.dormant) !== null) {
+      facts = {
+        total: cf.total, live: cf.live, superseded: cf.superseded, dormant: cf.dormant,
+        contested: num(cf.contested),
+        things: census.graph ? num(census.graph.things) : null,
+        factsInThings: census.graph ? num(census.graph.factsInThings) : null,
+        coreFacts: census.graph ? num(census.graph.coreFacts) : null,
+      };
+    }
+
+    const flow = [
+      { id: 'capture', label: 'Capture',
+        note: 'Notes arrive in the inbox before anything else happens.', stat: null },
+      { id: 'gate', label: 'Write gate',
+        note: 'A fact needs specificity, a source and at least one relation, or it waits.',
+        stat: (st && num(st.inbox) !== null) ? [{ n: st.inbox, text: 'in gate queue' }] : null },
+      { id: 'merge', label: 'Consolidation',
+        note: 'Duplicates merge and stale facts retire to the backend. Stored facts are never deleted.',
+        stat: null },
+      { id: 'graph', label: 'Graph',
+        note: 'One node per thing, with its facts inside it.',
+        stat: [{ n: graph.nodes.length, text: 'nodes' }, { n: graph.edges.length, text: 'relations' }] },
+      { id: 'ask', label: 'Ask',
+        note: 'Retrieval reads the live fact pool, and answers cite the facts they used.',
+        stat: null },
+    ];
+
+    const loop = (st && num(st.beat) !== null) ? {
+      beat: st.beat,
+      lastThink: (st.core && typeof st.core.last_think === 'string') ? st.core.last_think : null,
+      openQuestions: st.core ? num(st.core.open_questions) : null,
+      ts: (typeof st.ts === 'string') ? st.ts : null,
+    } : null;
+
+    const sh = st && st.health;
+    const health = (sh && typeof sh === 'object') ? {
+      backendUptimeS: num(sh.backend_uptime_s),
+      syncKnown: sh.sync_age_s !== undefined,
+      syncAgeS: num(sh.sync_age_s),
+      training: (sh.training && typeof sh.training.stamp === 'string' && sh.training.stamp) ? {
+        stamp: sh.training.stamp,
+        gate: (typeof sh.training.gate === 'string') ? sh.training.gate : null,
+        wired: sh.training.wired === true,
+      } : null,
+    } : null;
+
+    return { flow, loop, facts, relations, health, hasLiveState: !!st };
+  }
+
+  function kbRenderDashboard() {
+    const dash = $('#kb-dash');
+    if (!dash) return;
+    const m = kbDashboardModel(graphData, pairedCensus, kbLiveState);
+    dash.textContent = '';
+    if (!m) { dash.hidden = true; return; }
+    dash.hidden = false;
+    const ageOf = (iso) => {
+      const t = Date.parse(iso);
+      return Number.isFinite(t) ? fmtFreshAge(Date.now() - t) : null;
+    };
+    const block = (title, ...kids) => el('div', { class: 'kb-dash-block' },
+      el('div', { class: 'kb-dash-block-title' }, title), ...kids);
+
+    dash.append(el('h3', {}, 'How the brain works, right now'));
+
+    dash.append(el('div', { class: 'kb-dash-flow' }, ...m.flow.map((s) => el('div', { class: 'kb-dash-stage' },
+      el('div', { class: 'kb-dash-stage-label' }, s.label),
+      s.stat ? el('div', { class: 'kb-dash-stat' },
+        s.stat.map((seg) => nf.format(seg.n) + ' ' + seg.text).join(' · ')) : null,
+      el('div', { class: 'kb-dash-note' }, s.note)))));
+
+    if (kbLiveState) {
+      if (m.loop) {
+        const parts = ['beat ' + m.loop.beat];
+        const think = m.loop.lastThink ? ageOf(m.loop.lastThink) : null;
+        if (think) parts.push('last think ' + think);
+        if (m.loop.openQuestions !== null) parts.push(nf.format(m.loop.openQuestions) + ' open questions');
+        const data = m.loop.ts ? ageOf(m.loop.ts) : null;
+        if (data) parts.push('data ' + data);
+        dash.append(block('The loop',
+          el('div', { class: 'kb-dash-line' }, 'Reading · Flagging · Traversing · Updating'),
+          el('div', { class: 'kb-dash-line' }, parts.join(' · '))));
+      } else {
+        dash.append(block('The loop',
+          el('div', { class: 'kb-dash-line' }, 'Loop state is not in the saved state.')));
+      }
+    }
+
+    if (m.facts) {
+      const f = m.facts;
+      const pair = (k, v) => el('span', {}, el('span', { class: 'kb-dash-k' }, k), nf.format(v));
+      const stats = [pair('Total', f.total), pair('Live', f.live),
+        pair('Superseded', f.superseded), pair('Dormant', f.dormant)];
+      if (f.contested !== null) stats.push(pair('Contested', f.contested));
+      const extra = [];
+      if (f.factsInThings !== null && f.things !== null) {
+        extra.push(nf.format(f.factsInThings) + ' facts inside ' + nf.format(f.things) + ' things');
+      }
+      if (f.coreFacts !== null) extra.push('core holds ' + nf.format(f.coreFacts) + ' facts');
+      dash.append(block('Facts',
+        el('div', { class: 'kb-dash-stats' }, ...stats),
+        extra.length ? el('div', { class: 'kb-dash-line' }, extra.join(' · ')) : null));
+    }
+
+    const chips = m.relations.kinds.map((k) => el('span', { class: 'kb-dash-chip' }, k.type + ' ' + nf.format(k.n)));
+    if (m.relations.untyped > 0) {
+      chips.push(el('span', { class: 'kb-dash-chip' }, 'untyped ' + nf.format(m.relations.untyped)));
+    }
+    dash.append(block('Relations by kind', el('div', { class: 'kb-dash-chips' }, ...chips)));
+
+    if (kbLiveState) {
+      if (m.health) {
+        const h = m.health;
+        const rows = [];
+        if (h.backendUptimeS !== null) {
+          let up = 'Backend up ' + fmtFreshAge(h.backendUptimeS * 1000).replace(/ old$/, '');
+          const asOf = (m.loop && m.loop.ts) ? ageOf(m.loop.ts) : null;
+          if (asOf) up += ' · as of data ' + asOf;
+          rows.push(up);
+        }
+        if (h.syncKnown) {
+          rows.push(h.syncAgeS === null ? 'Sync: no relay contact yet'
+            : 'Sync: last relay ' + fmtFreshAge(h.syncAgeS * 1000));
+        }
+        if (h.training) {
+          const g = h.training.gate;
+          rows.push('GPU training: last run ' + h.training.stamp + (g
+            ? ' · gate ' + g + (h.training.wired ? ' · wired live' : g === 'pass' ? '' : ' · incumbent kept')
+            : ''));
+        }
+        dash.append(block('System health', ...rows.map((r) => el('div', { class: 'kb-dash-line' }, r))));
+      } else {
+        dash.append(block('System health',
+          el('div', { class: 'kb-dash-line' }, 'System health detail travels with the live connection; it is not part of the saved state.')));
+      }
+    }
+
+    dash.append(el('div', { class: 'kb-dash-source' }, kbLiveState
+      ? 'Every number here comes from the graph, the census and the live state this portal already loaded.'
+      : 'Live state unavailable. The counts here come from the loaded graph and its paired census.'));
   }
 
   async function kbRefreshLive(gen) {
@@ -4392,6 +4702,8 @@ function expandQueryVariants(q, groups) {
     line.textContent = Number.isFinite(t)
       ? 'live · data ' + fmtFreshAge(Date.now() - t)
       : 'live status unavailable';
+    kbLiveState = st;
+    kbRenderDashboard();
   }
 
   async function openKb() {
@@ -4416,6 +4728,7 @@ function expandQueryVariants(q, groups) {
     kbShowSection(kbLastId);
     panel.hidden = false;
     $('#close-kb').focus();
+    kbRenderDashboard();
     kbRefreshLive(gen);
   }
 
@@ -4563,10 +4876,7 @@ function expandQueryVariants(q, groups) {
   // The ticker names its stage explicitly (same boundaries as progressWords),
   // so the main path never depends on matching caption copy.
   askBar.progressStage = function (elapsedMs) {
-    const ms = Math.max(0, Number(elapsedMs) || 0);
-    if (ms >= 30000) return 'checking';
-    if (ms >= 4000) return 'thinking';
-    return 'reading';
+    return 'working';
   };
 
   askBar.setCaption = function (text, withDot, stageKey) {
@@ -4628,7 +4938,8 @@ function expandQueryVariants(q, groups) {
     const hitRows = (body.retrieval_debug && Array.isArray(body.retrieval_debug.hits)) ? body.retrieval_debug.hits : [];
     const hitSet = new Set(hitRows.map((h) => h && h.fid));
     const earlier = Number(body.retrieval_debug && body.retrieval_debug.history_turns) || 0;
-    askBar.setCaption('looked at ' + hitRows.length + ' notes' + (earlier > 0 ? ' · answered with ' + earlier + ' earlier turn' + (earlier === 1 ? '' : 's') + ' in mind' : ''), false);
+    const timingLine = askBar.stageLine(body.timings);
+    askBar.setCaption('looked at ' + hitRows.length + ' notes' + (earlier > 0 ? ' · answered with ' + earlier + ' earlier turn' + (earlier === 1 ? '' : 's') + ' in mind' : '') + (timingLine ? ' · ' + timingLine : ''), false);
     $('#askbar-answer').textContent = body.answer;
     $('#askbar-thinker').textContent = ASK_THINKER_WORDS;
     const warnList = $('#askbar-warnings');
@@ -4718,6 +5029,8 @@ function expandQueryVariants(q, groups) {
     const input = $('#askbar-input');
     const question = String(input.value || '').trim();
     if (!question) { askBar.showWords(ASK_REFUSAL_WORDS.empty_question); return; }
+    const parsedOp = askBar.parseThreadOp(question);
+    if (parsedOp) { await askBar.submitOp(question, parsedOp); return; }
     askBar.busy = true;
     askBar.refresh();
     const sentQuote = askBar.quote ? { question: askBar.quote.question, answer: askBar.quote.answer } : null;
@@ -4761,6 +5074,49 @@ function expandQueryVariants(q, groups) {
     input.value = '';
     askBar.onInput();
     askBar.onResponse(ok, body);
+  };
+
+  // An /op order never reaches the ask path. A parse error is a plain refusal turn; a valid
+  // op is staged through the box and recorded with whatever the box really said.
+  askBar.submitOp = async function (question, parsed) {
+    const input = $('#askbar-input');
+    const sentQuote = askBar.quote ? { question: askBar.quote.question, answer: askBar.quote.answer } : null;
+    askBar.busy = true;
+    askBar.refresh();
+    askBar.beginTurn(question, sentQuote);
+    askBar.openPanel();
+    if (parsed.error) {
+      askBar.showWords(parsed.error);
+      askBar.completeTurn({ kind: 'refusal' });
+    } else {
+      const op = { opId: '', op: parsed.op, node: parsed.node || null, title: parsed.title || null, text: parsed.text, state: 'refused' };
+      let words = 'the brain is unreachable — nothing was staged';
+      try {
+        const res = await threadOpBox('POST', { op: parsed.op, node: parsed.node, title: parsed.title, text: parsed.text, order: question });
+        if (res) {
+          let body = null;
+          try { body = await res.json(); } catch (e) { body = null; }
+          if (res.ok && body && typeof body.opId === 'string' && /^[A-Za-z0-9-]{8,64}$/.test(body.opId)) {
+            op.opId = body.opId;
+            op.state = 'proposed';
+            const g = body.gate;
+            if (g && typeof g === 'object' && typeof g.pass === 'boolean' && Array.isArray(g.codes)) op.gate = { pass: g.pass, codes: g.codes.filter((c) => typeof c === 'string') };
+            words = askBar.opStatusLine(op);
+          } else {
+            words = (body && typeof body.error === 'string' && body.error) ? body.error : 'the brain did not accept the op — nothing was staged';
+            if (body && typeof body.retry_after_ms === 'number') words += ' Try again in ' + Math.ceil(body.retry_after_ms / 1000) + 's.';
+          }
+        }
+      } catch (e) { /* words stay the unreachable line */ }
+      if (!op.opId) op.opId = askBar.newThreadId();
+      askBar.showWords(words);
+      askBar.completeTurn({ kind: 'op', answer: words, op: op });
+    }
+    askBar.busy = false;
+    askBar.refresh();
+    input.value = '';
+    askBar.onInput();
+    askBar.clearQuote();
   };
 
   // The only function that lights nodes. A refusal or failure plans nothing,
@@ -4827,13 +5183,60 @@ function expandQueryVariants(q, groups) {
     askBar.schedulePush();
   };
 
+  // The /op command grammar. null = not an op (ask path); {error} = a malformed op, which
+  // must never fall through to the ask path; otherwise the structured op.
+  askBar.parseThreadOp = function (text) {
+    const t = String(text || '').trim();
+    if (!/^\/op(\s|$)/.test(t)) return null;
+    // Results share askBar's prototype so they compare equal across realms (the test harness).
+    const mk = (o) => Object.setPrototypeOf(o, Object.getPrototypeOf(askBar));
+    const forms = ' Use "/op add <nodeId> <text>" or "/op create <title> :: <text>".';
+    const rest = t.slice(3).trim();
+    const verb = rest.split(/\s+/)[0];
+    const args = rest.slice(verb.length).trim();
+    if (verb === 'add') {
+      const node = args.split(/\s+/)[0];
+      const body = args.slice(node.length).trim();
+      if (!node || !body) return mk({ error: 'An add op needs a node id and the text to add.' + forms });
+      return mk({ op: 'add', node: node, text: body });
+    }
+    if (verb === 'create') {
+      const i = args.indexOf('::');
+      const title = i === -1 ? '' : args.slice(0, i).trim();
+      const body = i === -1 ? '' : args.slice(i + 2).trim();
+      if (!title || !body) return mk({ error: 'A create op needs a title, then "::", then the text.' + forms });
+      return mk({ op: 'create', title: title, text: body });
+    }
+    return mk({ error: (verb ? 'Unknown op "' + verb.slice(0, 40) + '".' : 'An op needs a verb.') + forms });
+  };
+
+  // Status lines never claim more than the state verifies.
+  askBar.opStatusLine = function (op) {
+    const where = op.op === 'create' ? 'a new note "' + (op.title || '') + '"' : (op.node || 'the node');
+    if (op.state === 'merged') return 'Op merged: the fact is in ' + (op.op === 'create' ? where : op.node) + '.';
+    if (op.state === 'not-applied') return 'Op not applied: the proposal was consumed without a verified match — it may have been rejected or merged in altered form.';
+    if (op.state === 'proposed') {
+      const flags = op.gate && op.gate.pass === false && op.gate.codes.length ? ' Pre-check flags: ' + op.gate.codes.join(', ') : '';
+      return 'Op proposed: ' + (op.op === 'create' ? 'create ' + where : 'add a fact to ' + where) + '. The write gate and the merge decide.' + flags;
+    }
+    return 'Op state: ' + op.state + '.';
+  };
+
+  askBar.ageWords = function (ts) {
+    const m = Math.max(0, Math.floor((Date.now() - ts) / 60000));
+    if (m < 1) return 'just now';
+    if (m < 60) return m + 'm ago';
+    if (m < 1440) return Math.floor(m / 60) + 'h ago';
+    return Math.floor(m / 1440) + 'd ago';
+  };
+
   // Returns a clean record or null. Only known fields survive.
   askBar.validRecord = function (r) {
     if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
     if (typeof r.question !== 'string' || typeof r.answer !== 'string') return null;
     if (!r.question && !r.answer) return null;
     const out = {
-      kind: r.kind === 'filed' || r.kind === 'refusal' || r.kind === 'brain' ? r.kind : 'ask',
+      kind: r.kind === 'filed' || r.kind === 'refusal' || r.kind === 'brain' || r.kind === 'op' ? r.kind : 'ask',
       question: r.question,
       caption: typeof r.caption === 'string' ? r.caption : '',
       answer: r.answer,
@@ -4857,6 +5260,26 @@ function expandQueryVariants(q, groups) {
     }
     if (typeof r.id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(r.id)) out.id = r.id;
     if (typeof r.ts === 'number' && isFinite(r.ts) && r.ts > 0) out.ts = r.ts;
+    if (r.kind === 'op') {
+      const o = r.op;
+      if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+      if (typeof o.opId !== 'string' || !/^[A-Za-z0-9-]{8,64}$/.test(o.opId)) return null;
+      if (o.op !== 'add' && o.op !== 'create') return null;
+      if (['proposed', 'merged', 'not-applied', 'unknown', 'refused', 'gate-refused'].indexOf(o.state) === -1) return null;
+      const caps = { node: 200, title: 200, text: 4000 };
+      const op = { opId: o.opId, op: o.op, state: o.state };
+      for (const k of ['node', 'title', 'text']) {
+        const v = o[k];
+        if (v === null || v === undefined) op[k] = null;
+        else if (typeof v === 'string' && v.length <= caps[k]) op[k] = v;
+        else return null;
+      }
+      const g = o.gate;
+      if (g && typeof g === 'object' && typeof g.pass === 'boolean' && Array.isArray(g.codes)) {
+        op.gate = { pass: g.pass, codes: g.codes.filter((c) => typeof c === 'string').map((c) => c.slice(0, 64)).slice(0, 20) };
+      }
+      out.op = op;
+    }
     if (typeof r.source === 'string' && r.source) out.source = r.source.slice(0, 40);
     if (r.filedThis === true) out.filedThis = true;
     return out;
@@ -4938,6 +5361,8 @@ function expandQueryVariants(q, groups) {
       let body = null;
       try { body = await res.json(); } catch (e) { return; }
       askBar.threadSynced = true;
+      if (body && typeof body.dropped_total === 'number' && isFinite(body.dropped_total)) askBar.droppedTotal = Math.max(0, Math.floor(body.dropped_total));
+      askBar.renderDroppedNotice();
       let remote = (body && Array.isArray(body.records)) ? body.records.map((r) => askBar.validRecord(r)).filter(Boolean) : [];
       const clearedAt = Math.max((body && typeof body.cleared_at === 'number') ? body.cleared_at : 0, askBar.clearedAt || 0);
       let local = askBar.thread;
@@ -4955,7 +5380,52 @@ function expandQueryVariants(q, groups) {
       const remoteIds = {};
       remote.forEach((r) => { if (r.id) remoteIds[r.id] = true; });
       if (merged.some((r) => r.id && !remoteIds[r.id])) askBar.pushThread();
+      await askBar.refreshOps();
     })();
+  };
+
+  // One small line above the thread when the 500-turn cap has trimmed older turns.
+  askBar.droppedTotal = 0;
+  askBar.renderDroppedNotice = function () {
+    const box = $('#askbar-thread');
+    if (!box || !box.parentNode) return;
+    let n = document.getElementById('askbar-thread-dropped');
+    if (!(askBar.droppedTotal > 0)) { if (n && n.parentNode) n.parentNode.removeChild(n); return; }
+    if (!n) {
+      n = document.createElement('p');
+      n.id = 'askbar-thread-dropped';
+      n.className = 'askbar-turn-caption';
+      box.parentNode.insertBefore(n, box);
+    }
+    n.textContent = askBar.droppedTotal + ' older turns are not kept — the thread holds the newest 500.';
+  };
+
+  // Re-ask the box about recent proposed ops (a handful, sequential, failures ignored).
+  // Terminal states are never re-queried.
+  askBar.refreshOps = async function () {
+    if (typeof threadOpBox !== 'function') return;
+    const cutoff = Date.now() - 7 * 24 * 3600 * 1000;
+    const pending = askBar.thread.filter((r) => r.kind === 'op' && r.op && r.op.state === 'proposed' && (r.ts || 0) > cutoff).slice(-5);
+    let changed = false;
+    for (const rec of pending) {
+      try {
+        const res = await threadOpBox('GET', rec.op.opId);
+        if (!res || !res.ok) continue;
+        const st = await res.json();
+        const states = ['merged', 'not-applied', 'unknown'];
+        if (!st || states.indexOf(st.state) === -1 || st.state === rec.op.state) continue;
+        rec.op.state = st.state;
+        rec.answer = askBar.opStatusLine(rec.op);
+        changed = true;
+      } catch (e) { /* failures are ignored; the next sync retries */ }
+    }
+    if (!changed) return;
+    askBar.saveThread();
+    const box = $('#askbar-thread');
+    if (box) {
+      box.textContent = '';
+      askBar.thread.forEach((r) => { if (r.archived) box.appendChild(askBar.buildArchivedTurn(r)); });
+    }
   };
 
   // ---- quote-reply: pick up any earlier turn and ask in its context
@@ -5061,6 +5531,14 @@ function expandQueryVariants(q, groups) {
     if (rec.kind === 'brain') add('p', 'askbar-turn-brain', 'Demand from the brain');
     if (rec.question) add('p', 'askbar-turn-q', rec.question);
     if (rec.caption) add('p', 'askbar-turn-caption', rec.caption);
+    if (rec.kind === 'op' && rec.op) {
+      add('p', 'askbar-turn-caption', rec.op.op === 'create' ? 'Create note: ' + (rec.op.title || '') : 'Add to: ' + (rec.op.node || ''));
+      if (rec.op.text) add('p', 'askbar-turn-answer', rec.op.text);
+      add('p', 'askbar-turn-caption', rec.answer);
+      if (rec.op.state === 'proposed' && rec.ts) add('p', 'askbar-turn-caption', 'proposed ' + askBar.ageWords(rec.ts) + ' — waiting for the merge');
+      addQuoteBtn();
+      return turn;
+    }
     if (rec.kind === 'filed') {
       const line = add('p', 'askbar-turn-answer', '');
       askBar.fillFiledLine(line, rec);
@@ -5125,13 +5603,26 @@ function expandQueryVariants(q, groups) {
     askBar.closePanel();
   };
 
-  // ---- staged progress: words follow the real pipeline order, the stage boundaries
-  // are elapsed-time guesses, not signals from the brain.
+  // ---- progress: one truthful in-flight caption. The brain reports real stage timings
+  // only once the turn is done (stageLine); nothing is claimed about stages while waiting.
+  askBar.stageLine = function (timings) {
+    if (!timings || typeof timings !== 'object') return '';
+    const num = (v) => (typeof v === 'number' && isFinite(v) && v >= 0 ? v : null);
+    const secs = (ms) => (ms / 1000).toFixed(1) + 's';
+    const retrieval = num(timings.retrieval_ms);
+    const pe = num(timings.prompt_eval_ms);
+    const ev = num(timings.eval_ms);
+    const total = num(timings.total_ms);
+    const parts = [];
+    if (retrieval !== null) parts.push('Read the notes in ' + secs(retrieval));
+    if (pe !== null || ev !== null) parts.push('thought for ' + secs((pe || 0) + (ev || 0)));
+    if (total !== null && parts.length) parts.push(secs(total) + ' in all');
+    return parts.join(' · ');
+  };
+
   askBar.progressWords = function (elapsedMs) {
     const ms = Math.max(0, Number(elapsedMs) || 0);
-    let words = 'Now working — looking through the notes…';
-    if (ms >= 30000) words = 'Now working — checking the answer against the notes…';
-    else if (ms >= 4000) words = 'Now working — the small local model is thinking…';
+    let words = 'Now working';
     if (ms >= 6000) words += ' · ' + Math.floor(ms / 1000) + 's';
     return words;
   };

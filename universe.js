@@ -19,6 +19,33 @@ function searchRankOf(node) {
   const t = String(node.name || node.label || '');
   return t.startsWith('[total-echo') ? 1 : 0;
 }
+/**
+ * Dual-mode graph helpers. Thing graphs carry facts[] on each page node plus a
+ * top-level redirects map {supersededFid: successorFid}; fact graphs carry one
+ * node per fact. Twin of the helpers in app.js.
+ */
+function buildFactIndex(graph) {
+  const byFact = new Map();
+  for (const n of graph && Array.isArray(graph.nodes) ? graph.nodes : []) {
+    if (!n || n.id == null || !Array.isArray(n.facts)) continue;
+    for (const f of n.facts) if (f && f.id != null) byFact.set(String(f.id), String(n.id));
+  }
+  const redirects = graph && graph.redirects && typeof graph.redirects === 'object' ? graph.redirects : {};
+  return { byFact, redirects };
+}
+/** Follow redirects first (superseded -> successor), then map the fact to its thing (null in legacy mode). */
+function resolveFactId(index, id) {
+  let fid = String(id);
+  const seen = new Set();
+  while (index.redirects[fid] != null && !seen.has(fid)) { seen.add(fid); fid = String(index.redirects[fid]); }
+  return { fid, thing: index.byFact.get(fid) || null };
+}
+/** Word-boundary match weight: exact word 3 > prefix 2 > substring 1 > none 0. */
+function matchScore(text, query) {
+  const t = String(text || '').toLowerCase();
+  const words = t.split(/[^a-z0-9]+/);
+  return words.includes(query) ? 3 : words.some((w) => w.startsWith(query)) ? 2 : t.includes(query) ? 1 : 0;
+}
 (function () {
   'use strict';
 
@@ -106,11 +133,13 @@ function searchRankOf(node) {
     'ENABLES': '#2ed573',
     'BLOCKS': '#d63031',
     'REFINES': '#48dbfb',
+    'EXTENDS': '#00cec9',
     'SUPPORTS': '#1dd1a1',
     'CHALLENGES': '#feca57',
     'CONTRADICTS': '#ff4d94',
     'INSTANCE': '#a29bfe',
     'COMPONENT': '#74b9ff',
+    'UPDATES': '#c56cf0',
     'DOMAIN': '#eaf6ff', // visual scaffolding: core -> hub -> facts (his call 2026-10-17)
   };
   const TYPES = Object.keys(TYPE_COLORS);
@@ -144,6 +173,8 @@ function searchRankOf(node) {
     if (!S || !S.graph || id == null) return null;
     return S.graph.graphData().nodes.find((x) => String(x.id) === String(id)) || null;
   }
+  // thing id -> fact id that matched the last search / citation (highlighted in the panel essay view)
+  const factHint = new Map();
   function linkNode(e) {
     if (!e) return null;
     return (typeof e === 'object') ? e : nodeById(e);
@@ -386,6 +417,10 @@ function searchRankOf(node) {
         status: String(n.status || ''),
         date: String(n.date || ''),
         cmt: String(n.cmt || ''), // fact.v2 share-time comment; not rendered yet
+        text: typeof n.text === 'string' ? n.text : '', // full fact text (legacy fact nodes; '' when the label is the whole text)
+        facts: Array.isArray(n.facts) ? n.facts.filter((f) => f && f.id != null).map((f) => ({
+          id: String(f.id), label: String(f.label || ''), text: String(f.text || ''), date: String(f.date || ''),
+        })) : null, // thing nodes: the facts the page carries (essay view)
         x: c.x * 0.25 + gR * Math.sin(ph) * Math.cos(th) + (hash01(id + ':x') - 0.5) * SEED_J,
         y: c.y * 0.25 + gR * Math.sin(ph) * Math.sin(th) + (hash01(id + ':y') - 0.5) * SEED_J,
         z: c.z * 0.25 + gR * Math.cos(ph) + (hash01(id + ':z') - 0.5) * SEED_J,
@@ -443,7 +478,7 @@ function searchRankOf(node) {
     const coreFacts = Array.isArray(data && data.coreFacts)
       ? data.coreFacts.filter((f) => f && f.id && f.text).map((f) => ({ id: String(f.id), text: String(f.text), date: String(f.date || '') }))
       : [];
-    return { nodes, byId, edges, adj, coreId, coreFacts };
+    return { nodes, byId, edges, adj, coreId, coreFacts, factIndex: buildFactIndex(data) };
   }
 
   // Kinds to lay out / list: registry kinds in slot order, then graph kinds the registry lacks (alphabetical).
@@ -792,6 +827,21 @@ function searchRankOf(node) {
     S.panelNode = node;
     panelHead('Fact ' + node.id);
     S.panel.append(h('h2', 'u-title', node.name));
+    if (node.text && node.text !== node.name) S.panel.append(h('p', 'u-muted u-fulltext', node.text));
+    if (node.facts && node.facts.length) {
+      // Thing mode: essay view, each carried fact's full text with its date and id.
+      const hint = factHint.get(String(node.id));
+      const sec = h('section', 'u-group');
+      sec.append(h('h3', 'u-group-title', 'Facts (' + node.facts.length + ')'));
+      for (const f of node.facts) {
+        const row = h('div', 'u-why');
+        if (f.id === hint) { row.style.borderLeft = '2px solid ' + kindColor(node); row.style.paddingLeft = '8px'; }
+        row.append(h('div', 'u-neighbor-dir', f.id + (f.date ? ' · ' + f.date : '')));
+        row.append(h('div', '', f.text || f.label));
+        sec.append(row);
+      }
+      S.panel.append(sec);
+    }
 
     const chips = h('div', 'u-chips');
     if (node.domain) chips.append(chip(node.domain, kindColor(node)));
@@ -2768,14 +2818,26 @@ function searchRankOf(node) {
       for (const n of S.graph.graphData().nodes) {
         const name = (n.name || '').toLowerCase();
         const id = (n.id || '').toLowerCase();
-        const text = name + ' ' + id;
-        // Check for whole-word match first.
-        const words = text.split(/[^a-z0-9]+/);
-        let score = 0;
-        if (words.includes(query)) score = 3;
-        else if (words.some((w) => w.startsWith(query))) score = 2;
-        else if (text.includes(query)) score = 1;
-        if (score > 0) results.push({ id: n.id, label: n.name || n.id, score });
+        // Check for whole-word match first (label + id).
+        let weight = matchScore(name + ' ' + id, query);
+        // Thing mode: also match each carried fact's label/text; legacy: the full fact text.
+        let matchedFid = null;
+        if (Array.isArray(n.facts)) {
+          let best = 0;
+          for (const f of n.facts) {
+            const fs = matchScore(f.label + ' ' + f.text + ' ' + f.id, query);
+            if (fs > best) { best = fs; matchedFid = f.id; }
+          }
+          weight = Math.max(weight, best);
+        } else if (n.text && weight < 3) {
+          weight = Math.max(weight, matchScore(n.text, query));
+        }
+        if (weight > 0) {
+          if (matchedFid) factHint.set(String(n.id), matchedFid);
+          const hit = { id: n.id, label: n.name || n.id, matchedFid };
+          hit.score = weight;
+          results.push(hit);
+        }
       }
       // A4: current before echo before superseded, then match quality; ties keep order.
       const byId = new Map(S.graph.graphData().nodes.map((n) => [n.id, n]));
@@ -2797,7 +2859,8 @@ function searchRankOf(node) {
         return n ? (n.name || n.label || n.id) : id;
       };
       const fidM = query.match(/^f-?(\d+)$/);
-      const fid = fidM ? 'F-' + fidM[1] : null;
+      let fid = fidM ? 'F-' + fidM[1] : null;
+      if (fid && S.data && S.data.factIndex) { const r = resolveFactId(S.data.factIndex, fid); fid = (r.thing || r.fid).toUpperCase(); }
       const results = [];
       const seen = new Set();
       for (const e of edges) {
@@ -2844,8 +2907,15 @@ function searchRankOf(node) {
   function lightCitationNodes(fids, looked) {
     if (typeof S === 'undefined' || !S || !S.live || !S.live.on || !S.graph) return false;
     clearBarGlow();
-    const resolve = (xs) => (Array.isArray(xs) ? xs : []).map(String).filter((id) => !!nodeById(id));
-    const litIds = resolve(fids);
+    // F-ids resolve through redirects first, then to their thing (legacy graphs: the fact node itself).
+    const index = S.data && S.data.factIndex;
+    const resolve = (xs, hint) => (Array.isArray(xs) ? xs : []).map(String).map((id) => {
+      if (!index) return id;
+      const r = resolveFactId(index, id);
+      if (r.thing && hint) factHint.set(r.thing, r.fid);
+      return r.thing || r.fid;
+    }).filter((id, i, a) => !!nodeById(id) && a.indexOf(id) === i);
+    const litIds = resolve(fids, true);
     const pulseIds = resolve(looked);
     for (const id of litIds.slice(0, 4)) pulseNodeRelations(id, 2);
     const settle = () => {
@@ -3651,11 +3721,25 @@ function searchRankOf(node) {
     const key = String(id);
     const now = Date.now();
     if (now - (pulseLastAt.get(key) || 0) < PULSE_NODE_COOLDOWN_MS) return 0;
-    const edges = SP.relByNode && SP.relByNode.get(key);
-    if (!edges || !edges.length) return 0;
-    pulseLastAt.set(key, now);
+    const limit = cap == null ? 4 : cap;
     let fired = 0;
-    for (const e of sparksPulsePlan(edges, cap == null ? 4 : cap)) if (fireEventPacket(e)) fired++;
+    const edges = SP.relByNode && SP.relByNode.get(key);
+    if (edges && edges.length) {
+      for (const e of sparksPulsePlan(edges, limit)) if (fireEventPacket(e)) fired++;
+    }
+    if (!fired) {
+      // Hubs, the core and relation-less facts hold only DOMAIN spokes in
+      // relByNode terms (it indexes non-DOMAIN edges only). Those spokes are
+      // their real rendered lines — the bolt system travels them — so when no
+      // typed relation fired, pulse the spokes from the full rendered index.
+      const all = SP.ctx && SP.ctx.byNode && SP.ctx.byNode.get(key);
+      if (all && all.length) {
+        const spokes = all.filter((e) => e && String(e.type || '').toUpperCase() === 'DOMAIN'
+          && String(e.source) !== String(e.target));
+        for (const e of spokes.slice(0, limit)) if (fireEventPacket(e)) fired++;
+      }
+    }
+    if (fired) pulseLastAt.set(key, now);
     return fired;
   }
 
@@ -3666,10 +3750,13 @@ function searchRankOf(node) {
     const s = String(edge.source != null ? edge.source : (edge.from != null ? edge.from : ''));
     const t = String(edge.target != null ? edge.target : (edge.to != null ? edge.to : ''));
     const type = String(edge.type || '');
-    if (!s || !t) return false;
+    if (!s || !t || s === t) return false; // a self-loop has no crossing to draw: it would never render, never finish, and squat a calm-cap slot forever
     const key = s + '|' + t + '|' + type;
     if (!SP.keys.has(key)) return false; // real rendered relation only
-    if (motion.shed >= 1) return false; // frame guard: packets stop spawning (feed/state unaffected)
+    // No fps shed here: event packets are one-shot and hard-capped below (12 / 6
+    // mobile, 60 s per relation). The v4.4 law for the storm directors — an
+    // fps-derived gate strangles firing exactly when the scene gets busy —
+    // applies to this path too; the guard still sheds ambient/storm load.
     if (SP.strikeSparks.length >= EVENT_PACKET_MAX) return false; // calm cap
     if (SP.strikeSparks.length >= packetCap()) return false; // tighter effective cap on phones (6)
     const now = Date.now();

@@ -1,244 +1,244 @@
 {
- "v": 1,
- "beat": 2221,
- "ts": "2026-11-15T16:38:24Z",
- "head": "9b3e8f9a",
- "nodes": 970,
- "inbox": 13,
- "fail": 0,
- "echo_c": 0,
- "echo_d": 0,
- "echo_touched": 0,
- "touched": [],
- "demands": [
-  "No contradictions this beat. That is the floor, not the ceiling \u2014 find the next inefficiency."
- ],
- "arrivals": [],
- "core": {
-  "focus": [
-   {
-    "label": "Works at F12.net as Project Services Specialist (between tier-3 support and compliance),\u2026",
-    "why": "the mesh keeps surfacing it (gravity 0.54)"
-   },
-   {
-    "label": "Net pay $2,248.19 bi-weekly (~$4,871/mo); RRSP employee + employer match ~$977/yr\u2026",
-    "why": "the mesh keeps surfacing it (gravity 0.51)"
-   },
-   {
-    "label": "Money target (stated 2026-10-01): fix the car, build an emergency fund, pay off credit\u2026",
-    "why": "the mesh keeps surfacing it (gravity 0.51)"
-   }
+  "v": 1,
+  "beat": 2253,
+  "ts": "2026-11-16T00:38:24Z",
+  "head": "ec3b07f9",
+  "nodes": 121,
+  "inbox": 0,
+  "fail": 0,
+  "echo_c": 0,
+  "echo_d": 0,
+  "echo_touched": 0,
+  "touched": [],
+  "demands": [
+    "No contradictions this beat. That is the floor, not the ceiling \u2014 find the next inefficiency."
   ],
-  "open_questions": 0,
-  "last_think": "2026-11-15T00:08:27.827Z"
- },
- "activity": [
-  {
-   "t": "2026-11-15T10:53:24Z",
-   "kind": "beat",
-   "beat": 2198,
-   "label": "beat 2198 \u2014 970 facts, inbox 13",
-   "fids": []
+  "arrivals": [],
+  "core": {
+    "focus": [
+      {
+        "label": "Works at F12.net as Project Services Specialist (between tier-3 support and compliance),\u2026",
+        "why": "the mesh keeps surfacing it (gravity 0.54)"
+      },
+      {
+        "label": "Net pay $2,248.19 bi-weekly (~$4,871/mo); RRSP employee + employer match ~$977/yr\u2026",
+        "why": "the mesh keeps surfacing it (gravity 0.51)"
+      },
+      {
+        "label": "Money target (stated 2026-10-01): fix the car, build an emergency fund, pay off credit\u2026",
+        "why": "the mesh keeps surfacing it (gravity 0.51)"
+      }
+    ],
+    "open_questions": 0,
+    "last_think": "2026-11-16T00:08:27.520Z"
   },
-  {
-   "t": "2026-11-15T11:08:24Z",
-   "kind": "beat",
-   "beat": 2199,
-   "label": "beat 2199 \u2014 970 facts, inbox 13",
-   "fids": []
+  "activity": [
+    {
+      "t": "2026-11-15T20:08:24Z",
+      "kind": "beat",
+      "beat": 2235,
+      "label": "beat 2235 \u2014 1093 facts, inbox 6",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T20:23:24Z",
+      "kind": "beat",
+      "beat": 2236,
+      "label": "beat 2236 \u2014 1093 facts, inbox 6",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T20:38:24Z",
+      "kind": "beat",
+      "beat": 2237,
+      "label": "beat 2237 \u2014 1093 facts, inbox 6",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T20:53:24Z",
+      "kind": "beat",
+      "beat": 2238,
+      "label": "beat 2238 \u2014 1093 facts, inbox 6",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:08:24Z",
+      "kind": "beat",
+      "beat": 2239,
+      "label": "beat 2239 \u2014 1143 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:08:24Z",
+      "kind": "demand_resolved",
+      "beat": 2239,
+      "label": "inbox cleared 6 \u2192 0 \u2014 demands settled",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:08:24Z",
+      "kind": "merge",
+      "beat": 2239,
+      "label": "mesh grew 1093 \u2192 1143 \u2014 new knowledge settled in",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:23:24Z",
+      "kind": "beat",
+      "beat": 2240,
+      "label": "beat 2240 \u2014 1143 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:38:24Z",
+      "kind": "beat",
+      "beat": 2241,
+      "label": "beat 2241 \u2014 1143 facts, inbox 2",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:53:24Z",
+      "kind": "beat",
+      "beat": 2242,
+      "label": "beat 2242 \u2014 1177 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:53:24Z",
+      "kind": "demand_resolved",
+      "beat": 2242,
+      "label": "inbox cleared 2 \u2192 0 \u2014 demands settled",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T21:53:24Z",
+      "kind": "merge",
+      "beat": 2242,
+      "label": "mesh grew 1143 \u2192 1177 \u2014 new knowledge settled in",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T22:08:24Z",
+      "kind": "beat",
+      "beat": 2243,
+      "label": "beat 2243 \u2014 1160 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T22:23:24Z",
+      "kind": "beat",
+      "beat": 2244,
+      "label": "beat 2244 \u2014 1160 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T22:38:24Z",
+      "kind": "beat",
+      "beat": 2245,
+      "label": "beat 2245 \u2014 121 facts, inbox 0 \u2014 checks failing",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T22:53:24Z",
+      "kind": "beat",
+      "beat": 2246,
+      "label": "beat 2246 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T23:08:24Z",
+      "kind": "beat",
+      "beat": 2247,
+      "label": "beat 2247 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T23:23:24Z",
+      "kind": "beat",
+      "beat": 2248,
+      "label": "beat 2248 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T23:38:24Z",
+      "kind": "beat",
+      "beat": 2249,
+      "label": "beat 2249 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-15T23:53:24Z",
+      "kind": "beat",
+      "beat": 2250,
+      "label": "beat 2250 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T00:08:24Z",
+      "kind": "beat",
+      "beat": 2251,
+      "label": "beat 2251 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T00:08:24Z",
+      "kind": "think",
+      "beat": 2251,
+      "label": "core-think: focus=none questions=+0/-0 proposals=0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T00:23:24Z",
+      "kind": "beat",
+      "beat": 2252,
+      "label": "beat 2252 \u2014 121 facts, inbox 0",
+      "fids": []
+    },
+    {
+      "t": "2026-11-16T00:38:24Z",
+      "kind": "beat",
+      "beat": 2253,
+      "label": "beat 2253 \u2014 121 facts, inbox 0",
+      "fids": []
+    }
+  ],
+  "formation": {
+    "stage": "forming",
+    "words": "the core is forming",
+    "progress_0_1": 0.25,
+    "thinks": 5,
+    "focus_stability": 0,
+    "gravity_concentration": 0.29
   },
-  {
-   "t": "2026-11-15T11:23:24Z",
-   "kind": "beat",
-   "beat": 2200,
-   "label": "beat 2200 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T11:38:24Z",
-   "kind": "beat",
-   "beat": 2201,
-   "label": "beat 2201 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T11:53:24Z",
-   "kind": "beat",
-   "beat": 2202,
-   "label": "beat 2202 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T12:08:24Z",
-   "kind": "beat",
-   "beat": 2203,
-   "label": "beat 2203 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T12:23:24Z",
-   "kind": "beat",
-   "beat": 2204,
-   "label": "beat 2204 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T12:38:24Z",
-   "kind": "beat",
-   "beat": 2205,
-   "label": "beat 2205 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T12:53:24Z",
-   "kind": "beat",
-   "beat": 2206,
-   "label": "beat 2206 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T13:08:24Z",
-   "kind": "beat",
-   "beat": 2207,
-   "label": "beat 2207 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T13:23:24Z",
-   "kind": "beat",
-   "beat": 2208,
-   "label": "beat 2208 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T13:38:24Z",
-   "kind": "beat",
-   "beat": 2209,
-   "label": "beat 2209 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T13:53:24Z",
-   "kind": "beat",
-   "beat": 2210,
-   "label": "beat 2210 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T14:08:24Z",
-   "kind": "beat",
-   "beat": 2211,
-   "label": "beat 2211 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T14:23:24Z",
-   "kind": "beat",
-   "beat": 2212,
-   "label": "beat 2212 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T14:38:24Z",
-   "kind": "beat",
-   "beat": 2213,
-   "label": "beat 2213 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T14:53:24Z",
-   "kind": "beat",
-   "beat": 2214,
-   "label": "beat 2214 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T15:08:24Z",
-   "kind": "beat",
-   "beat": 2215,
-   "label": "beat 2215 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T15:23:24Z",
-   "kind": "beat",
-   "beat": 2216,
-   "label": "beat 2216 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T15:38:24Z",
-   "kind": "beat",
-   "beat": 2217,
-   "label": "beat 2217 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T15:53:24Z",
-   "kind": "beat",
-   "beat": 2218,
-   "label": "beat 2218 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T16:08:24Z",
-   "kind": "beat",
-   "beat": 2219,
-   "label": "beat 2219 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T16:23:24Z",
-   "kind": "beat",
-   "beat": 2220,
-   "label": "beat 2220 \u2014 970 facts, inbox 13",
-   "fids": []
-  },
-  {
-   "t": "2026-11-15T16:38:24Z",
-   "kind": "beat",
-   "beat": 2221,
-   "label": "beat 2221 \u2014 970 facts, inbox 13",
-   "fids": []
+  "sync": {
+    "v": 2,
+    "at": "2026-11-16T00:38:14Z",
+    "state": "idle",
+    "words": "All synced \u2014 watching for new arrivals",
+    "dial": {
+      "percent": 100,
+      "label": "synced"
+    },
+    "pending": {
+      "captures": 0,
+      "bytes": 0,
+      "peek": []
+    },
+    "last": {
+      "at": "2026-11-16T00:38:14Z",
+      "captures": 0,
+      "bytes": 0,
+      "duration_s": 1
+    },
+    "estimate": {
+      "avg_bps": 68,
+      "eta_words": "-"
+    },
+    "watch": {
+      "mode": "continuous",
+      "check_every": "15m",
+      "trigger": "doorbell + scheduled peek"
+    },
+    "step": "idle"
   }
- ],
- "formation": {
-  "stage": "forming",
-  "words": "the core is forming",
-  "progress_0_1": 0.25,
-  "thinks": 5,
-  "focus_stability": 0,
-  "gravity_concentration": 0.291
- },
- "sync": {
-  "v": 2,
-  "at": "2026-11-15T16:38:20Z",
-  "state": "idle",
-  "words": "All synced \u2014 watching for new arrivals",
-  "dial": {
-   "percent": 100,
-   "label": "synced"
-  },
-  "pending": {
-   "captures": 0,
-   "bytes": 0,
-   "peek": []
-  },
-  "last": {
-   "at": "2026-11-15T16:38:20Z",
-   "captures": 0,
-   "bytes": 0,
-   "duration_s": 1
-  },
-  "estimate": {
-   "avg_bps": 68,
-   "eta_words": "-"
-  },
-  "watch": {
-   "mode": "continuous",
-   "check_every": "15m",
-   "trigger": "doorbell + scheduled peek"
-  },
-  "step": "idle"
- }
 }
