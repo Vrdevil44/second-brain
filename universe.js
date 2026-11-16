@@ -2366,30 +2366,80 @@ function matchScore(text, query) {
   }
 
   // node.ghost is NONE in the trace: there is no per-item queue. This is the
-  // aggregate membrane indicator only: one beacon at the rim, sized by the
-  // st.inbox count, pulsing around alpha 0.35 (static 0.35 under reduced motion).
+  // Outward node (tonight chain item 7): the membrane beacon becomes the
+  // brain's outward window as a real, interactive node at the same anchor.
+  // Appearance is driven by st.window (the backend's window block: state
+  // off/idle/active). Live-layer meshes are raycast-off by construction,
+  // so hover/click run on a screen-space hit test (outwardHit) against the
+  // projected position, and a DOM label rides the node.
   function membraneFx(st) {
     const L = S && S.live;
     if (!L || !st) return;
     const inbox = Math.max(0, Number(st.inbox) || 0);
-    if (L.membrane) { L.membrane.inbox = inbox; return; }
+    if (L.membrane) { L.membrane.inbox = inbox; L.membrane.win = st.window || null; return; }
     const scene = liveScene();
     const mesh = liveMesh(STREAK_KNOWLEDGE, FX_MEMBRANE_ALPHA);
     if (!scene || !mesh) return; // glow template not ready yet: try next poll
     const R = edgeRadius() * 1.08, d = hashDir('membrane');
     mesh.position.set(d.x * R, d.y * R, d.z * R);
     scene.add(mesh);
-    const m = L.membrane = { inbox };
+    const m = L.membrane = { inbox, win: st.window || null, hover: false, proj: null };
+    const label = document.createElement('button');
+    label.type = 'button';
+    label.className = 'outward-node-label';
+    label.textContent = 'Outward window';
+    label.setAttribute('aria-label', 'Open the outward window panel');
+    label.addEventListener('click', () => { if (S.api && typeof S.api.onOutwardClick === 'function') S.api.onOutwardClick(); });
+    m.label = label;
+    const outwardHit = (cx, cy) => {
+      if (!m.proj) return false;
+      const dx = cx - m.proj.x, dy = cy - m.proj.y;
+      return (dx * dx + dy * dy) <= m.proj.r * m.proj.r;
+    };
+    m.hit = outwardHit;
+    const dom = S.graph && typeof S.graph.renderer === 'function' ? S.graph.renderer().domElement : null;
+    if (dom) {
+      (dom.parentNode || document.body).appendChild(label);
+      let downAt = null;
+      dom.addEventListener('pointermove', (ev) => {
+        const hit = outwardHit(ev.clientX, ev.clientY);
+        if (hit !== m.hover) { m.hover = hit; dom.style.cursor = hit ? 'pointer' : ''; label.classList.toggle('hover', hit); }
+      });
+      dom.addEventListener('pointerdown', (ev) => { downAt = outwardHit(ev.clientX, ev.clientY) ? [ev.clientX, ev.clientY] : null; });
+      dom.addEventListener('pointerup', (ev) => {
+        if (downAt && Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) < 6 && outwardHit(ev.clientX, ev.clientY)) {
+          if (S.api && typeof S.api.onOutwardClick === 'function') S.api.onOutwardClick();
+        }
+        downAt = null;
+      });
+    } else {
+      document.body.appendChild(label);
+    }
     L.fx.push({
       update(now) {
         budgetLog(now);
         mesh.visible = true;
+        const win = m.win;
+        const state = win && win.state ? win.state : null;
         const pulse = fxReduced() ? 1 : 0.8 + 0.2 * Math.sin((2 * Math.PI * now) / (FX_PULSE_S * 1000));
-        mesh.material.opacity = FX_MEMBRANE_ALPHA * pulse;
-        mesh.scale.setScalar(5 + 9 * Math.min(1, m.inbox / 40));
+        mesh.material.color.set(state === 'active' ? '#7fd4a8' : state === 'idle' ? '#8fa3b8' : state === 'off' ? '#5a6672' : STREAK_KNOWLEDGE);
+        mesh.material.opacity = (state === 'active' ? 0.5 : state ? 0.35 : FX_MEMBRANE_ALPHA) * pulse;
+        mesh.scale.setScalar((5 + 9 * Math.min(1, m.inbox / 40)) * (m.hover ? 1.25 : 1));
+        try {
+          const rect = dom ? dom.getBoundingClientRect() : null;
+          const v = mesh.position.clone().project(S.graph.camera());
+          if (rect && v.z < 1) {
+            const x = rect.left + (v.x * 0.5 + 0.5) * rect.width;
+            const y = rect.top + (-v.y * 0.5 + 0.5) * rect.height;
+            m.proj = { x, y, r: Math.max(16, mesh.scale.x * 2.4) };
+            label.hidden = false;
+            label.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px) translate(-50%,-170%)';
+            label.textContent = 'Outward window' + (state ? ' · ' + state : '');
+          } else { m.proj = null; label.hidden = true; }
+        } catch (e) { m.proj = null; }
         return true;
       },
-      dispose(sc) { (sc || scene).remove(mesh); mesh.material.dispose(); },
+      dispose(sc) { (sc || scene).remove(mesh); mesh.material.dispose(); if (m.label) m.label.remove(); },
     });
   }
 

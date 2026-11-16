@@ -1502,6 +1502,12 @@ body.view-3d .node-panel { display: none; }
 .askbar-prov-snippet { color: var(--text-2, var(--text-3)); font-size: 12px; overflow-wrap: anywhere; }
 .askbar-prov-conf { color: var(--text-3); font-size: 11px; }
 .askbar-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+/* Outward window (chain item 7): projected node label + live panel. */
+.outward-node-label { position: fixed; left: 0; top: 0; z-index: 30; background: rgba(10, 14, 20, 0.72); color: var(--text-2, #cfe4ff); border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: 11px; letter-spacing: 0.04em; cursor: pointer; pointer-events: auto; white-space: nowrap; }
+.outward-node-label.hover, .outward-node-label:hover { border-color: var(--accent-glow); color: #fff; }
+.outward-why { color: var(--text-3); }
+.outward-list { margin: 0 0 10px; padding-left: 18px; }
+.outward-list li { margin: 0 0 3px; overflow-wrap: anywhere; }
 .askbar-turn-q,
 .askbar-question { margin: 0 0 4px; color: var(--text); font-weight: 600; overflow-wrap: anywhere; white-space: pre-wrap; }
 .askbar-turn-caption { margin: 0 0 4px; color: var(--text-3); font-size: 12px; }

@@ -716,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=13acd53');
-        await loadScriptOnce('universe.js?v=13acd53');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=5c0d113');
+        await loadScriptOnce('universe.js?v=5c0d113');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -726,6 +726,7 @@ function expandQueryVariants(q, groups) {
           loadLiveState: loadLiveStateLive, // live tailnet API first, baked fallback
           kindRegistry: kindSlots, // null -> every kind renders unassigned
           onBeatUpdates: (st) => appendBeatUpdates(st),
+          onOutwardClick: () => { openOutwardPanel(); },
         });
         $('#demo-badge').hidden = !graphData.demo;
         if (toggle) { toggle.textContent = '2D'; toggle.title = 'Switch to 2D view'; }
@@ -1452,6 +1453,59 @@ function expandQueryVariants(q, groups) {
     return out;
   };
   let lastActivitySparkKey = '';
+
+  // The outward panel model (tonight chain item 7): renders exactly the
+  // window block the backend reports (backend/window-block.mjs). No block
+  // reported yet is an honest "Not reported", never a fabricated state.
+  function outwardPanelModel(win) {
+    if (!win || typeof win !== 'object') {
+      return { reported: false, stateWord: 'Not reported', why: 'The brain has not reported its outward window state yet.', pulls: [], questions: [], questionsOpen: 0 };
+    }
+    const words = { off: 'Off', idle: 'Idle', active: 'Active' };
+    return {
+      reported: true,
+      stateWord: words[win.state] || 'Unknown',
+      why: typeof win.why === 'string' ? win.why : '',
+      pulls: Array.isArray(win.pulls) ? win.pulls : [],
+      questions: Array.isArray(win.questions) ? win.questions : [],
+      questionsOpen: Number.isInteger(win.questions_open) ? win.questions_open : 0,
+    };
+  }
+
+  function openOutwardPanel() {
+    const panel = $('#outward-panel');
+    if (!panel) return;
+    const st = (liveSseState && liveSseState.st) || liveStateFloor || null;
+    const model = outwardPanelModel(st && st.window);
+    $('#outward-state').textContent = model.stateWord;
+    $('#outward-why').textContent = model.why;
+    const pullsEl = $('#outward-pulls');
+    pullsEl.textContent = '';
+    if (!model.pulls.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No pulls recorded.';
+      pullsEl.appendChild(li);
+    }
+    model.pulls.forEach((p) => {
+      const li = document.createElement('li');
+      li.textContent = (p.at ? String(p.at).slice(0, 10) + ' · ' : '') + p.source + (p.outcome ? ' · ' + p.outcome : '');
+      pullsEl.appendChild(li);
+    });
+    $('#outward-qcount').textContent = model.questionsOpen ? '(' + model.questionsOpen + ' open)' : '';
+    const qEl = $('#outward-questions');
+    qEl.textContent = '';
+    if (!model.questions.length) {
+      const li = document.createElement('li');
+      li.textContent = 'No open questions in flight.';
+      qEl.appendChild(li);
+    }
+    model.questions.forEach((q) => {
+      const li = document.createElement('li');
+      li.textContent = q.text;
+      qEl.appendChild(li);
+    });
+    panel.hidden = false;
+  }
 
   function storeSseState(b) {
     if (b && typeof b.beat === 'number' && (!liveSseState || fresherLiveState(liveSseState.st, b) === b)) {
@@ -2506,6 +2560,7 @@ function expandQueryVariants(q, groups) {
   }
 
   $('#close-node').addEventListener('click', () => selectNode(null));
+  $('#outward-close').addEventListener('click', () => { $('#outward-panel').hidden = true; });
 
   window.addEventListener('resize', () => { resize(); });
 
