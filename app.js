@@ -744,8 +744,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=48f91ed');
-        await loadScriptOnce('universe.js?v=48f91ed');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c58c4a3');
+        await loadScriptOnce('universe.js?v=c58c4a3');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -5860,16 +5860,25 @@ function expandQueryVariants(q, groups) {
     }
     const rows = m.history;
     const W = 600, H = 170, PL = 8, PR = 8, PT = 10, PB = 18;
-    const series = (key) => {
-      let min = Infinity, max = -Infinity;
-      for (const r of rows) { if (r[key] < min) min = r[key]; if (r[key] > max) max = r[key]; }
-      if (max === min) max = min + 1;
-      return rows.map((r, i) => {
-        const x = PL + (i / (rows.length - 1)) * (W - PL - PR);
-        const y = PT + (1 - (r[key] - min) / (max - min)) * (H - PT - PB);
-        return x.toFixed(1) + ',' + y.toFixed(1);
-      }).join(' ');
-    };
+    // One shared scale for both series: a single min/max across nodes and
+    // edges together. Per-series scales stretched both lines to full
+    // height, so the lines could not be compared and the restructure drop
+    // at the end (nodes 1093 to 121 against an edges range up to 1916)
+    // read as stray dots on the baseline instead of the fall the caption
+    // names. On the shared scale every point sits at its true height.
+    let min = Infinity, max = -Infinity;
+    for (const r of rows) {
+      for (const key of ['nodes', 'edges']) {
+        if (r[key] < min) min = r[key];
+        if (r[key] > max) max = r[key];
+      }
+    }
+    if (max === min) max = min + 1;
+    const series = (key) => rows.map((r, i) => {
+      const x = PL + (i / (rows.length - 1)) * (W - PL - PR);
+      const y = PT + (1 - (r[key] - min) / (max - min)) * (H - PT - PB);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
     const fmtDay = (iso) => {
       const t = Date.parse(iso);
       return Number.isFinite(t)
