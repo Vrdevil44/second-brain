@@ -718,8 +718,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7053c1b');
-        await loadScriptOnce('universe.js?v=7053c1b');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=4bc16e2');
+        await loadScriptOnce('universe.js?v=4bc16e2');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -5452,6 +5452,436 @@ function expandQueryVariants(q, groups) {
     }
     if (!tiles.length) return null;
     return el('div', { class: 'kb-headlines' }, ...tiles);
+  }
+
+  // Collapsible block for the console layer, mirroring the dashboard's
+  // own section pattern (real button header, collapse state in
+  // kbDashOpen) so a live re-render keeps the reader's place.
+  function kbBlock(id, title, intro, kids) {
+    const open = kbDashOpen[id] !== false;
+    const body = el('div', { class: 'kb-dash-section-body' },
+      el('p', { class: 'kb-dash-intro' }, intro), ...kids);
+    body.hidden = !open;
+    const head = el('button', {
+      type: 'button', class: 'kb-dash-section-head', 'aria-expanded': open ? 'true' : 'false',
+      onclick: () => {
+        const nowOpen = body.hidden;
+        body.hidden = !nowOpen;
+        kbDashOpen[id] = nowOpen;
+        head.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      },
+    }, el('span', { class: 'kb-dash-section-title' }, title));
+    return el('section', { class: 'kb-dash-section' }, head, body);
+  }
+
+  // The worked example: one real fact traced through all eight stages.
+  // F-2288 is the ISRC fact the ask path cites for "What is an ISRC?";
+  // an evaluator can ask the live system the same question and watch it
+  // answer with the same citation. Step 8 states the honest truth for
+  // this fact: it has never been superseded.
+  function kbExampleSteps() {
+    return [
+      '1 · Arrive: a capture carrying music industry knowledge lands in the inbox, timestamped and queued.',
+      '2 · Validate: the write gate scans it for secrets and private data, checks its source, and accepts it.',
+      '3 · Merge: consolidation resolves its entities. The fact belongs to a thing that already exists, so it is filed into that node instead of being born as a new one.',
+      '4 · Graph placement: the fact now sits inside its node, next to that node\'s other facts and relations.',
+      '5 · Semantic indexing: at the next criteria-driven refresh, its text is embedded and enters the index. The wired index holds 2,380 rows over 1,376 facts.',
+      '6 · Retrieval: ask "What is an ISRC?" and this fact ranks first on the fast path, so the answer cites F-2288.',
+      '7 · Enhancement: the node summary layer cites it among the node\'s facts, under the summary\'s freshness stamp.',
+      '8 · Restructure: no newer fact about ISRC has landed, so this fact has never been superseded. When one does, this fact retires to the backend and stays readable.',
+    ];
+  }
+
+  function kbExampleGo(delta) {
+    const n = kbExampleSteps().length;
+    kbExampleStep = Math.max(0, Math.min(n - 1, kbExampleStep + delta));
+    kbRenderDashboard();
+  }
+
+  // Data Lifecycle board: the eight stage cards from the model, each
+  // opening the stage drawer for its component, plus the traced example.
+  function kbRenderLifecycle(m) {
+    if (!m || !Array.isArray(m.stages)) return null;
+    const kids = [];
+    const cards = m.stages.map((s) => el('div', {
+      class: 'kb-life-card', role: 'button', tabindex: '0',
+      'aria-label': s.name + ': open stage details',
+      onclick: () => kbOpenStage(s.component),
+      onkeydown: (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kbOpenStage(s.component); }
+      },
+    },
+      el('div', { class: 'kb-life-name' }, s.name),
+      el('div', { class: 'kb-life-row' }, el('span', { class: 'kb-life-k' }, 'In'), s.inLine),
+      el('div', { class: 'kb-life-row' }, el('span', { class: 'kb-life-k' }, 'Does'), s.transform),
+      el('div', { class: 'kb-life-row' }, el('span', { class: 'kb-life-k' }, 'Out'), s.outLine),
+      s.count ? el('div', { class: 'kb-life-count' }, nf.format(s.count.n) + ' ' + s.count.text) : null,
+      s.schedule ? el('div', { class: 'kb-life-sched' }, s.schedule) : null));
+    kids.push(el('div', { class: 'kb-life-grid' }, ...cards));
+    const steps = kbExampleSteps();
+    const step = Math.max(0, Math.min(kbExampleStep, steps.length - 1));
+    kids.push(el('div', { class: 'kb-example' },
+      el('div', { class: 'kb-example-head' }, 'One fact, traced end to end: F-2288, what an ISRC is'),
+      el('div', { class: 'kb-example-step' }, steps[step]),
+      el('div', { class: 'kb-example-nav' },
+        el('button', { type: 'button', class: 'kb-example-btn', onclick: () => kbExampleGo(-1) }, 'Back'),
+        el('span', { class: 'kb-example-pos' }, 'Step ' + (step + 1) + ' of ' + steps.length),
+        el('button', { type: 'button', class: 'kb-example-btn', onclick: () => kbExampleGo(1) }, 'Next'))));
+    return kbBlock('lifecycle', 'Data Lifecycle',
+      'Follow one fact on its whole journey: every stage is a real stage with a real count, and the traced example is a real fact you can ask about.',
+      kids);
+  }
+
+  // Activity Monitoring board: liveness from the awake loop's own
+  // counters, plus what the retained event stream says the loops did.
+  function kbRenderActivity(m) {
+    if (!m) return null;
+    const kids = [];
+    const line = (txt) => el('div', { class: 'kb-dash-line' }, txt);
+    if (m.liveness && m.liveness.beat !== null) {
+      const parts = ['Awake: beat ' + nf.format(m.liveness.beat)];
+      if (m.liveness.ts) {
+        const t = Date.parse(m.liveness.ts);
+        if (Number.isFinite(t)) parts.push('cycle data ' + fmtFreshAge(Date.now() - t));
+      }
+      if (m.liveness.throughput1h !== null) {
+        parts.push(nf.format(m.liveness.throughput1h) + ' items processed in the last hour');
+      }
+      if (m.liveness.queueDepth !== null) parts.push('queue depth ' + nf.format(m.liveness.queueDepth));
+      kids.push(line(parts.join(' · ')));
+      kids.push(line('The awake loop runs on a roughly 96 second cycle by design; the beat is its own counter, read from the host.'));
+    } else {
+      kids.push(line('Liveness travels with the live connection; it is not part of the saved state.'));
+    }
+    if (m.processes && m.processes.total !== null) {
+      let p = nf.format(m.processes.total) + ' events in the retained stream';
+      if (m.processes.lastKind) p += ' · latest ' + m.processes.lastKind;
+      kids.push(line(p));
+      if (m.processes.byKind.length) {
+        kids.push(line(m.processes.byKind.map((e) => e.kind + ' ' + nf.format(e.n)).join(' · ')));
+      }
+    } else {
+      kids.push(line('Pipeline event detail arrives with the next backend update.'));
+    }
+    return kbBlock('activity', 'Activity Monitoring',
+      'Proof of life, read off the machine itself: what is running, what ran, and what it did.', kids);
+  }
+
+  // Growth chart: nodes and relations per snapshot, drawn only from the
+  // validated history series. No smoothing, no invented points; the
+  // caption names the source and explains the restructure drop that is
+  // visible in the series itself.
+  function kbRenderChart(m) {
+    if (!m || !Array.isArray(m.history) || m.history.length < 2) return null;
+    const rows = m.history;
+    const W = 600, H = 170, PL = 8, PR = 8, PT = 10, PB = 18;
+    const series = (key) => {
+      let min = Infinity, max = -Infinity;
+      for (const r of rows) { if (r[key] < min) min = r[key]; if (r[key] > max) max = r[key]; }
+      if (max === min) max = min + 1;
+      return rows.map((r, i) => {
+        const x = PL + (i / (rows.length - 1)) * (W - PL - PR);
+        const y = PT + (1 - (r[key] - min) / (max - min)) * (H - PT - PB);
+        return x.toFixed(1) + ',' + y.toFixed(1);
+      }).join(' ');
+    };
+    const fmtDay = (iso) => {
+      const t = Date.parse(iso);
+      return Number.isFinite(t)
+        ? new Date(t).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
+        : '';
+    };
+    const first = rows[0];
+    const last = rows[rows.length - 1];
+    const svg = el('svg', { class: 'kb-chart-svg', viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+      'aria-label': 'Graph growth chart: nodes and relations per snapshot' },
+      el('polyline', { points: series('edges'), fill: 'none', style: 'stroke:var(--accent)', 'stroke-width': '1.5' }),
+      el('polyline', { points: series('nodes'), fill: 'none', style: 'stroke:var(--text-2)', 'stroke-width': '1.5' }));
+    return el('div', { class: 'kb-chart' },
+      el('div', { class: 'kb-dash-block-title' }, 'Growth'),
+      svg,
+      el('div', { class: 'kb-chart-legend' },
+        'Nodes ' + nf.format(first.nodes) + ' to ' + nf.format(last.nodes)
+        + ' · Relations ' + nf.format(first.edges) + ' to ' + nf.format(last.edges)),
+      el('div', { class: 'kb-chart-caption' },
+        'Source: portal/graph-history.jsonl, ' + rows.length + ' snapshots, '
+        + fmtDay(first.at) + ' to ' + fmtDay(last.at)
+        + '. The sharp drop at the end is the Nov 15 to 16 thing-node restructure, when fact-level nodes folded into one node per thing.'));
+  }
+
+  // Stage information for the drawer: every component of the circuit
+  // board, in the same four parts (job, inputs, outputs, rules), plus
+  // the feed kinds that count as this stage's recent items.
+  function kbStageInfo(id) {
+    const INFO = {
+      capture: { title: 'Capture and Inbox',
+        job: 'Receives every note, capture and proposal before anything else happens.',
+        inputs: 'Owner notes, lane captures and governed proposals, timestamped on arrival.',
+        outputs: 'Queued inbox items, untouched, waiting for the gate.',
+        rules: 'Nothing is edited at this stage. An item may wait here; it cannot skip the gate.',
+        kinds: ['arrival'] },
+      gate: { title: 'Write Gate',
+        job: 'Decides what may enter the graph.',
+        inputs: 'Queued inbox items with their sources attached.',
+        outputs: 'Accepted items to consolidation; rejected items to the rejected pile, with the reason recorded in the merge record.',
+        rules: 'A fact needs specificity, a source and at least one relation. The secret scan and the privacy scan run here. Nothing routes around the gate.',
+        kinds: ['merge'] },
+      consolidation: { title: 'Consolidation Engine',
+        job: 'Files accepted facts into the graph: resolves entities, merges duplicates, supersedes stale facts.',
+        inputs: 'Accepted items from the gate.',
+        outputs: 'Facts inside their nodes, a merge record with counts, and demands when confidence needs the owner.',
+        rules: 'Reuse first: an existing thing is updated before anything new is born. Stored facts are never deleted.',
+        kinds: ['merge', 'birth'] },
+      graph: { title: 'Knowledge Graph',
+        job: 'The store itself: one node per thing, every fact about a thing inside its node.',
+        inputs: 'Filed facts and relations from consolidation.',
+        outputs: 'The graph the portal draws and the ask path cites.',
+        rules: 'One node per thing. A new node only for a genuinely new thing, through the governed birth path.',
+        kinds: ['birth'] },
+      semantic: { title: 'Semantic Index',
+        job: 'Embeds fact texts so retrieval can rank by meaning as well as by words.',
+        inputs: 'Fact texts from the graph.',
+        outputs: 'Index rows over the fact pool.',
+        rules: 'Batch by design: a refresh runs at 50 new facts or 7 days. A candidate index is wired only when it matches or beats the live one on the frozen evaluation set; a failed gate keeps the incumbent, and the record says so.',
+        kinds: ['training'] },
+      think: { title: 'Think Loop and Demands',
+        job: 'The housekeeping mind: reads, flags, traverses and updates; refreshes node summaries and stages demands.',
+        inputs: 'Changed nodes, open questions and the learn budget.',
+        outputs: 'Refreshed summaries under freshness stamps, demands as questions the owner can answer, and council verdicts.',
+        rules: 'Budgets and pick caps bind every cycle, with automatic brakes. Skill consults are recorded as their own event type and never fake a skill run.',
+        kinds: ['pipeline', 'council'] },
+      localmax: { title: 'Local Max, the Resident Mind',
+        job: 'The brain\'s resident decision maker on the host: a local model for everyday cycles, with a governed cloud seat as escalation for deep think cycles.',
+        inputs: 'Wake cycles, the memory mirror and the question store.',
+        outputs: 'Proposals and answers, staged through the same governed paths as everything else.',
+        rules: 'Wake gates fail closed. Local Max writes proposals, never direct facts. The seat is capped per day and every call is ledgered. No wake event kind exists in the stream yet, and none is invented here.',
+        kinds: [] },
+      window: { title: 'Outward Window',
+        job: 'The one guarded window to the public web: facts may come in, personal context never goes out.',
+        inputs: 'Open research questions from the question store.',
+        outputs: 'Corroborated facts, landed through the gate like any other capture.',
+        rules: 'Governed, capped and logged, with a brake that is currently off, so it runs dry. A claim needs two sources, or one top tier source, before it can land.',
+        kinds: [] },
+      ask: { title: 'Retrieval and Ask',
+        job: 'Answers questions from the graph, with citations.',
+        inputs: 'A question, plus the thread context when a turn is quoted.',
+        outputs: 'An answer citing the facts it used, and an ask event in the feed.',
+        rules: 'Pulse-first word retrieval, then the meaning leg. An answer cites its facts or says it does not know; an unbacked composition is discarded and the cited fact text is served instead.',
+        kinds: ['ask'] },
+    };
+    return INFO[id] || null;
+  }
+
+  function kbOpenStage(id) {
+    kbStageOpen = id;
+    const m = kbDashboardModel(graphData, pairedCensus, kbLiveState, kbPhases, kbHistory);
+    kbRenderStageDrawer(m);
+    const drawer = $('#kb-stage-drawer');
+    if (drawer && drawer.scrollIntoView) {
+      try { drawer.scrollIntoView({ block: 'nearest' }); } catch { /* older engines */ }
+    }
+  }
+
+  function kbCloseStage() {
+    kbStageOpen = null;
+    const drawer = $('#kb-stage-drawer');
+    if (drawer) drawer.hidden = true;
+  }
+
+  // The stage detail drawer: one implementation, opened from the
+  // circuit board and from the lifecycle cards. Queue now, recent
+  // items and recent decisions all read from the same model the boards
+  // render; a reason the artefacts do not carry is named as living in
+  // the consolidation record, never invented.
+  function kbRenderStageDrawer(m) {
+    const drawer = $('#kb-stage-drawer');
+    if (!drawer) return;
+    if (!kbStageOpen || !m) { drawer.hidden = true; return; }
+    const info = kbStageInfo(kbStageOpen);
+    if (!info) { drawer.hidden = true; return; }
+    drawer.textContent = '';
+    const row = (k, v) => el('div', { class: 'kb-drawer-row' },
+      el('span', { class: 'kb-life-k' }, k), v);
+    const kids = [];
+    kids.push(el('div', { class: 'kb-drawer-head' },
+      el('span', { class: 'kb-drawer-title' }, info.title),
+      el('button', { type: 'button', class: 'kb-drawer-close', onclick: () => kbCloseStage() }, 'Close')));
+    kids.push(row('Job', info.job));
+    kids.push(row('In', info.inputs));
+    kids.push(row('Out', info.outputs));
+    kids.push(row('Rules', info.rules));
+    const stage = (m.stages || []).find((s) => s.component === kbStageOpen);
+    if (kbStageOpen === 'localmax') {
+      kids.push(row('Queue', 'Wakes every 30 minutes by design. Its liveness counter is the beat on the Activity Monitoring board.'));
+    } else if (stage && stage.count) {
+      kids.push(row('Queue', nf.format(stage.count.n) + ' ' + stage.count.text));
+    } else if (stage && stage.schedule) {
+      kids.push(row('Queue', stage.schedule));
+    }
+    if (kbStageOpen === 'gate' && m.gateFeed) {
+      const parts = [];
+      if (m.gateFeed.rejectedLastRun !== null) parts.push(nf.format(m.gateFeed.rejectedLastRun) + ' rejected in the last run');
+      if (m.gateFeed.pile !== null) parts.push(nf.format(m.gateFeed.pile) + ' in the rejected pile');
+      if (parts.length) kids.push(row('Decisions', parts.join(' · ') + '. Reasons live in the consolidation record.'));
+    }
+    if (kbStageOpen === 'consolidation' && m.merge) {
+      const parts = [];
+      if (m.merge.merged !== null) parts.push(nf.format(m.merge.merged) + ' merged');
+      if (m.merge.rejected !== null) parts.push(nf.format(m.merge.rejected) + ' rejected');
+      if (m.merge.duplicates !== null) parts.push(nf.format(m.merge.duplicates) + ' duplicates folded');
+      if (parts.length) kids.push(row('Decisions', 'Last run: ' + parts.join(' · ') + '.'));
+    }
+    if (kbStageOpen === 'semantic' && m.health && m.health.training) {
+      const tr = m.health.training;
+      kids.push(row('Decisions', 'Last refresh: ' + tr.stamp
+        + (tr.gate ? ', gate ' + tr.gate : '') + (tr.wired ? ', wired live' : tr.gate && tr.gate !== 'pass' ? ', incumbent kept' : '') + '.'));
+    }
+    const recent = (m.feed || []).filter((e) => info.kinds.includes(e.kind)).slice(-3).reverse();
+    if (recent.length) {
+      kids.push(el('div', { class: 'kb-drawer-sub' }, 'Recent items'));
+      for (const e of recent) {
+        kids.push(el('div', { class: 'kb-dash-line' },
+          (e.t ? e.t.slice(0, 10) + ' ' + e.t.slice(11, 16) + ' · ' : '') + e.label));
+      }
+    }
+    drawer.append(...kids);
+    drawer.hidden = false;
+  }
+
+  function kbCircuitHover(id, on) {
+    const traces = document.querySelectorAll('.kb-circuit-trace');
+    traces.forEach((t) => {
+      const hit = t.getAttribute('data-from') === id || t.getAttribute('data-to') === id;
+      t.classList.toggle('kb-circuit-trace-hi', !!on && hit);
+    });
+  }
+
+  // The living circuit board: the whole system as one UML-flavoured
+  // circuit diagram. Components carry their live counters; a real event
+  // travels its trace as one pulse; a component lights only while its
+  // own signal is fresh. No event, no motion.
+  function kbRenderCircuit(m) {
+    if (!m) return null;
+    const stageOf = (id) => (m.stages || []).find((s) => s.id === id);
+    const countOf = (id) => { const s = stageOf(id); return s && s.count ? s.count.n : null; };
+    const nowMs = m.loop && m.loop.ts ? Date.parse(m.loop.ts) : NaN;
+    const fresh = (iso) => {
+      if (!iso || !Number.isFinite(nowMs)) return false;
+      const t = Date.parse(iso);
+      return Number.isFinite(t) && t <= nowMs && (nowMs - t) <= 15 * 60 * 1000;
+    };
+    const fmt = (n, unit) => (n === null ? null : nf.format(n) + ' ' + unit);
+
+    // One pulse per real event: the newest feed entry, if it is new
+    // since the last render, travels the trace its kind belongs to.
+    const newest = m.feed && m.feed.length ? m.feed[m.feed.length - 1] : null;
+    const sig = newest ? (newest.t || '') + '|' + (newest.kind || '') + '|' + newest.label : '';
+    let pulseTrace = null;
+    let pulseNode = null;
+    if (newest && kbCircuitSig && kbCircuitSig !== sig && !reducedMotion) {
+      const map = {
+        arrival: ['kb-tr-arrive', 'capture'], merge: ['kb-tr-accept', 'consolidation'],
+        birth: ['kb-tr-file', 'graph'], training: ['kb-tr-index', 'semantic'],
+        ask: ['kb-tr-retrieve', 'ask'], pipeline: ['kb-tr-loop', 'think'],
+        council: ['kb-tr-loop', 'think'], promotion: ['kb-tr-file', 'graph'],
+      };
+      const hit = map[newest.kind];
+      if (hit) { pulseTrace = hit[0]; pulseNode = hit[1]; }
+    }
+    if (sig) kbCircuitSig = sig;
+
+    const trace = (id, d, from, to) => el('path', {
+      id, d, class: 'kb-circuit-trace', 'data-from': from, 'data-to': to,
+    });
+    const tlabel = (x, y, txt) => el('text', { x: String(x), y: String(y), class: 'kb-circuit-tlabel' }, txt);
+    const zone = (x, y, txt) => el('text', { x: String(x), y: String(y), class: 'kb-circuit-zone' }, txt);
+    const comp = (id, shape, cx, title, countText, active) => el('g', {
+      class: 'kb-circuit-node' + (active ? ' kb-circuit-on' : '') + (pulseNode === id ? ' kb-circuit-flash' : ''),
+      'data-id': id, tabindex: '0', role: 'button', 'aria-label': title + ': open stage details',
+      onclick: () => kbOpenStage(id),
+      onkeydown: (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kbOpenStage(id); }
+      },
+      onmouseenter: () => kbCircuitHover(id, true),
+      onmouseleave: () => kbCircuitHover(id, false),
+    },
+      shape,
+      el('text', { x: String(cx), y: '58', class: 'kb-circuit-name', 'text-anchor': 'middle' }, title),
+      countText ? el('text', { x: String(cx), y: '76', class: 'kb-circuit-count', 'text-anchor': 'middle' }, countText) : null);
+    const comp2 = (id, shape, cx, title, countText, active) => el('g', {
+      class: 'kb-circuit-node' + (active ? ' kb-circuit-on' : '') + (pulseNode === id ? ' kb-circuit-flash' : ''),
+      'data-id': id, tabindex: '0', role: 'button', 'aria-label': title + ': open stage details',
+      onclick: () => kbOpenStage(id),
+      onkeydown: (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kbOpenStage(id); }
+      },
+      onmouseenter: () => kbCircuitHover(id, true),
+      onmouseleave: () => kbCircuitHover(id, false),
+    },
+      shape,
+      el('text', { x: String(cx), y: '240', class: 'kb-circuit-name', 'text-anchor': 'middle' }, title),
+      countText ? el('text', { x: String(cx), y: '258', class: 'kb-circuit-count', 'text-anchor': 'middle' }, countText) : null);
+    const box = (x, y, w, rx) => el('rect', { x: String(x), y: String(y), width: String(w), height: '58', rx: String(rx), class: 'kb-circuit-shape' });
+
+    const inboxN = countOf('arrive');
+    const pileN = countOf('validate');
+    const thingsN = m.facts ? m.facts.things : null;
+    const queueN = m.windowFeed ? m.windowFeed.queued : null;
+
+    const svgKids = [
+      zone(8, 20, 'Ingest'), zone(150, 20, 'Validation'), zone(318, 20, 'Storage'), zone(734, 20, 'Retrieval'),
+      zone(8, 202, 'Outward'), zone(318, 202, 'Mind'),
+      trace('kb-tr-arrive', 'M136 63 H158', 'capture', 'gate'),
+      trace('kb-tr-accept', 'M266 63 H318', 'gate', 'consolidation'),
+      trace('kb-tr-file', 'M466 63 H526', 'consolidation', 'graph'),
+      trace('kb-tr-retrieve', 'M674 63 H734', 'graph', 'ask'),
+      trace('kb-tr-reject', 'M212 112 V220', 'gate', 'gate'),
+      trace('kb-tr-loop', 'M392 92 V216', 'consolidation', 'think'),
+      trace('kb-tr-index', 'M600 92 V216', 'graph', 'semantic'),
+      trace('kb-tr-questions', 'M136 245 H318', 'window', 'think'),
+      trace('kb-tr-wake', 'M392 274 V306 H798 V274', 'think', 'localmax'),
+      tlabel(280, 54, 'accept'), tlabel(220, 170, 'reject'), tlabel(608, 160, 'index'),
+      tlabel(400, 160, 'loops'), tlabel(180, 236, 'questions'),
+      comp('capture', box(8, 34, 128, 29), 72, 'Capture', fmt(inboxN, 'waiting'),
+        inboxN !== null && inboxN > 0),
+      comp('gate', el('polygon', { points: '212,14 266,63 212,112 158,63', class: 'kb-circuit-shape' }), 212,
+        'Write Gate', fmt(pileN, 'in the pile'),
+        (inboxN !== null && inboxN > 0) || (pileN !== null && pileN > 0)),
+      comp('consolidation', box(318, 34, 148, 10), 392, 'Consolidation', fmt(countOf('merge'), 'merged'),
+        !!(m.flow && m.flow[2] && m.flow[2].active)),
+      comp('graph', box(526, 34, 148, 10), 600, 'Knowledge Graph', fmt(thingsN, 'things'),
+        !!(m.flow && m.flow[3] && m.flow[3].active)),
+      comp('ask', box(734, 34, 128, 29), 798, 'Ask', fmt(countOf('retrieval'), 'asks today'),
+        !!(m.flow && m.flow[4] && m.flow[4].active)),
+      el('g', { class: 'kb-circuit-node kb-circuit-static' },
+        box(150, 220, 124, 8),
+        el('text', { x: '212', y: '240', class: 'kb-circuit-name', 'text-anchor': 'middle' }, 'Rejected Pile'),
+        pileN !== null
+          ? el('text', { x: '212', y: '258', class: 'kb-circuit-count', 'text-anchor': 'middle' }, nf.format(pileN) + ' waiting')
+          : null),
+      comp2('window', box(8, 216, 128, 10), 72, 'Outward Window',
+        m.windowFeed && m.windowFeed.enabled === false ? 'brake off, dry' : fmt(queueN, 'questions'), false),
+      comp2('think', box(318, 216, 148, 10), 392, 'Think Loop', fmt(countOf('enhancement'), 'questions'),
+        fresh(m.processes && m.processes.lastAt)),
+      comp2('semantic', box(526, 216, 148, 10), 600, 'Semantic Index',
+        fmt(m.semanticFeed ? m.semanticFeed.rows : null, 'rows'),
+        fresh(m.health && m.health.training && m.health.training.at)),
+      comp2('localmax', box(734, 216, 128, 10), 798, 'Local Max', 'wakes every 30 min', false),
+    ];
+    if (pulseTrace) {
+      svgKids.push(el('circle', { r: '5', class: 'kb-circuit-pulse' },
+        el('animateMotion', { dur: '1.4s', repeatCount: '1' },
+          el('mpath', { href: '#' + pulseTrace }))));
+    }
+    const svg = el('svg', { class: 'kb-circuit-svg', viewBox: '0 0 980 330', role: 'group',
+      'aria-label': 'Circuit diagram of the whole system' }, ...svgKids);
+    return el('div', { class: 'kb-circuit' },
+      el('div', { class: 'kb-dash-block-title' }, 'The System, Live'),
+      svg,
+      el('div', { class: 'kb-circuit-legend' },
+        'Rounded ends: where data enters or leaves. Diamond: a decision. A pulse is one real event travelling its path. '
+        + 'Counters change only when their source changes. Click any component for its stage detail. '
+        + 'When nothing happens, this board is quiet.'));
   }
 
   async function kbRefreshLive(gen) {

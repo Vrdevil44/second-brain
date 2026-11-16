@@ -1307,6 +1307,49 @@ body.view-3d .node-panel { display: none; }
 .kb-tile-value { font-size: 20px; font-weight: 700; line-height: 1.15; }
 .kb-tile-label { font-size: 13px; color: var(--text); margin-top: 2px; }
 .kb-tile-source { font-size: 11px; color: var(--text-3); margin-top: 2px; overflow-wrap: anywhere; }
+.kb-life-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.kb-life-card { flex: 1 1 210px; min-width: 190px; border: 1px solid var(--line-glow); border-radius: 10px; padding: 8px 10px; background: var(--surface); cursor: pointer; }
+.kb-life-card:hover, .kb-life-card:focus-visible { border-color: var(--accent-glow); outline: none; }
+.kb-life-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.kb-life-row { font-size: 13px; color: var(--text-2); margin-top: 2px; overflow-wrap: anywhere; }
+.kb-life-k { display: inline-block; min-width: 34px; font-weight: 600; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.kb-life-count { font-size: 14px; font-weight: 600; margin-top: 6px; }
+.kb-life-sched { font-size: 12px; color: var(--text-3); margin-top: 6px; overflow-wrap: anywhere; }
+.kb-example { margin-top: 12px; border: 1px solid var(--line-glow); border-radius: 10px; padding: 10px 12px; }
+.kb-example-head { font-weight: 700; font-size: 14px; }
+.kb-example-step { font-size: 14px; margin-top: 6px; overflow-wrap: anywhere; }
+.kb-example-nav { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.kb-example-btn { font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-glow); background: transparent; color: inherit; cursor: pointer; }
+.kb-example-btn:hover { border-color: var(--accent-glow); }
+.kb-example-pos { font-size: 12px; color: var(--text-3); }
+.kb-chart { margin-top: 14px; }
+.kb-chart-svg { width: 100%; height: auto; display: block; }
+.kb-chart-legend { font-size: 13px; margin-top: 4px; }
+.kb-chart-caption { font-size: 12px; color: var(--text-3); margin-top: 2px; overflow-wrap: anywhere; }
+.kb-circuit { margin-bottom: 4px; }
+.kb-circuit-svg { width: 100%; height: auto; display: block; }
+.kb-circuit-shape { fill: var(--surface-solid); stroke: var(--border-strong); stroke-width: 1.2; }
+.kb-circuit-node { cursor: pointer; }
+.kb-circuit-static { cursor: default; }
+.kb-circuit-node:focus-visible { outline: none; }
+.kb-circuit-node:focus-visible .kb-circuit-shape, .kb-circuit-node:hover .kb-circuit-shape { stroke: var(--accent-glow); }
+.kb-circuit-on .kb-circuit-shape { stroke: var(--accent-glow); }
+.kb-circuit-flash .kb-circuit-shape { stroke: var(--accent-glow); stroke-width: 2; }
+.kb-circuit-trace { fill: none; stroke: var(--text-3); stroke-width: 1.4; }
+.kb-circuit-trace-hi { stroke: var(--accent-glow); stroke-width: 2; }
+.kb-circuit-name { fill: var(--text); font-size: 13px; font-weight: 600; }
+.kb-circuit-count { fill: var(--text-2); font-size: 11px; }
+.kb-circuit-zone { fill: var(--text-3); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.kb-circuit-tlabel { fill: var(--text-3); font-size: 10px; }
+.kb-circuit-pulse { fill: var(--accent-glow); }
+.kb-circuit-legend { font-size: 12px; color: var(--text-3); margin-top: 4px; overflow-wrap: anywhere; }
+.kb-stage-drawer { flex: none; max-height: 32vh; overflow-y: auto; overscroll-behavior: contain; margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line-glow); border-radius: 10px; background: var(--surface); }
+.kb-drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.kb-drawer-title { font-weight: 700; font-size: 15px; }
+.kb-drawer-close { font: inherit; font-size: 13px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-glow); background: transparent; color: inherit; cursor: pointer; }
+.kb-drawer-close:hover { border-color: var(--accent-glow); }
+.kb-drawer-row { font-size: 14px; color: var(--text-2); margin-top: 6px; overflow-wrap: anywhere; }
+.kb-drawer-sub { font-weight: 700; font-size: 13px; margin-top: 10px; }
 .kb-dash-section { margin-top: 14px; }
 .kb-dash-section-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; font: inherit; font-weight: 600; font-size: 14px; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 8px; cursor: pointer; text-align: left; transition: background-color .18s ease, border-color .18s ease; }
 .kb-dash-section-head:hover { background: var(--surface); border-color: var(--line-glow); }
