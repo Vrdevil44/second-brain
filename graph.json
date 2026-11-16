@@ -1222,7 +1222,7 @@
       "date": "2026-10-21",
       "factCount": 1,
       "path": "knowledge/people/apoorva-dhama.md",
-      "size": 4,
+      "size": 5,
       "gravity": 0.274,
       "facts": [
         {
@@ -1243,13 +1243,13 @@
       "id": "person-camp-network",
       "label": "DOTM camp network",
       "domain": "people",
-      "kind": "person",
+      "kind": "group",
       "node": "person-camp-network",
       "status": "active",
       "date": "2026-10-30",
       "factCount": 4,
       "path": "knowledge/people/camp-network.md",
-      "size": 4,
+      "size": 11,
       "gravity": 0.284,
       "facts": [
         {
@@ -1732,7 +1732,7 @@
       "date": "2026-10-21",
       "factCount": 1,
       "path": "knowledge/people/ghaint-jxtt.md",
-      "size": 4,
+      "size": 5,
       "gravity": 0.274,
       "facts": [
         {
@@ -1926,7 +1926,7 @@
       "date": "2026-10-21",
       "factCount": 1,
       "path": "knowledge/people/harjinder-singh.md",
-      "size": 4,
+      "size": 5,
       "gravity": 0.274,
       "facts": [
         {
@@ -2013,7 +2013,7 @@
       "date": "2026-10-21",
       "factCount": 1,
       "path": "knowledge/people/hpo.md",
-      "size": 4,
+      "size": 5,
       "gravity": 0.274,
       "facts": [
         {
@@ -2544,7 +2544,7 @@
       "date": "2026-10-21",
       "factCount": 1,
       "path": "knowledge/people/nitesh.md",
-      "size": 4,
+      "size": 5,
       "gravity": 0.274,
       "facts": [
         {
@@ -2755,7 +2755,7 @@
       "date": "2026-10-21",
       "factCount": 1,
       "path": "knowledge/people/princi.md",
-      "size": 4,
+      "size": 5,
       "gravity": 0.274,
       "facts": [
         {
@@ -2816,7 +2816,7 @@
       "date": "2026-10-30",
       "factCount": 4,
       "path": "knowledge/people/roommate-kp.md",
-      "size": 4,
+      "size": 5,
       "gravity": 0.284,
       "facts": [
         {
@@ -14320,6 +14320,62 @@
       "context": "Manan call is today, Nov 13: checklist is the Dec 26 morning-arrival plan, who books the flight, and the return date. If he joins, the group becomes 4 — the Summerland room stays the same price, only …"
     },
     {
+      "source": "person-camp-network",
+      "target": "person-harjinder-singh",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "Canada-side contacts, all contacted 2026-09-19: Harjinder Singh (EYP Creations) and Nitesh (Cash Digital), whose canonical facts live on their own person pages; Neofox media has no person page or fact…"
+    },
+    {
+      "source": "person-camp-network",
+      "target": "person-nitesh",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "Canada-side contacts, all contacted 2026-09-19: Harjinder Singh (EYP Creations) and Nitesh (Cash Digital), whose canonical facts live on their own person pages; Neofox media has no person page or fact…"
+    },
+    {
+      "source": "person-camp-network",
+      "target": "person-ghaint-jxtt",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "Ghaint Jxtt (@ghaint.jxtt), artist in the camp who comes via Dev; the canonical fact lives on person-ghaint-jxtt (F-0765). This list copy retired to a pointer in the merge batch."
+    },
+    {
+      "source": "person-camp-network",
+      "target": "person-hpo",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "HPO / Mash by HPO (@mashbyhpo), the camp's in-house production DJ; the canonical fact lives on person-hpo (F-0767). This list copy retired to a pointer in the merge batch."
+    },
+    {
+      "source": "person-camp-network",
+      "target": "person-apoorva-dhama",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "India-side contacts in the camp network: Apoorva Dhama, Princi, Anuj Bhaiya; their canonical facts live on their own person pages (person-apoorva-dhama, person-princi, person-anuj-bhaiya). This list c…"
+    },
+    {
+      "source": "person-camp-network",
+      "target": "person-princi",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "India-side contacts in the camp network: Apoorva Dhama, Princi, Anuj Bhaiya; their canonical facts live on their own person pages (person-apoorva-dhama, person-princi, person-anuj-bhaiya). This list c…"
+    },
+    {
+      "source": "person-camp-network",
+      "target": "person-anuj-bhaiya",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "India-side contacts in the camp network: Apoorva Dhama, Princi, Anuj Bhaiya; their canonical facts live on their own person pages (person-apoorva-dhama, person-princi, person-anuj-bhaiya). This list c…"
+    },
+    {
       "source": "person-guggu",
       "target": "place-burnaby",
       "type": "CONTEXT",
@@ -14358,6 +14414,14 @@
       "weight": 1,
       "via": "wikilink",
       "context": "Colleague idea-credit incident (Oct 7, 2026): a colleague posted a LinkedIn \"Second Brain\" article crediting Vibhu only as \"a colleague casually brought up the concept\" — his words: \"he is my colleagu…"
+    },
+    {
+      "source": "person-roommate-kp",
+      "target": "person-vibhu",
+      "type": "CONTEXT",
+      "weight": 1,
+      "via": "wikilink",
+      "context": "Vibhu has been pushing KP since last year; now that KP is doing better in his career Vibhu expects him to think of himself first — Vibhu can't really rely on or trust him"
     },
     {
       "source": "person-vibhu",
@@ -15190,7 +15254,7 @@
     },
     {
       "node": "person-camp-network",
-      "kind": "person"
+      "kind": "group"
     },
     {
       "node": "person-dale-bhagwagar",
