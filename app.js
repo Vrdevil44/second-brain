@@ -716,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=762cafe');
-        await loadScriptOnce('universe.js?v=762cafe');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c03232a');
+        await loadScriptOnce('universe.js?v=c03232a');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6142,7 +6142,7 @@ function expandQueryVariants(q, groups) {
   const S5_UNAVAILABLE_WORDS = 'History unavailable';
   const S5_NO_RECORD_WORDS = 'No verified consolidation record for this row.';
   const S5_HISTORY_URL = 'graph-history.jsonl';
-  const S5_ID_RE = /^(F-\d+|C-\d+|core|domain-[a-z0-9-]+|skill-[a-z0-9-]+|dict-[a-z0-9-]+)$/; // = graph-history.mjs ID_RE
+  const S5_ID_RE = /^(F-\d+|C-\d+|core|domain-[a-z0-9-]+|skill-[a-z0-9-]+|dict-[a-z0-9-]+|person-[a-z0-9-]+|place-[a-z0-9-]+|topic-[a-z0-9-]+|proj-[a-z0-9-]+|pattern-[a-z0-9-]+|lib-[a-z0-9-]+|flower-[a-z0-9-]+)$/; // = graph-history.mjs ID_RE
 
   // Slider thumb value -> row index. Always a row, never a beat number.
   sliderSleep.inputToRow = function (value, n) {
@@ -6196,6 +6196,7 @@ function expandQueryVariants(q, groups) {
     const d = drawn || { nodes: row.counts.nodes, edges: row.counts.edges };
     let counts = 'recorded ' + row.counts.nodes + ' nodes · ' + d.nodes + ' drawn'
       + ' · recorded ' + row.counts.edges + ' edges · ' + d.edges + ' drawn';
+    if (Number.isFinite(row.counts.facts)) counts += ' · ' + row.counts.facts + ' facts inside things';
     if (d.nodes < row.counts.nodes || d.edges < row.counts.edges) counts += ' (removed items cannot be drawn)';
     return { head, counts };
   };
