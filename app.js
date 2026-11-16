@@ -716,8 +716,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=1fdeac4');
-        await loadScriptOnce('universe.js?v=1fdeac4');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=6615487');
+        await loadScriptOnce('universe.js?v=6615487');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6264,8 +6264,12 @@ function expandQueryVariants(q, groups) {
       details.appendChild(wl);
     }
     if (rec.thinker) {
-      addTo(details, 'p', 'askbar-turn-caption',
-        'Answered by ' + (rec.thinker === 'localmind' ? "the brain's small local model" : rec.thinker));
+      // Records stored before the thinker token was normalised carry the full
+      // caption sentence ("answered by the brain's small local model, ...");
+      // strip its leading "answered by" so the prefix is never doubled.
+      let who = rec.thinker === 'localmind' ? "the brain's small local model" : String(rec.thinker);
+      if (/^answered by /i.test(who)) who = who.replace(/^answered by /i, '');
+      addTo(details, 'p', 'askbar-turn-caption', 'Answered by ' + who);
     }
     addQuoteBtn();
     if (rec.kind === 'ask') {
@@ -6658,7 +6662,13 @@ function expandQueryVariants(q, groups) {
         };
         rec.onend = () => { if (askBar.rec === rec) askBar.rec = null; askBar.setMicPressed(false); };
         rec.onerror = (ev) => {
-          if (ev && ev.error === 'not-allowed') { askBar.openPanel(); askBar.setCaption('The mic is blocked — allow microphone access in the browser, or just type.', false); }
+          // Every recognition failure is stated honestly in the caption; a
+          // silent mic reads as a broken product (owner report 2026-11-15).
+          const err = ev && ev.error;
+          if (err === 'not-allowed') { askBar.openPanel(); askBar.setCaption('The mic is blocked — allow microphone access in the browser, or just type.', false); }
+          else if (err === 'audio-capture') { askBar.openPanel(); askBar.setCaption('No microphone was found on this device. Typing works as always.', false); }
+          else if (err === 'no-speech') { askBar.openPanel(); askBar.setCaption('I did not hear anything. Tap the mic and try again, or just type.', false); }
+          else if (err && err !== 'aborted') { askBar.openPanel(); askBar.setCaption('Voice input could not run in this browser. Typing works as always.', false); }
           if (askBar.rec === rec) askBar.rec = null;
           askBar.setMicPressed(false);
         };
@@ -6668,6 +6678,8 @@ function expandQueryVariants(q, groups) {
       } catch (e) {
         askBar.rec = null;
         askBar.setMicPressed(false);
+        askBar.openPanel();
+        askBar.setCaption('Voice input could not start in this browser. Typing works as always.', false);
       }
     });
   };
