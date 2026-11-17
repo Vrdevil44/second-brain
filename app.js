@@ -744,8 +744,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c26e365');
-        await loadScriptOnce('universe.js?v=c26e365');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ce78899');
+        await loadScriptOnce('universe.js?v=ce78899');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6757,8 +6757,17 @@ function expandQueryVariants(q, groups) {
   }
 
   askBar.focusFid = function (fid) {
-    if (viewMode === '3d' && window.BrainUniverse && window.BrainUniverse.focusNode) return window.BrainUniverse.focusNode(fid);
-    const n = graph.byId.get(fid);
+    // Callers pass fact ids; the graph focuses node ids. Resolve the fact
+    // through redirects to its host thing first (same rule as search).
+    let target = String(fid);
+    const redirects = (graphData && graphData.redirects && typeof graphData.redirects === 'object') ? graphData.redirects : {};
+    const seen = new Set();
+    while (redirects[target] != null && !seen.has(target)) { seen.add(target); target = String(redirects[target]); }
+    const nodes = (graphData && Array.isArray(graphData.nodes)) ? graphData.nodes : [];
+    const host = nodes.find((n) => n && Array.isArray(n.facts) && n.facts.some((f) => f && String(f.id) === target));
+    if (host && host.id !== undefined && host.id !== null) target = String(host.id);
+    if (viewMode === '3d' && window.BrainUniverse && window.BrainUniverse.focusNode) return window.BrainUniverse.focusNode(target);
+    const n = graph.byId.get(target);
     if (n) { selectNode(n); return true; }
     return false;
   };
