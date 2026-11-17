@@ -745,8 +745,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=34e1394');
-        await loadScriptOnce('universe.js?v=34e1394');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f15e036');
+        await loadScriptOnce('universe.js?v=f15e036');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1767,6 +1767,7 @@ function expandQueryVariants(q, groups) {
         resultingHash = delta.hash || targetHash;
       }
       renderGraphMeta();
+      renderRecordCard();
       pageGraphHash = resultingHash;
       convergeRetry = 0;
       await rebuildGraphView();
