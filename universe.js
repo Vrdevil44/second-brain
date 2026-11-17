@@ -1727,8 +1727,10 @@ function matchScore(text, query) {
         if (S.modality === 'touch') return;
         const id = node ? node.id : null;
         if (S.hovered === id) return;
+        const left = S.hovered;
         S.hovered = id;
-        if (id) pulseNodeRelations(id, 3);
+        if (left) lingerNodeEdges(left); // hover-off: the lit edges fade out over seconds, not one frame
+        if (id) pulseNodeRelations(id, 3, HOVER_PACKET_COOLDOWN_MS);
         if (id) stopRotation(); else armResume();
         if (node) {
           S.tip.textContent = node.name;
@@ -3465,13 +3467,20 @@ function matchScore(text, query) {
   const SPARKS_TRAIL_WORLD = 60;  // trail length in world units (capped by edge length)
   const SPARKS_SPEED = 480;       // world units per second
   const SPARKS_CORE_COLOR = '#eaf6ff';
-  const SHIMMER_BASE = 0.05;      // relation alpha under the sparks (per-link twinkle on top)
-  const SHIMMER_DOMAIN = 0.03;    // DOMAIN scaffolding alpha
-  const QUAL_ALPHA = 0.30;        // qualified lines (typed relations, core spokes): permanent thin shine
+  // Owner order 2026-11-17: every data edge is clearly visible at rest. The old 0.05 / 0.03
+  // left the 49 degree-1 DOMAIN spokes at ~3% alpha (x the lib's 0.55 linkOpacity): drawn, not seen.
+  const SHIMMER_BASE = 0.28;      // relation alpha under the sparks (per-link twinkle on top)
+  const SHIMMER_DOMAIN = 0.22;    // DOMAIN scaffolding alpha
+  const QUAL_ALPHA = 0.40;        // qualified lines (typed relations, core spokes): permanent thin shine
+  const EDGE_REST_FLOOR = 0.16;   // no data edge ever rests below this alpha (twinkle trough, reduced motion, recession)
   const SHIMMER_DIGEST_MS = 1000; // twinkle digest period (1 Hz max)
   const GLOW_REFRESH_MS = 250;    // lit-network re-digest gate (timestamp only, never reset)
   const GLOW_REFRESH_SLOW_MS = 500; // same gate while frames are heavy (ema > 30)
   const STRIKE_GLOW_MS = 900;     // a lit network decays over this long (per-entry expiry)
+  const LINGER_MS = 3600;         // an edge a spark arrived on / the pointer left lingers this long, easing out
+  const LINGER_FINE_STEPS = 20;   // lingering edges fade in 1/20 steps (strikes stay in quarters)
+  const AMBIENT_CAP = 4;          // ambient sparks alive at once (owner 2026-11-17: ~3-6, subtle)
+  const HOVER_PACKET_COOLDOWN_MS = 4000; // per-relation quiet period for hover packets (events keep 60 s)
   const BOLT_GAP_MIN_MS = 600;    // storm: one bolt event every 600-1200 ms
   const BOLT_GAP_MAX_MS = 1200;   // (each event fires 2-3 staggered bolts)
   const BOLT_STAGGER_MS = 120;    // start offset between bolts of one event
@@ -3490,8 +3499,9 @@ function matchScore(text, query) {
   // ping-pong or trail, so sparks draw on their own LineSegments trail layer.
   // Focused / selected nodes keep their neighbourhood lines solid (opacity 1).
   // The time-slider filter still hides links first (linkVisibility).
-  // Calm target (owner, 2026-11-12): ambient spawning is OFF. Packets are event-only
-  // (fireEventPacket): one-way, ~3 s, max 12 alive, 1 per relation per 60 s.
+  // Calm target (owner, 2026-11-12): ambient spawning was turned OFF; event packets stay
+  // (fireEventPacket): one-way, ~3 s, max 12 alive, 1 per relation per 60 s. The owner's
+  // 2026-11-17 amendment RE-ENABLES a low ambient lane (AMBIENT_CAP sparks, sparksTick).
 
   // SPARKS-SCHEDULER:begin
   // Pure: no DOM, no timers, no globals. state = { active: [{s,t,type,ttl,pool}],
@@ -3670,7 +3680,13 @@ function matchScore(text, query) {
     const g = SP && SP[map].get(id);
     if (!g) return 0;
     const rem = g.until - performance.now();
-    return rem <= 0 ? 0 : Math.min(1, Math.max(0.25, Math.ceil((rem / (g.dur || STRIKE_GLOW_MS)) * g.k * 4) / 4));
+    if (rem <= 0) return 0;
+    const dur = g.dur || STRIKE_GLOW_MS;
+    if (dur > STRIKE_GLOW_MS) { // lingering entry: ease-out (quadratic) in fine steps, no 0.25 plateau
+      const u = Math.min(1, rem / dur);
+      return Math.min(1, Math.max(1 / LINGER_FINE_STEPS, Math.ceil(u * u * g.k * LINGER_FINE_STEPS) / LINGER_FINE_STEPS));
+    }
+    return Math.min(1, Math.max(0.25, Math.ceil((rem / dur) * g.k * 4) / 4));
   }
   function strikeNodeLevel(id) { return strikeLevel('glowNodes', id); }
   function strikeEdgeLevel(l) { return strikeLevel('glowEdges', idOf(l.source) + '|' + idOf(l.target) + '|' + l.type); }
@@ -3700,23 +3716,31 @@ function matchScore(text, query) {
   // are type-coloured at SHIMMER alpha x twinkle (qualified lines: QUAL_ALPHA x a soft shine). Twinkle: 0.6 + 0.4 sin(t/1400 + phase),
   // phase = hash of the edge key. Reduced motion: static at base alpha. Alpha is
   // quantised so the lib's colour+opacity material cache stays small.
+  // Pure: the resting alpha of a data edge. sn = the twinkle sine in [-1, 1], or null when
+  // static (reduced motion / sparks not running). Never below EDGE_REST_FLOOR.
+  function sparksRestAlpha(qualified, domain, sn) {
+    let a = qualified ? QUAL_ALPHA : (domain ? SHIMMER_DOMAIN : SHIMMER_BASE);
+    if (sn !== null && sn !== undefined) a *= qualified ? 0.85 + 0.15 * sn : 0.75 + 0.25 * sn; // qualified: soft shine, not a twinkle
+    return Math.max(EDGE_REST_FLOOR, a);
+  }
+
   function sparksShimmerAccessor(base) {
     const f = (l) => {
       if (fxSession.drawing.size && fxSession.drawing.has(linkKey(l))) return base(l);
       const fs = S.focusSet;
       if (fs && fs.has(idOf(l.source)) && fs.has(idOf(l.target))) return base(l);
-      if (S.sparks && S.sparks.glowEdges.size) {
-        const lv = strikeEdgeLevel(l);
-        if (lv > 0) return focusLinkColor(l, lv); // the focus light-up, transient
-      }
       if (l.__q === undefined) l.__q = sparksQualified(l.type, String(idOf(l.source)), String(idOf(l.target)), null); // stamped for real in sparksOnData
-      let a = l.__q ? QUAL_ALPHA : (isDomainLink(l) ? SHIMMER_DOMAIN : SHIMMER_BASE);
+      let sn = null;
       if (sparksOn() && !sparksReducedMotion()) {
         if (l.__ph === undefined) l.__ph = hash01(linkKey(l) + '|' + l.type) * 6.283185;
-        const sn = Math.sin(performance.now() / 1400 + l.__ph);
-        a *= l.__q ? 0.85 + 0.15 * sn : 0.6 + 0.4 * sn; // qualified lines: soft shine, not a twinkle
+        sn = Math.sin(performance.now() / 1400 + l.__ph);
       }
-      return hexToRgba(l.color || FALLBACK_LINK, Math.round(a * 500) / 500);
+      const a = Math.round(sparksRestAlpha(l.__q, isDomainLink(l), sn) * 500) / 500;
+      if (S.sparks && S.sparks.glowEdges.size) {
+        const lv = strikeEdgeLevel(l);
+        if (lv > 0) return focusLinkColor(l, Math.max(lv, a)); // the focus light-up, transient; never dips below rest
+      }
+      return hexToRgba(l.color || FALLBACK_LINK, a);
     };
     f.__shimBase = base;
     return f;
@@ -3967,6 +3991,15 @@ function matchScore(text, query) {
     SP.glowDirty = true;
   }
 
+  // Hover-off linger: the node's direct edges (and its halo) keep a long, easing-out glow.
+  function lingerNodeEdges(node) {
+    const SP = S && S.sparks;
+    if (!SP || !SP.running || node == null) return;
+    const id = String(node);
+    for (const e of SP.ctx.byNode.get(id) || []) glowPut(SP, SP.glowEdges, e.source + '|' + e.target + '|' + e.type, LINGER_MS, 0.85);
+    glowPut(SP, SP.glowNodes, id, LINGER_MS, 0.7);
+  }
+
   // Peer strike light-up: a node's whole direct network with the shared focus treatment.
   function strikeLight(SP, node, k = 1) {
     for (const e of SP.ctx.byNode.get(node) || []) glowPut(SP, SP.glowEdges, e.source + '|' + e.target + '|' + e.type, STRIKE_GLOW_MS, k);
@@ -4035,17 +4068,20 @@ function matchScore(text, query) {
   const pulseLastAt = new Map(); // node id -> last pulse time
   const PULSE_NODE_COOLDOWN_MS = 8000;
   // Event source wrapper: hover / selection / ask citations pulse a node's real relations.
-  function pulseNodeRelations(id, cap) {
+  function pulseNodeRelations(id, cap, edgeCooldownMs) {
     const SP = S && S.sparks;
     if (!SP || !SP.running || id == null) return 0;
     const key = String(id);
     const now = Date.now();
-    if (now - (pulseLastAt.get(key) || 0) < PULSE_NODE_COOLDOWN_MS) return 0;
+    // Hover passes a shorter per-relation quiet period: with the 60 s event default a second hover
+    // within a minute sent nothing, so the pointer looked dead (owner 2026-11-17).
+    const nodeCool = edgeCooldownMs ? Math.min(PULSE_NODE_COOLDOWN_MS, edgeCooldownMs) : PULSE_NODE_COOLDOWN_MS;
+    if (now - (pulseLastAt.get(key) || 0) < nodeCool) return 0;
     const limit = cap == null ? 4 : cap;
     let fired = 0;
     const edges = SP.relByNode && SP.relByNode.get(key);
     if (edges && edges.length) {
-      for (const e of sparksPulsePlan(edges, limit)) if (fireEventPacket(e)) fired++;
+      for (const e of sparksPulsePlan(edges, limit)) if (fireEventPacket(e, edgeCooldownMs)) fired++;
     }
     if (!fired) {
       // Hubs, the core and relation-less facts hold only DOMAIN spokes in
@@ -4056,7 +4092,7 @@ function matchScore(text, query) {
       if (all && all.length) {
         const spokes = all.filter((e) => e && String(e.type || '').toUpperCase() === 'DOMAIN'
           && String(e.source) !== String(e.target));
-        for (const e of spokes.slice(0, limit)) if (fireEventPacket(e)) fired++;
+        for (const e of spokes.slice(0, limit)) if (fireEventPacket(e, edgeCooldownMs)) fired++;
       }
     }
     if (fired) pulseLastAt.set(key, now);
@@ -4064,7 +4100,7 @@ function matchScore(text, query) {
   }
 
   // Event packet: one calm one-way crossing on a real rendered relation, exact direction.
-  function fireEventPacket(edge) {
+  function fireEventPacket(edge, cooldownMs) {
     const SP = S && S.sparks;
     if (!SP || !SP.running || !edge) return false;
     const s = String(edge.source != null ? edge.source : (edge.from != null ? edge.from : ''));
@@ -4080,13 +4116,13 @@ function matchScore(text, query) {
     if (SP.strikeSparks.length >= EVENT_PACKET_MAX) return false; // calm cap
     if (SP.strikeSparks.length >= packetCap()) return false; // tighter effective cap on phones (6)
     const now = Date.now();
-    if (now - (eventPacketLastAt.get(key) || 0) < EVENT_PACKET_COOLDOWN_MS) return false;
+    if (now - (eventPacketLastAt.get(key) || 0) < (cooldownMs || EVENT_PACKET_COOLDOWN_MS)) return false;
     eventPacketLastAt.set(key, now);
     SP.strikeSparks.push({ s: s, t: t, type: type, t0: SP.clock, ph: 0, legs: 0, once: true,
       durMs: EVENT_PACKET_MS, glow: 1.8, segs: SPARKS_BOLT_TRAIL_SEGS,
       rgb: sparksHexRgb(TYPE_COLORS[type] || SPARKS_CORE_COLOR), key: key,
       done: () => {
-        glowPut(SP, SP.glowEdges, key, BOLT_AFTERGLOW_MS, 0.5);
+        glowPut(SP, SP.glowEdges, key, LINGER_MS, 0.85); // the arrival edge lingers, easing out
         glowPut(SP, SP.glowNodes, t, BOLT_FLASH_MS, 1);
         if (SP.reachable.has(t)) SP.sparked.add(t);
       } });
@@ -4161,9 +4197,14 @@ function matchScore(text, query) {
       if (!ss[i].dead && SP.keys.has(ss[i].key)) ss[w++] = ss[i];
     }
     ss.length = w;
-    // Calm target (owner, 2026-11-12): no ambient spawning — packets fire on events only (fireEventPacket).
-    SP.ctx.cap = SP.liveCap;
+    // Ambient lane RE-ENABLED on the owner's 2026-11-17 amendment (it was turned off deliberately on
+    // 2026-11-12, the calm target). Simulated ambient flow is approved until real event wiring lands:
+    // a few subtle sparks alive at once (AMBIENT_CAP, not the 180 scheduler max), at most one new per
+    // tick, none while a node is hovered/selected (their pulses own the view). Event packets
+    // (fireEventPacket) are unchanged and ride the separate strike buffer.
     SP.ctx.fresh = sparksFreshSet();
+    SP.ctx.cap = (S.focusSet || S.hovered || S.selected) ? 0 : Math.min(AMBIENT_CAP, SP.liveCap, act.length + 1);
+    sparksStep(SP.state, SP.ctx);
     if (SP.state.bagCycle !== SP.cycleSeen) { SP.cycleSeen = SP.state.bagCycle; SP.sparked.clear(); }
     for (const a of act) {
       if (a.t0 !== undefined) continue;
@@ -4189,7 +4230,10 @@ function matchScore(text, query) {
     const D = a.durMs ? a.durMs : Math.min(2000, Math.max(500, (len / SPARKS_SPEED) * 1000)) / (a.fast || 1);
     a.ph += dt / D;
     const legs = Math.floor(a.ph);
-    while (a.legs < legs) { a.legs++; SP.sparked.add(a.legs & 1 ? a.t : a.s); if (a.once) { a.dead = true; if (a.done) { const d = a.done; a.done = null; d(); } } }
+    while (a.legs < legs) {
+      a.legs++; SP.sparked.add(a.legs & 1 ? a.t : a.s);
+      if (!a.once) glowPut(SP, SP.glowEdges, a.s + '|' + a.t + '|' + a.type, LINGER_MS, 0.6); // ambient arrival: the edge lingers
+      if (a.once) { a.dead = true; if (a.done) { const d = a.done; a.done = null; d(); } } }
     if (a.dead) return o;
     const m = a.ph % 2;
     const f = m < 1 ? m : 2 - m;

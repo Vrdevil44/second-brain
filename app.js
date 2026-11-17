@@ -121,7 +121,7 @@ function expandQueryVariants(q, groups) {
     const m = method.toUpperCase();
 
     if (u.origin === window.location.origin) {
-      // Same origin: only graph.json, census.json, kind-slots.json, mfa.json, live-state.json, knowledge-base.json, phases.json and graph-history.jsonl, only GET.
+      // Same origin: only graph.json, census.json, kind-slots.json, mfa.json, live-state.json, knowledge-base.json, phases.json, dev-progress.json and graph-history.jsonl, only GET.
       const isGraph = u.pathname.endsWith('/' + CONFIG.graphUrl) || u.pathname === '/' + CONFIG.graphUrl;
       const isMfa = u.pathname.endsWith('/mfa.json') || u.pathname === '/mfa.json';
       const isLive = u.pathname.endsWith('/live-state.json') || u.pathname === '/live-state.json';
@@ -129,8 +129,9 @@ function expandQueryVariants(q, groups) {
       const isCensus = u.pathname.endsWith('/census.json') || u.pathname === '/census.json';
       const isKindSlots = u.pathname.endsWith('/kind-slots.json') || u.pathname === '/kind-slots.json';
       const isPhases = u.pathname.endsWith('/phases.json') || u.pathname === '/phases.json';
+      const isDevProgress = u.pathname.endsWith('/dev-progress.json') || u.pathname === '/dev-progress.json';
       const isGraphHistory = u.pathname.endsWith('/graph-history.jsonl') || u.pathname === '/graph-history.jsonl';
-      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus || isKindSlots || isPhases || isGraphHistory) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
+      if (m === 'GET' && (isGraph || isMfa || isLive || isKb || isCensus || isKindSlots || isPhases || isDevProgress || isGraphHistory) && !/\/(daily-dump|organized)\//.test(u.pathname)) return;
       // R3: aliases.json (public subset) is also readable, GET only.
       const isAliases = u.pathname.endsWith('/aliases.json') || u.pathname === '/aliases.json';
       if (m === 'GET' && isAliases) return;
@@ -744,8 +745,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=d6f3825');
-        await loadScriptOnce('universe.js?v=d6f3825');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f16ce53');
+        await loadScriptOnce('universe.js?v=f16ce53');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4537,6 +4538,9 @@ function expandQueryVariants(q, groups) {
   let kbDashLogSig = '';   // last log signature rendered (log rows enter on real gains only)
   let kbDashFeedSig = '';  // last feed signature rendered (feed rows enter on real gains only)
   let kbPhases = null;     // tracker render copy (portal/phases.json), in memory only
+  let kbDevProgress = null; // the build lanes' current-pass progress (portal/dev-progress.json), in memory only
+  let kbDevFeedTimer = null; // the system-refinement feed rotation, created once per session
+  let kbDevFeedIdx = -1;   // feed position (-1 = start at the first running item), survives re-renders
   let kbHistory = null;    // growth snapshots (portal/graph-history.jsonl), in memory only
   let kbHistoryState = 'idle'; // growth history load: idle, loading, ready, failed
   let kbCircuitSig = '';   // last feed signature the circuit diagram pulsed for
@@ -5659,6 +5663,7 @@ function expandQueryVariants(q, groups) {
     'asks answered today': '--kb-teal',
     'rows in the semantic index': '--kb-lime',
     'open questions': '--kb-yellow',
+    'system refinement': '--kb-steel',
   };
 
   const KB_SECTION_ACCENTS = {
@@ -5853,8 +5858,86 @@ function expandQueryVariants(q, groups) {
       tile(nf.format(m.findings.openQuestions), 'open questions', 'the core question store',
         metricSpark('open_questions', '--kb-yellow', m.findings.openQuestions));
     }
+    // System refinement: the build lanes' current pass (portal/dev-progress.json). The number and the
+    // feed under it come from the same file; the percent rule is stated on the source line.
+    const dev = (typeof kbDevProgressModel === 'function' && typeof kbDevProgress !== 'undefined')
+      ? kbDevProgressModel(kbDevProgress, kbTodayIso()) : null;
+    if (dev) {
+      tile(dev.percent + '%', 'system refinement',
+        (dev.stale ? 'as of ' + dev.updated + ' · ' : '') + dev.done + ' of ' + dev.total + ' items done, parked excluded · dev-progress.json',
+        kbRenderDevFeed(dev));
+    }
     if (!tiles.length) return null;
     return el('div', { class: 'kb-headlines' }, ...tiles);
+  }
+
+  // ---- System refinement tile (owner order 2026-11-17) ----
+  // Pure: the file's items -> percent (done / total, parked excluded), feed rows, as-of state.
+  const KB_DEV_STATUS_WORD = { done: 'done', running: 'running', paused: 'paused', pending: 'next', parked: 'parked' };
+  function kbTodayIso() {
+    const d = new Date();
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  function kbDevProgressModel(raw, today) {
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.items)) return null;
+    const items = [];
+    for (const it of raw.items) {
+      if (!it || typeof it.label !== 'string' || !it.label || !Object.prototype.hasOwnProperty.call(KB_DEV_STATUS_WORD, it.status)) continue;
+      items.push({ phase: typeof it.phase === 'string' ? it.phase : '', label: it.label, status: it.status, word: KB_DEV_STATUS_WORD[it.status] });
+    }
+    const counted = items.filter((i) => i.status !== 'parked');
+    if (!counted.length) return null;
+    const done = counted.filter((i) => i.status === 'done').length;
+    const updated = typeof raw.updated === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.updated) ? raw.updated : '';
+    return { items, done, total: counted.length, percent: Math.round((done / counted.length) * 100),
+      updated, stale: !updated || updated !== today };
+  }
+
+  // The feed: every item stacked in one box, one visible at a time. Rotation is a class flip every
+  // few seconds (kbDevFeedTick); the fade and the flowing line are CSS (opacity / transform only).
+  function kbRenderDevFeed(dev) {
+    const n = dev.items.length;
+    if (kbDevFeedIdx < 0 || kbDevFeedIdx >= n) kbDevFeedIdx = Math.max(0, dev.items.findIndex((i) => i.status === 'running'));
+    return el('div', { class: 'kb-devfeed', role: 'group', 'aria-label': 'System refinement feed' },
+      el('div', { class: 'kb-devfeed-stack' }, ...dev.items.map((it, i) => el('div', {
+        class: 'kb-devfeed-item kb-dev-' + it.status + (i === kbDevFeedIdx ? ' is-on' : ''),
+        'aria-hidden': i === kbDevFeedIdx ? 'false' : 'true', title: it.label,
+      }, el('span', { class: 'kb-devfeed-phase' }, it.phase),
+        el('span', { class: 'kb-devfeed-status' }, it.word),
+        el('span', { class: 'kb-devfeed-text' }, it.label)))),
+      el('div', { class: 'kb-devflow', 'aria-hidden': 'true' }));
+  }
+
+  function kbDevFeedTick() {
+    if (document.hidden) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; // static: no rotation
+    const panel = $('#kb-panel');
+    if (panel && panel.hidden) return;
+    const feed = document.querySelector('.kb-devfeed');
+    if (!feed) return;
+    const rows = feed.querySelectorAll('.kb-devfeed-item');
+    if (rows.length < 2) return;
+    const cur = kbDevFeedIdx % rows.length;
+    const next = (cur + 1) % rows.length;
+    rows[cur].classList.remove('is-on');
+    rows[cur].setAttribute('aria-hidden', 'true');
+    rows[next].classList.add('is-on');
+    rows[next].setAttribute('aria-hidden', 'false');
+    kbDevFeedIdx = next;
+  }
+
+  async function kbLoadDevProgress() {
+    try {
+      const res = await guardedFetch('dev-progress.json', { cache: 'no-store' });
+      if (!res.ok) return;
+      const body = await res.json();
+      if (kbDevProgressModel(body, kbTodayIso())) {
+        kbDevProgress = body;
+        if (!kbDevFeedTimer) kbDevFeedTimer = setInterval(kbDevFeedTick, 3600);
+        kbRenderDashboard();
+      }
+    } catch { /* no tile without the file */ }
   }
 
   // Collapsible block for the console layer, mirroring the dashboard's
@@ -6509,6 +6592,7 @@ function expandQueryVariants(q, groups) {
     line.textContent = kbLiveLine();
     if (!kbAgeTimer) kbAgeTimer = setInterval(kbTickAges, 5000);
     if (!kbPhases) kbLoadPhases();
+    if (!kbDevProgress) kbLoadDevProgress();
     if (!kbHistory) kbLoadHistory();
     kbRenderDashboard();
   }
