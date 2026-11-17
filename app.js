@@ -712,7 +712,10 @@ function expandQueryVariants(q, groups) {
     const fc = faceCounts(graphData);
     const parts = [];
     if (fc && fc.carriesFacts) {
-      parts.push(nf.format(fc.things) + ' things', nf.format(fc.facts) + ' facts');
+      const live = pairedCensus && pairedCensus.facts && Number.isFinite(pairedCensus.facts.live)
+        ? pairedCensus.facts.live : null;
+      parts.push(nf.format(fc.things) + ' things',
+        live !== null ? nf.format(live) + ' ' + 'live facts' : nf.format(fc.facts) + ' facts');
     } else if (c.nodes !== null) parts.push(nf.format(c.nodes) + ' nodes');
     if (fc) parts.push(nf.format(fc.relations) + ' relations');
     else if (c.edges !== null) parts.push(nf.format(c.edges) + ' relations');
@@ -745,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=a19a412');
-        await loadScriptOnce('universe.js?v=a19a412');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=01aa457');
+        await loadScriptOnce('universe.js?v=01aa457');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1021,6 +1024,7 @@ function expandQueryVariants(q, groups) {
     }
     renderRecordCard();
     if (typeof kbRenderDashboard === 'function') kbRenderDashboard();
+    renderGraphMeta();
   }
 
   // Shared live-state with the paired census's active facts stamped on, so the HUD can trust st.facts.
