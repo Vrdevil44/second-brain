@@ -745,8 +745,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7c6fb04');
-        await loadScriptOnce('universe.js?v=7c6fb04');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f20ecd8');
+        await loadScriptOnce('universe.js?v=f20ecd8');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4542,6 +4542,16 @@ function expandQueryVariants(q, groups) {
   let kbDevProgress = null; // the build lanes' current-pass progress (portal/dev-progress.json), in memory only
   let kbDevFeedTimer = null; // the system-refinement feed rotation, created once per session
   let kbDevFeedIdx = -1;   // feed position (-1 = start at the first running item), survives re-renders
+  let kbDevProgressText = ''; // raw text of the last good dev-progress.json response, for change detection
+  let kbDevStale = null;   // the model's stale flag at the last accepted load; flips across midnight
+  let kbDevFetching = false; // in-flight guard for the refetch
+  let kbDevPollTimer = null; // 30s refetch while the KB panel is open
+  let kbDevListOpen = false; // hover list state survives dashboard rebuilds
+  let kbDevListScroll = 0;   // and so does its scroll position
+  let kbDevTileEl = null;    // the live tile the list is anchored to
+  let kbDevRefocus = false;  // the tile had focus when the dashboard was rebuilt
+  let kbDevIntentTimer = null;
+  let kbDevLeaveTimer = null;
   let kbHistory = null;    // growth snapshots (portal/graph-history.jsonl), in memory only
   let kbHistoryState = 'idle'; // growth history load: idle, loading, ready, failed
   let kbCircuitSig = '';   // last feed signature the circuit diagram pulsed for
@@ -4560,6 +4570,7 @@ function expandQueryVariants(q, groups) {
 
   function kbReset() {
     kbGen++;
+    kbStopDevPoll();
     kbSections = null;
     kbLastId = null;
     kbLiveState = null;
@@ -5100,6 +5111,7 @@ function expandQueryVariants(q, groups) {
     if (!dash) return;
     const m = kbDashboardModel(graphData, pairedCensus, kbLiveState, kbPhases,
       (typeof kbHistory !== 'undefined') ? kbHistory : null);
+    if (typeof kbDevSnapshot === 'function') kbDevSnapshot(); // hover list: keep focus + scroll across the rebuild
     dash.textContent = '';
     if (!m) { dash.hidden = true; return; }
     dash.hidden = false;
@@ -5867,6 +5879,7 @@ function expandQueryVariants(q, groups) {
       tile(dev.percent + '%', 'system refinement',
         (dev.stale ? 'as of ' + dev.updated + ' · ' : '') + dev.done + ' of ' + dev.total + ' items done, parked excluded · dev-progress.json',
         kbRenderDevFeed(dev));
+      if (typeof kbWireDevTile === 'function') kbWireDevTile(tiles[tiles.length - 1], dev);
     }
     if (!tiles.length) return null;
     return el('div', { class: 'kb-headlines' }, ...tiles);
@@ -5928,17 +5941,212 @@ function expandQueryVariants(q, groups) {
     kbDevFeedIdx = next;
   }
 
+  // Pure: the hover list. Groups in the fixed phase order; a phase outside the set goes in a trailing
+  // "Other" group, never dropped. Empty groups are omitted. Parked rows are listed (they are not counted).
+  const KB_DEV_PHASES = ['NOW', 'A', 'B', 'C', 'D', 'E', 'F'];
+  function kbDevListModel(dev) {
+    if (!dev || !Array.isArray(dev.items)) return [];
+    const groups = KB_DEV_PHASES.map((p) => ({ phase: p, items: [] }));
+    const other = { phase: 'Other', items: [] };
+    for (const it of dev.items) {
+      const g = groups.find((x) => x.phase === it.phase);
+      (g || other).items.push({ label: it.label, status: it.status, word: it.status });
+    }
+    groups.push(other);
+    return groups.filter((g) => g.items.length);
+  }
+
+  // Pure: did the fetched text change? Raw text compare; a non-string next never counts as a change.
+  function kbDevProgressChanged(prevText, nextText) {
+    return typeof nextText === 'string' && nextText !== prevText;
+  }
+
+  // Re-fetches on every KB open, every 30 s while the panel is open and the tab visible, and when the
+  // tab becomes visible. Silent on failure (last good data stays). Re-renders only when the text or the
+  // stale flag changed, so the feed rotation and layout do not churn.
   async function kbLoadDevProgress() {
+    if (kbDevFetching) return;
+    kbDevFetching = true;
     try {
       const res = await guardedFetch('dev-progress.json', { cache: 'no-store' });
       if (!res.ok) return;
-      const body = await res.json();
-      if (kbDevProgressModel(body, kbTodayIso())) {
-        kbDevProgress = body;
-        if (!kbDevFeedTimer) kbDevFeedTimer = setInterval(kbDevFeedTick, 3600);
-        kbRenderDashboard();
+      const text = await res.text();
+      const body = JSON.parse(text);
+      const model = kbDevProgressModel(body, kbTodayIso());
+      if (!model) return;
+      const changed = kbDevProgressChanged(kbDevProgressText, text);
+      const staleFlip = kbDevStale !== null && kbDevStale !== model.stale;
+      kbDevProgressText = text;
+      kbDevStale = model.stale;
+      if (!changed && !staleFlip) return;
+      kbDevProgress = body;
+      if (!kbDevFeedTimer) kbDevFeedTimer = setInterval(kbDevFeedTick, 3600);
+      kbRenderDashboard();
+    } catch { /* no tile without the file; keep the last good data */ }
+    finally { kbDevFetching = false; }
+  }
+
+  function kbDevPollTick() {
+    const panel = $('#kb-panel');
+    if (document.hidden || !panel || panel.hidden) return;
+    kbLoadDevProgress();
+  }
+  function kbStartDevPoll() {
+    if (!kbDevPollTimer) kbDevPollTimer = setInterval(kbDevPollTick, 30000);
+  }
+  function kbStopDevPoll() {
+    if (kbDevPollTimer) { clearInterval(kbDevPollTimer); kbDevPollTimer = null; }
+    kbCloseDevList(false);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) kbDevPollTick();
+  });
+
+  // ---- hover list: every registry item by phase, rendered from kbDevProgress (no second fetch) ----
+  function kbDevSnapshot() {
+    kbDevRefocus = !!(kbDevListOpen && document.activeElement && document.activeElement.classList
+      && document.activeElement.classList.contains('kb-devtile'));
+    const box = kbDevListEl();
+    if (kbDevListOpen && box) kbDevListScroll = box.scrollTop;
+  }
+
+  function kbDevListEl() { return document.getElementById('kb-devlist'); }
+
+  function kbPlaceDevList(box) {
+    const tile = kbDevTileEl;
+    if (!tile || !tile.isConnected) { kbCloseDevList(false); return; }
+    const r = tile.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const w = Math.min(380, vw - 16);
+    const left = Math.max(8, Math.min(r.left, vw - w - 8));
+    const below = vh - r.bottom - 14, above = r.top - 14;
+    box.style.width = w + 'px';
+    box.style.left = left + 'px';
+    if (below >= 220 || below >= above) {
+      box.style.top = (r.bottom + 6) + 'px'; box.style.bottom = 'auto';
+      box.style.maxHeight = Math.max(120, Math.min(480, below)) + 'px';
+    } else {
+      box.style.top = 'auto'; box.style.bottom = (vh - r.top + 6) + 'px';
+      box.style.maxHeight = Math.max(120, Math.min(480, above)) + 'px';
+    }
+  }
+
+  function kbRenderDevList(dev) {
+    let box = kbDevListEl();
+    if (!box) {
+      box = el('div', { id: 'kb-devlist', class: 'kb-devlist', role: 'region', 'aria-label': 'System refinement: all items by phase' });
+      box.addEventListener('mouseenter', () => { clearTimeout(kbDevLeaveTimer); });
+      box.addEventListener('mouseleave', () => kbScheduleDevListClose());
+      document.body.appendChild(box);
+    }
+    box.textContent = '';
+    for (const g of kbDevListModel(dev)) {
+      box.appendChild(el('div', { class: 'kb-devlist-phase' }, g.phase));
+      for (const it of g.items) {
+        box.appendChild(el('div', { class: 'kb-devlist-row kb-dev-' + it.status },
+          el('span', { class: 'kb-devchip kb-devchip-' + it.status }, it.word),
+          el('span', { class: 'kb-devlist-label' }, it.label)));
       }
-    } catch { /* no tile without the file */ }
+    }
+    kbPlaceDevList(box);
+    box.scrollTop = kbDevListScroll;
+    return box;
+  }
+
+  function kbOpenDevList() {
+    clearTimeout(kbDevIntentTimer); clearTimeout(kbDevLeaveTimer);
+    const dev = kbDevProgressModel(kbDevProgress, kbTodayIso());
+    if (!dev || !kbDevTileEl) return;
+    kbDevListOpen = true;
+    kbDevTileEl.setAttribute('aria-expanded', 'true');
+    kbRenderDevList(dev);
+  }
+
+  function kbCloseDevList(toTile) {
+    clearTimeout(kbDevIntentTimer); clearTimeout(kbDevLeaveTimer);
+    const was = kbDevListOpen;
+    kbDevListOpen = false;
+    kbDevListScroll = 0;
+    const box = kbDevListEl();
+    if (box) box.remove();
+    if (kbDevTileEl) kbDevTileEl.setAttribute('aria-expanded', 'false');
+    if (was && toTile && kbDevTileEl && kbDevTileEl.isConnected) kbDevTileEl.focus({ preventScroll: true });
+  }
+
+  function kbScheduleDevListClose() {
+    clearTimeout(kbDevLeaveTimer);
+    kbDevLeaveTimer = setTimeout(() => kbCloseDevList(false), 120);
+  }
+
+  let kbDevGlobalWired = false;
+  function kbWireDevGlobals() {
+    if (kbDevGlobalWired) return;
+    kbDevGlobalWired = true;
+    // capture phase: Esc closes the list first and does not also close the KB panel
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !kbDevListOpen) return;
+      e.preventDefault(); e.stopPropagation();
+      kbCloseDevList(true);
+    }, true);
+    document.addEventListener('pointerdown', (e) => {
+      if (!kbDevListOpen) return;
+      const box = kbDevListEl();
+      if ((box && box.contains(e.target)) || (kbDevTileEl && kbDevTileEl.contains(e.target))) return;
+      kbCloseDevList(false);
+    }, true);
+    // the dashboard scrolls: keep the list glued to its tile
+    document.addEventListener('scroll', (e) => {
+      if (!kbDevListOpen) return;
+      const box = kbDevListEl();
+      if (box && e.target === box) return;
+      if (box) kbPlaceDevList(box);
+    }, true);
+    window.addEventListener('resize', () => { const b = kbDevListEl(); if (kbDevListOpen && b) kbPlaceDevList(b); });
+  }
+
+  function kbWireDevTile(tile, dev) {
+    kbWireDevGlobals();
+    kbDevTileEl = tile;
+    tile.classList.add('kb-devtile');
+    tile.setAttribute('tabindex', '0');
+    tile.setAttribute('aria-controls', 'kb-devlist');
+    tile.setAttribute('aria-expanded', kbDevListOpen ? 'true' : 'false');
+    let pointerType = 'mouse';
+    tile.addEventListener('pointerdown', (e) => { pointerType = e.pointerType || 'mouse'; });
+    tile.addEventListener('mouseenter', () => {
+      clearTimeout(kbDevLeaveTimer);
+      if (kbDevListOpen) return;
+      clearTimeout(kbDevIntentTimer);
+      kbDevIntentTimer = setTimeout(kbOpenDevList, 150);
+    });
+    tile.addEventListener('mouseleave', () => {
+      clearTimeout(kbDevIntentTimer);
+      if (kbDevListOpen) kbScheduleDevListClose();
+    });
+    tile.addEventListener('focus', () => { if (!kbDevListOpen) kbOpenDevList(); });
+    tile.addEventListener('focusout', (e) => {
+      if (kbDevRefocus || !tile.isConnected) return; // a rebuild, not the reader leaving
+      const box = kbDevListEl();
+      if (box && e.relatedTarget && box.contains(e.relatedTarget)) return;
+      if (kbDevListOpen && pointerType === 'mouse' && tile.matches(':hover')) return;
+      if (kbDevListOpen) kbCloseDevList(false);
+    });
+    tile.addEventListener('click', () => {
+      // a mouse click never closes what the hover just opened; touch toggles
+      if (pointerType === 'mouse' && !kbDevListOpen) { kbOpenDevList(); return; }
+      if (pointerType === 'mouse') return;
+      if (kbDevListOpen) kbCloseDevList(false); else kbOpenDevList();
+    });
+    tile.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      if (kbDevListOpen) kbCloseDevList(false); else kbOpenDevList();
+    });
+    if (kbDevListOpen) {
+      kbRenderDevList(dev);
+      if (kbDevRefocus) setTimeout(() => { if (tile.isConnected) tile.focus({ preventScroll: true }); kbDevRefocus = false; }, 0);
+    }
   }
 
   // Collapsible block for the console layer, mirroring the dashboard's
@@ -6593,7 +6801,7 @@ function expandQueryVariants(q, groups) {
     line.textContent = kbLiveLine();
     if (!kbAgeTimer) kbAgeTimer = setInterval(kbTickAges, 5000);
     if (!kbPhases) kbLoadPhases();
-    if (!kbDevProgress) kbLoadDevProgress();
+    kbLoadDevProgress();
     if (!kbHistory) kbLoadHistory();
     kbRenderDashboard();
   }
@@ -6713,6 +6921,7 @@ function expandQueryVariants(q, groups) {
     panel.hidden = false;
     $('#close-kb').focus();
     kbRenderDashboard();
+    kbStartDevPoll();
     kbRefreshLive(gen);
   }
 
@@ -6720,6 +6929,7 @@ function expandQueryVariants(q, groups) {
     const panel = $('#kb-panel');
     if (panel.hidden) return;
     panel.hidden = true;
+    kbStopDevPoll();
     $('#open-kb').focus();
   }
 

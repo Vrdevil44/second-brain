@@ -1365,6 +1365,43 @@ body.view-3d .node-panel { display: none; }
 .kb-range-btn.active { background: var(--accent-glow); border-color: var(--accent-glow); color: var(--bg); }
 .kb-tile-tick { animation: kb-tile-tick .8s ease; }
 @keyframes kb-tile-tick { 0% { border-color: var(--accent-glow); } 100% { border-color: var(--line-glow); } }
+/* System refinement tile (owner order 2026-11-17): a looped feed of the build lanes' items under the number.
+   The fade is opacity + transform on one stacked box (no layout work); the flowing line is a translated
+   gradient. Reduced motion: no rotation (JS), no fade, no flow. */
+.kb-devfeed { margin-top: 8px; }
+.kb-devfeed-stack { position: relative; height: 46px; overflow: hidden; }
+.kb-devfeed-item { position: absolute; inset: 0; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: 6px; align-content: start; font-size: 11.5px; line-height: 15px; color: var(--text-2); opacity: 0; transform: translateY(4px); transition: opacity .9s ease, transform .9s ease; pointer-events: none; }
+.kb-devfeed-item.is-on { opacity: 1; transform: none; }
+.kb-devfeed-phase { font-weight: 700; color: var(--kb-steel); }
+.kb-devfeed-text { grid-column: 1 / -1; grid-row: 2; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.kb-devfeed-status { justify-self: end; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.kb-dev-done .kb-devfeed-status { color: var(--kb-green); }
+.kb-dev-running .kb-devfeed-status { color: var(--kb-amber); }
+.kb-dev-paused .kb-devfeed-status { color: var(--kb-orange); }
+/* Hover list: fixed, outside the tile (the tile clips and the dashboard scrolls). Above the KB panel, below modals. */
+.kb-devtile { cursor: default; }
+.kb-devtile:focus-visible { outline: 2px solid var(--kb-steel); outline-offset: 2px; }
+.kb-devlist { position: fixed; z-index: 28; overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px 10px; background: var(--bg-2); border: 1px solid var(--line-glow); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .5); font-size: 12px; line-height: 16px; color: var(--text-2); animation: kb-devlist-in .12s ease; }
+@keyframes kb-devlist-in { from { opacity: 0; } to { opacity: 1; } }
+.kb-devlist-phase { margin: 8px 0 3px; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--kb-steel); }
+.kb-devlist-phase:first-child { margin-top: 0; }
+.kb-devlist-row { display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: start; padding: 2px 0; }
+.kb-devlist-row.kb-dev-done { opacity: .72; }
+.kb-devlist-label { min-width: 0; overflow-wrap: anywhere; }
+.kb-devchip { justify-self: start; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 14px; padding: 0 6px; border-radius: 7px; border: 1px solid currentColor; color: var(--kb-steel); }
+.kb-devchip-done { color: var(--kb-green); }
+.kb-devchip-running { color: var(--kb-amber); }
+.kb-devchip-pending { color: var(--kb-sky); }
+.kb-devchip-paused { color: var(--kb-orange); }
+.kb-devchip-parked { color: var(--kb-steel); }
+@media (prefers-reduced-motion: reduce) { .kb-devlist { animation: none; } }
+.kb-devflow { position: relative; height: 2px; margin-top: 6px; border-radius: 2px; overflow: hidden; background: rgba(143, 163, 184, .18); }
+.kb-devflow::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(90deg, transparent, var(--kb-steel), transparent); transform: translateX(-100%); animation: kb-devflow 3.2s linear infinite; will-change: transform; }
+@keyframes kb-devflow { to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) {
+  .kb-devfeed-item { transition: none; transform: none; }
+  .kb-devflow::after { animation: none; transform: none; width: 100%; opacity: .5; }
+}
 /* The refinement tile's top accent drifts slowly (background-position only, no layout work). Motion-safe only. */
 @keyframes kb-devaccent { from { background-position: 0% 0; } to { background-position: 100% 0; } }
 @media (prefers-reduced-motion: no-preference) {
