@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=fd1a988');
-        await loadScriptOnce('universe.js?v=fd1a988');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=b37aaf2');
+        await loadScriptOnce('universe.js?v=b37aaf2');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -7752,146 +7752,139 @@ function expandQueryVariants(q, groups) {
   askBar.buildArchivedTurn = function (rec) {
     const turn = document.createElement('div');
     turn.className = 'askbar-turn';
-    const add = (tag, cls, text) => {
+    turn.setAttribute('tabindex', '0');
+    turn.setAttribute('role', 'button');
+    turn.setAttribute('aria-expanded', 'false');
+    turn.setAttribute('aria-label', 'Show details for this turn');
+    const mk = (parent, tag, cls, text) => {
       const n = document.createElement(tag);
       n.className = cls;
-      n.appendChild(document.createTextNode(text));
-      turn.appendChild(n);
-      return n;
-    };
-    const addTo = (parent, tag, cls, text) => {
-      const n = document.createElement(tag);
-      n.className = cls;
-      n.appendChild(document.createTextNode(text));
+      if (text) n.appendChild(document.createTextNode(text));
       parent.appendChild(n);
       return n;
     };
-    // Kind tags: stored on the record; derived for legacy records.
     const TAG_WORDS = { question: 'Question', answer: 'Answer', reply: 'Reply', update: 'Update', demand: 'Demand' };
     const tags = (Array.isArray(rec.tags) && rec.tags.length) ? rec.tags : askBar.turnTags(rec);
-    if (tags.length) {
-      const row = document.createElement('div');
-      row.className = 'askbar-tags';
-      tags.forEach((t) => {
-        const s = document.createElement('span');
-        s.className = 'askbar-tag askbar-tag-' + t;
-        s.appendChild(document.createTextNode(TAG_WORDS[t] || t));
-        row.appendChild(s);
-      });
-      turn.appendChild(row);
-    }
-    // The details panel + its toggle; actions are appended into it below.
-    const details = document.createElement('div');
-    details.className = 'askbar-details';
-    details.hidden = true;
-    const toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.className = 'askbar-details-btn';
-    toggle.appendChild(document.createTextNode('Details'));
-    toggle.setAttribute('aria-expanded', 'false');
-    toggle.setAttribute('aria-label', 'Show the facts and actions for this turn');
-    toggle.addEventListener('click', () => {
-      details.hidden = !details.hidden;
-      toggle.setAttribute('aria-expanded', String(!details.hidden));
-    });
-    const actions = document.createElement('div');
-    actions.className = 'askbar-actions';
-    const addQuoteBtn = () => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'askbar-quote-btn';
-      b.appendChild(document.createTextNode('Reply'));
-      b.setAttribute('aria-label', 'Reply to this turn');
-      b.addEventListener('click', () => { askBar.setQuote(rec); });
-      actions.appendChild(b);
-    };
-    const finish = () => {
-      if (actions.children.length) details.appendChild(actions);
-      turn.appendChild(toggle);
-      turn.appendChild(details);
-      return turn;
-    };
-    if (rec.quote) add('p', 'askbar-turn-quote', '↳ ' + askBar.snippet(rec.quote.question || rec.quote.answer, QUOTE_CHIP_MAX));
-    if (rec.question) add('p', 'askbar-turn-q', rec.question);
-    if (rec.caption) add('p', 'askbar-turn-caption', rec.caption);
-    if (rec.kind === 'op' && rec.op) {
-      add('p', 'askbar-turn-caption', rec.op.op === 'create' ? 'Create note: ' + (rec.op.title || '') : 'Add to: ' + (rec.op.node || ''));
-      if (rec.op.text) add('p', 'askbar-turn-answer', rec.op.text);
-      add('p', 'askbar-turn-caption', rec.answer);
-      if (rec.op.state === 'proposed' && rec.ts) add('p', 'askbar-turn-caption', 'proposed ' + askBar.ageWords(rec.ts) + ' — waiting for the merge');
-      addQuoteBtn();
-      return finish();
-    }
-    if (rec.kind === 'filed') {
-      const line = add('p', 'askbar-turn-answer', '');
-      askBar.fillFiledLine(line, rec);
-      addQuoteBtn();
-      return finish();
-    }
-    if (rec.answer) add('p', 'askbar-turn-answer', rec.answer);
-    if (rec.cites && rec.cites.length) {
-      addTo(details, 'p', 'askbar-prov-title', 'Facts used');
-      rec.cites.forEach((c) => {
-        const row = document.createElement('div');
-        row.className = 'askbar-prov';
-        if (c.lit) {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'askbar-cite-btn';
-          b.appendChild(document.createTextNode(c.fid));
-          b.setAttribute('aria-label', 'Show ' + c.fid + ' in the graph');
-          b.addEventListener('click', () => { askBar.focusFid(c.fid); });
-          row.appendChild(b);
-        } else {
-          const sp = document.createElement('span');
-          sp.className = 'askbar-cite-meta';
-          sp.appendChild(document.createTextNode(c.fid));
-          row.appendChild(sp);
-        }
-        if (c.snippet) {
-          const sn = document.createElement('span');
-          sn.className = 'askbar-prov-snippet';
-          sn.appendChild(document.createTextNode(c.snippet));
-          row.appendChild(sn);
-        }
-        if (typeof c.confidence === 'number' && isFinite(c.confidence)) {
-          const cf = document.createElement('span');
-          cf.className = 'askbar-prov-conf';
-          cf.appendChild(document.createTextNode(Math.round(c.confidence * 100) + '%'));
-          row.appendChild(cf);
-        }
-        details.appendChild(row);
-      });
-    }
-    if (rec.warnings && rec.warnings.length) {
-      const wl = document.createElement('ul');
-      wl.className = 'askbar-warnings';
-      rec.warnings.forEach((w) => { const li = document.createElement('li'); li.appendChild(document.createTextNode(w)); wl.appendChild(li); });
-      details.appendChild(wl);
-    }
+    let who = '';
     if (rec.thinker) {
-      // Records stored before the thinker token was normalised carry the full
-      // caption sentence ("answered by the brain's small local model, ...");
-      // strip its leading "answered by" so the prefix is never doubled.
-      let who = rec.thinker === 'localmind' ? "the brain's small local model" : String(rec.thinker);
-      if (/^answered by /i.test(who)) who = who.replace(/^answered by /i, '');
-      addTo(details, 'p', 'askbar-turn-caption', 'Answered by ' + who);
+      // Older records carry the full caption sentence; strip its "answered by".
+      who = rec.thinker === 'localmind' ? "the brain's small local model" : String(rec.thinker);
+      who = who.replace(/^answered by /i, '');
     }
-    addQuoteBtn();
-    if (rec.kind === 'ask') {
-      const fb = document.createElement('button');
-      fb.type = 'button';
-      fb.className = 'askbar-filethis-btn';
-      if (rec.filedThis) {
-        fb.disabled = true;
-        fb.appendChild(document.createTextNode('Filed'));
-      } else {
-        fb.appendChild(document.createTextNode('File this'));
-        fb.addEventListener('click', () => { askBar.fileThis(rec, fb); });
+    // The one text shown as the answer: an op shows its own text, not both.
+    const isOp = rec.kind === 'op' && rec.op;
+    const answerText = isOp ? (rec.op.text || rec.answer || '') : (rec.answer || '');
+    // Caption lines that add something the resting surface does not already say.
+    const captions = [];
+    if (isOp) {
+      captions.push(rec.op.op === 'create' ? 'Create note: ' + (rec.op.title || '') : 'Add to: ' + (rec.op.node || ''));
+      if (rec.op.state === 'proposed' && rec.ts) captions.push('proposed ' + askBar.ageWords(rec.ts) + ' — waiting for the merge');
+    } else if (rec.caption && rec.caption !== answerText) {
+      captions.push(rec.caption);
+    }
+
+    // ---- resting surface: quote, question, answer ----
+    if (rec.quote) mk(turn, 'p', 'askbar-turn-quote', '↳ ' + askBar.snippet(rec.quote.question || rec.quote.answer, QUOTE_CHIP_MAX));
+    if (rec.question) mk(turn, 'p', 'askbar-turn-q', rec.question);
+    let filedLine = null;
+    if (rec.kind === 'filed') {
+      filedLine = mk(turn, 'p', 'askbar-turn-answer', '');
+      askBar.fillFiledLine(filedLine, rec);
+    } else if (answerText) {
+      mk(turn, 'p', 'askbar-turn-answer', answerText);
+    }
+
+    // ---- hover/focus meta line (hidden at rest; CSS adds the hover-intent delay) ----
+    const meta = mk(turn, 'p', 'askbar-turn-meta', '');
+    meta.hidden = true;
+    const metaBits = tags.map((t) => TAG_WORDS[t] || t).concat(captions);
+    if (who) metaBits.push('Answered by ' + who);
+    if (rec.ts) metaBits.push(askBar.ageWords(rec.ts));
+    meta.appendChild(document.createTextNode(metaBits.join(' · ')));
+    const showMeta = () => { meta.hidden = false; };
+    const hideMeta = () => { meta.hidden = true; };
+    turn.addEventListener('mouseenter', showMeta);
+    turn.addEventListener('focus', showMeta);
+    turn.addEventListener('mouseleave', hideMeta);
+    turn.addEventListener('blur', hideMeta);
+
+    // ---- click modal: full detail, working buttons ----
+    let backdrop = null;
+    const onKey = (e) => { if (backdrop && e && e.key === 'Escape') close(); };
+    function close() {
+      if (!backdrop) return;
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+      backdrop = null;
+      if (document.removeEventListener) document.removeEventListener('keydown', onKey);
+      turn.setAttribute('aria-expanded', 'false');
+      turn.focus();
+    }
+    const open = () => {
+      if (backdrop) return;
+      backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop askbar-turn-modal-backdrop';
+      backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+      const modal = mk(backdrop, 'div', 'modal askbar-turn-modal', '');
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-label', 'Turn details');
+      const tagRow = mk(modal, 'div', 'askbar-tags', '');
+      tags.forEach((t) => mk(tagRow, 'span', 'askbar-tag askbar-tag-' + t, TAG_WORDS[t] || t));
+      if (rec.quote) mk(modal, 'p', 'askbar-turn-quote', '↳ ' + askBar.snippet(rec.quote.question || rec.quote.answer, QUOTE_CHIP_MAX));
+      if (rec.question) mk(modal, 'p', 'askbar-turn-q', rec.question);
+      if (filedLine) {
+        askBar.fillFiledLine(mk(modal, 'p', 'askbar-turn-answer', ''), rec);
+      } else if (answerText) {
+        mk(modal, 'p', 'askbar-turn-answer', answerText);
       }
-      actions.appendChild(fb);
-    }
-    return finish();
+      captions.forEach((c) => mk(modal, 'p', 'askbar-turn-caption', c));
+      if (isOp && rec.answer && rec.answer !== answerText) mk(modal, 'p', 'askbar-turn-caption', rec.answer);
+      if (who) mk(modal, 'p', 'askbar-turn-caption', 'Answered by ' + who);
+      if (rec.ts) mk(modal, 'p', 'askbar-turn-caption', askBar.ageWords(rec.ts));
+      if (rec.cites && rec.cites.length) {
+        mk(modal, 'p', 'askbar-prov-title', 'Facts used');
+        rec.cites.forEach((c) => {
+          const row = mk(modal, 'div', 'askbar-prov', '');
+          if (c.lit) {
+            const b = mk(row, 'button', 'askbar-cite-btn', c.fid);
+            b.type = 'button';
+            b.setAttribute('aria-label', 'Show ' + c.fid + ' in the graph');
+            b.addEventListener('click', () => { askBar.focusFid(c.fid); });
+          } else {
+            mk(row, 'span', 'askbar-cite-meta', c.fid);
+          }
+          if (c.snippet) mk(row, 'span', 'askbar-prov-snippet', c.snippet);
+          if (typeof c.confidence === 'number' && isFinite(c.confidence)) mk(row, 'span', 'askbar-prov-conf', Math.round(c.confidence * 100) + '%');
+        });
+      }
+      if (rec.warnings && rec.warnings.length) {
+        const wl = mk(modal, 'ul', 'askbar-warnings', '');
+        rec.warnings.forEach((w) => mk(wl, 'li', '', w));
+      }
+      const actions = mk(modal, 'div', 'askbar-actions', '');
+      const qb = mk(actions, 'button', 'askbar-quote-btn', 'Reply');
+      qb.type = 'button';
+      qb.setAttribute('aria-label', 'Reply to this turn');
+      qb.addEventListener('click', () => { askBar.setQuote(rec); });
+      if (rec.kind === 'ask') {
+        const fb = mk(actions, 'button', 'askbar-filethis-btn', rec.filedThis ? 'Filed' : 'File this');
+        fb.type = 'button';
+        if (rec.filedThis) fb.disabled = true;
+        else fb.addEventListener('click', () => { askBar.fileThis(rec, fb); });
+      }
+      const cb = mk(actions, 'button', 'askbar-modal-close', 'Close');
+      cb.type = 'button';
+      cb.addEventListener('click', close);
+      document.body.appendChild(backdrop);
+      document.addEventListener('keydown', onKey);
+      turn.setAttribute('aria-expanded', 'true');
+      cb.focus();
+    };
+    turn.addEventListener('click', open);
+    turn.addEventListener('keydown', (e) => {
+      if (e && (e.key === 'Enter' || e.key === ' ')) { if (e.preventDefault) e.preventDefault(); open(); }
+    });
+    return turn;
   };
 
   askBar.clearThread = function () {

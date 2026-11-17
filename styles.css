@@ -1743,8 +1743,15 @@ body.view-3d .node-panel { display: none; }
 .askbar-tag-reply { color: var(--accent-glow); border-color: var(--accent-glow); }
 .askbar-tag-demand { color: #e0a458; border-color: #e0a458; }
 .askbar-tag-update { color: #7fc97f; border-color: #7fc97f; }
-.askbar-details-btn { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; opacity: 0.75; font-size: 0.8em; padding: 2px 0; text-decoration: underline; }
-.askbar-details { margin-top: 4px; }
+.askbar-turn { cursor: pointer; }
+.askbar-turn:focus-visible { outline: 1px solid var(--accent-glow); outline-offset: 2px; }
+/* Hover/focus meta line: hidden at rest; ~150ms hover-intent via animation delay. */
+.askbar-turn-meta { margin: 0 0 4px; color: var(--text-3); font-size: 12px; animation: askbar-meta-in 120ms ease 150ms both; }
+.askbar-turn-meta[hidden] { display: none; }
+@keyframes askbar-meta-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .askbar-turn-meta { animation: none; } }
+.askbar-turn-modal .askbar-prov, .askbar-turn-modal .askbar-warnings { margin-bottom: 8px; }
+.askbar-turn-modal .askbar-actions { margin-top: 12px; }
 .askbar-prov-title { margin: 0 0 4px; color: var(--text-3); font-size: 12px; }
 .askbar-prov { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 0 0 4px; }
 .askbar-prov-snippet { color: var(--text-2, var(--text-3)); font-size: 12px; overflow-wrap: anywhere; }
