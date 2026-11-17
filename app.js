@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=384330a');
-        await loadScriptOnce('universe.js?v=384330a');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=53f6d43');
+        await loadScriptOnce('universe.js?v=53f6d43');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -7471,7 +7471,7 @@ function expandQueryVariants(q, groups) {
       thinker: typeof r.thinker === 'string' ? r.thinker : '',
       warnings: Array.isArray(r.warnings) ? r.warnings.filter((w) => typeof w === 'string') : [],
       cites: [],
-      archived: true,
+      archived: typeof r.archived === 'boolean' ? r.archived : true,
     };
     if (Array.isArray(r.cites)) {
       r.cites.forEach((c) => {
