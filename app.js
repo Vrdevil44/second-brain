@@ -744,8 +744,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=ca12285');
-        await loadScriptOnce('universe.js?v=ca12285');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=d6f3825');
+        await loadScriptOnce('universe.js?v=d6f3825');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6577,7 +6577,7 @@ function expandQueryVariants(q, groups) {
   function kbOnBeat(st) {
     const panel = $('#kb-panel');
     if (!panel || panel.hidden || !st) return;
-    const beat = (st && typeof st.beat === 'number') ? st.beat : null;
+    const beat = (st && typeof st.awake_cycle === 'number') ? st.awake_cycle : (typeof st.beat === 'number' ? st.beat : null);
     if (beat === null || beat === kbBeatPulse) return;
     kbBeatPulse = beat;
     kbLiveState = Object.assign({}, kbLiveState, st);
