@@ -744,8 +744,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0287afe');
-        await loadScriptOnce('universe.js?v=0287afe');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c26e365');
+        await loadScriptOnce('universe.js?v=c26e365');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6720,7 +6720,13 @@ function expandQueryVariants(q, groups) {
 
   askBar.graphIds = function () {
     const nodes = (graphData && Array.isArray(graphData.nodes)) ? graphData.nodes : [];
-    return new Set(nodes.map((n) => String(n.id)));
+    const ids = new Set();
+    nodes.forEach((n) => {
+      if (!n) return;
+      if (n.id !== undefined && n.id !== null) ids.add(String(n.id));
+      if (Array.isArray(n.facts)) n.facts.forEach((f) => { if (f && f.id !== undefined && f.id !== null) ids.add(String(f.id)); });
+    });
+    return ids;
   };
 
   askBar.STATE_WORDS = { connecting: 'Connecting to the brain…', notoken: 'Unlock the portal to ask the brain.', unreachable: 'The brain is not reachable right now. Asking works again when it answers.', asleep: 'The brain is asleep right now. Try again in a minute.', live: '', nobase: 'Live asking is not configured on this door.' };
