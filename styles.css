@@ -1365,6 +1365,11 @@ body.view-3d .node-panel { display: none; }
 .kb-range-btn.active { background: var(--accent-glow); border-color: var(--accent-glow); color: var(--bg); }
 .kb-tile-tick { animation: kb-tile-tick .8s ease; }
 @keyframes kb-tile-tick { 0% { border-color: var(--accent-glow); } 100% { border-color: var(--line-glow); } }
+/* The refinement tile's top accent drifts slowly (background-position only, no layout work). Motion-safe only. */
+@keyframes kb-devaccent { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+@media (prefers-reduced-motion: no-preference) {
+  .kb-tile:has(.kb-devfeed)::before { background: linear-gradient(90deg, var(--kb-steel), var(--accent-glow), var(--kb-steel), var(--accent-glow)); background-size: 200% 100%; opacity: 1; animation: kb-devaccent 7s ease-in-out infinite alternate; }
+}
 .kb-life-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .kb-life-card { flex: 1 1 210px; min-width: 190px; border: 1px solid var(--line-glow); border-radius: 10px; padding: 8px 10px; background: var(--surface-2); cursor: pointer; transition: border-color .18s ease, transform .18s ease; }
 .kb-life-card:hover, .kb-life-card:focus-visible { border-color: var(--accent-glow); outline: none; transform: translateY(-1px); }

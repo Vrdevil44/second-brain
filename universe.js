@@ -3867,14 +3867,20 @@ function matchScore(text, query) {
 
   function sparksTryStart(attempt) {
     if (!S || !S.graph || S.sparks) return;
-    if (sparksReducedMotion()) return; // reduced motion: engine never starts, shimmer stays static
+    if (sparksReducedMotion()) { S.sparksState = 'reduced-motion'; sparksPublishIdle(); return; } // reduced motion: engine never starts, shimmer stays static
     if (S.sparksRetry) { clearTimeout(S.sparksRetry); S.sparksRetry = 0; }
-    const retry = () => {
-      if (attempt < 40) { const s = S; S.sparksRetry = setTimeout(() => { if (S === s) sparksTryStart(attempt + 1); }, 500); }
+    // Never give up: sparksOnData is the only other caller, so a start that missed its window (slow first
+    // digest, background tab, late WebGL) would leave the layer dead until the next data refresh.
+    // 500 ms for the first 20 s, then a slow 5 s heartbeat.
+    const retry = (why) => {
+      S.sparksState = why;
+      sparksPublishIdle();
+      const s = S;
+      S.sparksRetry = setTimeout(() => { if (S === s) sparksTryStart(attempt + 1); }, attempt < 40 ? 500 : 5000);
     };
-    if (!glowTpl && !captureGlowTemplate()) { retry(); return; }
+    if (!glowTpl && !captureGlowTemplate()) { retry('waiting-node-template'); return; }
     const scene = liveScene();
-    if (!scene) { retry(); return; }
+    if (!scene) { retry('waiting-scene'); return; }
     let layer = null;
     try {
       // Constructors come from live objects (the bundle keeps Three.js private).
@@ -3914,9 +3920,10 @@ function matchScore(text, query) {
       layer = { mesh, geo, mat, pos: posA.array, col: colA.array, posA, colA };
     } catch (e) {
       console.error('sparks: trail layer unavailable', e);
-      retry();
+      retry('layer-error: ' + (e && e.message));
       return;
     }
+    S.sparksState = 'running';
     const SP = S.sparks = {
       running: true, layer, scene,
       state: { active: [], bag: [], bagCycle: 0 },
@@ -3944,7 +3951,7 @@ function matchScore(text, query) {
   }
 
   function sparksPublishIdle() {
-    window.__sparks = { active: 0, cap: 0, poolMain: 0, poolCore: 0, poolReach: 0, frameMsEMA: 0,
+    window.__sparks = { state: (S && S.sparksState) || 'stopped', active: 0, cap: 0, poolMain: 0, poolCore: 0, poolReach: 0, frameMsEMA: 0,
       nodesSparked: 0, nodesTotal: 0, coveragePct: 0, cycle: 0, boltsRun: 0, strikesRun: 0,
       eventPackets: eventPacketsFiredTotal };
   }
@@ -3960,6 +3967,7 @@ function matchScore(text, query) {
     document.removeEventListener('visibilitychange', SP.onVis);
     try { SP.scene.remove(SP.layer.mesh); SP.layer.geo.dispose(); SP.layer.mat.dispose(); } catch (e) { /* scene gone */ }
     S.sparks = null;
+    S.sparksState = 'stopped';
     sparksPublishIdle();
     if (!tearDown && S.graph) { // give the plain lines (or the static reduced-motion shimmer) back
       S.graph.linkVisibility(composeLinkVis(S.s5vis, S.s5keys));
@@ -4304,7 +4312,7 @@ function matchScore(text, query) {
       let sparked = 0;
       for (const id of SP.sparked) if (SP.reachable.has(id)) sparked++;
       const total = SP.reachable.size;
-      window.__sparks = { active: act.length, cap: SP.liveCap, poolMain: SP.ctx.main.length,
+      window.__sparks = { state: 'running', active: act.length, cap: SP.liveCap, poolMain: SP.ctx.main.length,
         poolCore: SP.ctx.core.length, poolReach: SP.ctx.reach.length,
         frameMsEMA: Math.round(SP.ema * 10) / 10,
         nodesSparked: sparked, nodesTotal: total, nodesUnreachable: SP.unreachable,
