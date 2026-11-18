@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0c74e48');
-        await loadScriptOnce('universe.js?v=0c74e48');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=22d7cb7');
+        await loadScriptOnce('universe.js?v=22d7cb7');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6324,10 +6324,73 @@ function expandQueryVariants(q, groups) {
       kids);
   }
 
+  // Growth chart model, pure. The Nov 15 to 16 restructure folded
+  // fact-level nodes into one node per thing, so node and relation counts
+  // fall off a cliff and cannot share a scale across it. The first snapshot
+  // at or after the cut is the only break candidate: it counts as the
+  // restructure when its nodes are under half of the previous snapshot's.
+  // Each side of the break is a regime segment with its own min/max over
+  // nodes and edges. Facts series come only from snapshots whose metrics
+  // carry a finite number, so the facts lines start where the record does.
+  function kbChartModel(rows) {
+    const cut = Date.parse('2026-11-16T00:00:00Z');
+    let breakIndex = -1;
+    for (let i = 1; i < rows.length; i++) {
+      const t = Date.parse(rows[i].at);
+      if (Number.isFinite(t) && t >= cut) {
+        if (rows[i].nodes < 0.5 * rows[i - 1].nodes) breakIndex = i;
+        break;
+      }
+    }
+    const span = (start, end, regime) => {
+      let min = Infinity, max = -Infinity;
+      for (let i = start; i <= end; i++) {
+        for (const key of ['nodes', 'edges']) {
+          if (rows[i][key] < min) min = rows[i][key];
+          if (rows[i][key] > max) max = rows[i][key];
+        }
+      }
+      if (min === max) max = min + 1;
+      return { start, end, regime, min, max };
+    };
+    const segments = breakIndex > 0
+      ? [span(0, breakIndex - 1, false), span(breakIndex, rows.length - 1, true)]
+      : [span(0, rows.length - 1, true)];
+    const live = [], total = [];
+    rows.forEach((r, i) => {
+      const mt = r && r.metrics;
+      if (!mt || typeof mt !== 'object') return;
+      if (Number.isFinite(mt.facts_live)) live.push({ i, at: r.at, v: mt.facts_live });
+      if (Number.isFinite(mt.facts_total)) total.push({ i, at: r.at, v: mt.facts_total });
+    });
+    let facts = null;
+    if (live.length || total.length) {
+      const all = live.concat(total);
+      let min = Math.min(...all.map((p) => p.v));
+      let max = Math.max(...all.map((p) => p.v));
+      if (min === max) max = min + 1;
+      let since = all[0].at;
+      for (const p of all) if (p.at < since) since = p.at;
+      facts = { live, total, min, max, since };
+    }
+    const legend = [];
+    const ends = (pts) => ({ from: pts[0].v, to: pts[pts.length - 1].v });
+    if (live.length) legend.push({ key: 'facts_live', label: 'Facts live', ...ends(live) });
+    if (total.length) legend.push({ key: 'facts_total', label: 'Facts in total', ...ends(total) });
+    const reg = segments[segments.length - 1];
+    for (const [key, label] of [['nodes', 'Nodes'], ['edges', 'Relations']]) {
+      legend.push({ key, label, from: rows[reg.start][key], to: rows[reg.end][key] });
+    }
+    return { breakIndex, facts, segments, legend };
+  }
+
   // Growth chart: nodes and relations per snapshot, drawn only from the
-  // validated history series. No smoothing, no invented points; the
-  // caption names the source and explains the restructure drop that is
-  // visible in the series itself.
+  // validated history series. No smoothing, no invented points. A facts
+  // lane sits above the main lane and starts where facts were first
+  // recorded, so it never implies earlier history. The main lane splits
+  // into regime segments at the restructure, each on its own scale, with
+  // a dashed break marker between them; the caption names the source and
+  // explains the drop and the scale restart.
   function kbRenderChart(m) {
     // The slot renders even before the history file lands, so the board
     // does not pop in late and shove the sections below it. While the file
@@ -6357,26 +6420,11 @@ function expandQueryVariants(q, groups) {
       }
       return null;
     }
-    const W = 600, H = 170, PL = 8, PR = 8, PT = 10, PB = 18;
-    // One shared scale for both series: a single min/max across nodes and
-    // edges together. Per-series scales stretched both lines to full
-    // height, so the lines could not be compared and the restructure drop
-    // at the end (nodes 1093 to 121 against an edges range up to 1916)
-    // read as stray dots on the baseline instead of the fall the caption
-    // names. On the shared scale every point sits at its true height.
-    let min = Infinity, max = -Infinity;
-    for (const r of rows) {
-      for (const key of ['nodes', 'edges']) {
-        if (r[key] < min) min = r[key];
-        if (r[key] > max) max = r[key];
-      }
-    }
-    if (max === min) max = min + 1;
-    const series = (key) => rows.map((r, i) => {
-      const x = PL + (i / (rows.length - 1)) * (W - PL - PR);
-      const y = PT + (1 - (r[key] - min) / (max - min)) * (H - PT - PB);
-      return x.toFixed(1) + ',' + y.toFixed(1);
-    }).join(' ');
+    const cm = kbChartModel(rows);
+    const W = 600, PL = 8, PR = 8;
+    const H = 170, PT = 10, PB = 18;
+    const FH = 96, FPT = 8, FPB = 16;
+    const xAt = (i) => PL + (i / (rows.length - 1)) * (W - PL - PR);
     const fmtDay = (iso) => {
       const t = Date.parse(iso);
       return Number.isFinite(t)
@@ -6385,29 +6433,78 @@ function expandQueryVariants(q, groups) {
     };
     const first = rows[0];
     const last = rows[rows.length - 1];
+    // Main lane: each regime segment is drawn on its own scale, so the
+    // restructure drop does not flatten the lines on either side of it.
+    const yMain = (seg, v) => PT + (1 - (v - seg.min) / (seg.max - seg.min)) * (H - PT - PB);
+    const LINES = [['edges', 'stroke:var(--accent)'], ['nodes', 'stroke:var(--text-2)']];
+    const polys = [];
+    for (const seg of cm.segments) {
+      if (seg.end - seg.start < 1) continue;
+      for (const [key, style] of LINES) {
+        const pts = [];
+        for (let i = seg.start; i <= seg.end; i++) {
+          pts.push(xAt(i).toFixed(1) + ',' + yMain(seg, rows[i][key]).toFixed(1));
+        }
+        polys.push(el('polyline', { points: pts.join(' '), fill: 'none', style, 'stroke-width': '1.5' }));
+      }
+    }
     const svg = el('svg', { class: 'kb-chart-svg', viewBox: '0 0 ' + W + ' ' + H, role: 'img',
-      'aria-label': 'Graph growth chart: nodes and relations per snapshot' },
-      el('polyline', { points: series('edges'), fill: 'none', style: 'stroke:var(--accent)', 'stroke-width': '1.5' }),
-      el('polyline', { points: series('nodes'), fill: 'none', style: 'stroke:var(--text-2)', 'stroke-width': '1.5' }));
+      'aria-label': 'Graph growth chart: nodes and relations per snapshot' }, ...polys);
+    if (cm.breakIndex > 0) {
+      const bx = xAt(cm.breakIndex).toFixed(1);
+      svg.append(el('line', { x1: bx, y1: '10', x2: bx, y2: '152', class: 'kb-chart-break',
+          style: 'stroke:var(--text-2)', 'stroke-dasharray': '4 3', 'stroke-width': '1' },
+        el('title', {}, 'Nov 15 to 16 thing-node restructure: the scale restarts here')));
+    }
     // Dots on the real snapshots, each carrying its own values as a
     // tooltip; the last snapshot is marked larger. Nothing interpolated.
-    const dots = (key, colorVar, label) => series(key).split(' ').map((p, i) => {
-      const xy = p.split(',');
-      return el('circle', { cx: xy[0], cy: xy[1], r: i === rows.length - 1 ? '3.5' : '2.2',
-          class: 'kb-chart-dot', style: 'fill:var(' + colorVar + ')' },
-        el('title', {}, fmtDay(rows[i].at) + ': ' + nf.format(rows[i][key]) + ' ' + label));
-    });
-    svg.append(...dots('edges', '--accent', 'relations'), ...dots('nodes', '--text-2', 'nodes'));
+    const dots = [];
+    for (const seg of cm.segments) {
+      for (const [key, colorVar, label] of [['edges', '--accent', 'relations'], ['nodes', '--text-2', 'nodes']]) {
+        for (let i = seg.start; i <= seg.end; i++) {
+          dots.push(el('circle', { cx: xAt(i).toFixed(1), cy: yMain(seg, rows[i][key]).toFixed(1),
+              r: i === rows.length - 1 ? '3.5' : '2.2', class: 'kb-chart-dot', style: 'fill:var(' + colorVar + ')' },
+            el('title', {}, fmtDay(rows[i].at) + ': ' + nf.format(rows[i][key]) + ' ' + label)));
+        }
+      }
+    }
+    svg.append(...dots);
+    // Facts lane: its own short chart above the main one, drawn only from
+    // the snapshots that actually carry the facts metrics.
+    const factsEls = [];
+    if (cm.facts) {
+      const f = cm.facts;
+      const yF = (v) => FPT + (1 - (v - f.min) / (f.max - f.min)) * (FH - FPT - FPB);
+      const FSER = [
+        [f.total, '--kb-blue', 'facts in total'],
+        [f.live, '--kb-green', 'facts live']
+      ];
+      const fpolys = FSER.filter((s) => s[0].length >= 2).map((s) => el('polyline', {
+        points: s[0].map((p) => xAt(p.i).toFixed(1) + ',' + yF(p.v).toFixed(1)).join(' '),
+        fill: 'none', style: 'stroke:var(' + s[1] + ')', 'stroke-width': '1.5' }));
+      const fsvg = el('svg', { class: 'kb-chart-svg', viewBox: '0 0 ' + W + ' ' + FH, role: 'img',
+        'aria-label': 'Graph growth chart: facts per snapshot' }, ...fpolys);
+      for (const [pts, colorVar, label] of FSER) {
+        fsvg.append(...pts.map((p, k) => el('circle', { cx: xAt(p.i).toFixed(1), cy: yF(p.v).toFixed(1),
+            r: k === pts.length - 1 ? '3.5' : '2.2', class: 'kb-chart-dot', style: 'fill:var(' + colorVar + ')' },
+          el('title', {}, fmtDay(p.at) + ': ' + nf.format(p.v) + ' ' + label))));
+      }
+      factsEls.push(el('div', { class: 'kb-dash-line' }, 'Facts recorded from ' + fmtDay(f.since)), fsvg);
+    }
+    const legend = cm.legend.map((e) => e.label + ' ' + (e.from === e.to
+      ? nf.format(e.from)
+      : nf.format(e.from) + ' to ' + nf.format(e.to))).join(' · ');
+    let caption = 'Source: portal/graph-history.jsonl, ' + rows.length + ' snapshots, '
+      + fmtDay(first.at) + ' to ' + fmtDay(last.at)
+      + '. The sharp drop at the end is the Nov 15 to 16 thing-node restructure, when fact-level nodes folded into one node per thing.';
+    if (cm.breakIndex > 0) caption += ' The scale restarts at the restructure mark; heights do not compare across it.';
+    if (cm.facts) caption += ' Facts are recorded from ' + fmtDay(cm.facts.since) + '; the facts lines begin there.';
     return el('div', { class: 'kb-chart', id: 'kb-sec-growth' },
       el('div', { class: 'kb-dash-block-title' }, 'Growth'),
+      ...factsEls,
       svg,
-      el('div', { class: 'kb-chart-legend' },
-        'Nodes ' + nf.format(first.nodes) + ' to ' + nf.format(last.nodes)
-        + ' · Relations ' + nf.format(first.edges) + ' to ' + nf.format(last.edges)),
-      el('div', { class: 'kb-chart-caption' },
-        'Source: portal/graph-history.jsonl, ' + rows.length + ' snapshots, '
-        + fmtDay(first.at) + ' to ' + fmtDay(last.at)
-        + '. The sharp drop at the end is the Nov 15 to 16 thing-node restructure, when fact-level nodes folded into one node per thing.'));
+      el('div', { class: 'kb-chart-legend' }, legend),
+      el('div', { class: 'kb-chart-caption' }, caption));
   }
 
   // Stage information for the drawer: every component of the circuit
