@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f0095d0');
-        await loadScriptOnce('universe.js?v=f0095d0');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=5591203');
+        await loadScriptOnce('universe.js?v=5591203');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
