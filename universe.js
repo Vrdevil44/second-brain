@@ -3464,7 +3464,7 @@ function matchScore(text, query) {
   const SPARKS_TICK_MS = 150;     // scheduler tick
   const SPARKS_TRAIL_SEGS = 12;   // trail segments behind each head
   const SPARKS_BOLT_TRAIL_SEGS = 16; // bolt trails are the longest; buffers are sized for them
-  const SPARKS_TRAIL_WORLD = 60;  // trail length in world units (capped by edge length)
+  const SPARKS_TRAIL_WORLD = 90;  // trail length in world units (capped by edge length)
   const SPARKS_SPEED = 480;       // world units per second
   const SPARKS_CORE_COLOR = '#eaf6ff';
   // Owner order 2026-11-17: every data edge is clearly visible at rest. The old 0.05 / 0.03
@@ -3479,7 +3479,7 @@ function matchScore(text, query) {
   const STRIKE_GLOW_MS = 900;     // a lit network decays over this long (per-entry expiry)
   const LINGER_MS = 3600;         // an edge a spark arrived on / the pointer left lingers this long, easing out
   const LINGER_FINE_STEPS = 20;   // lingering edges fade in 1/20 steps (strikes stay in quarters)
-  const AMBIENT_CAP = 4;          // ambient sparks alive at once (owner 2026-11-17: ~3-6, subtle)
+  const AMBIENT_CAP = 6;         // ambient sparks alive at once (owner 2026-11-17: ~3-6, subtle)
   const HOVER_PACKET_COOLDOWN_MS = 4000; // per-relation quiet period for hover packets (events keep 60 s)
   const BOLT_GAP_MIN_MS = 600;    // storm: one bolt event every 600-1200 ms
   const BOLT_GAP_MAX_MS = 1200;   // (each event fires 2-3 staggered bolts)
@@ -3935,7 +3935,7 @@ function matchScore(text, query) {
       strikeSparks: [], glowEdges: new Map(), glowNodes: new Map(), glowLast: 0, glowDirty: false, haloPrev: new Set(),
       strikeAt: BOLT_GAP_MIN_MS + Math.random() * (BOLT_GAP_MAX_MS - BOLT_GAP_MIN_MS), strikesRun: 0, boltsRun: 0, boltEvents: 0,
       liveCap: SPARKS_MAX_ACTIVE, trailSegs: SPARKS_TRAIL_SEGS,
-      clock: 0, last: 0, ema: 16, slow: 0, fast: 0, raf: 0, timer: 0, shimTimer: 0, pub: 0, pubAt: 0,
+      clock: 0, last: 0, ema: 16, slow: 0, fast: 0, raf: 0, timer: 0, shimTimer: 0, pub: 0, pubAt: 0, lastFrameAt: 0, tickPubAt: 0,
     };
     SP.onVis = () => { if (!document.hidden && SP.running && !SP.raf) { SP.last = 0; SP.raf = requestAnimationFrame(sparksFrame); } };
     document.addEventListener('visibilitychange', SP.onVis);
@@ -3953,7 +3953,8 @@ function matchScore(text, query) {
   function sparksPublishIdle() {
     window.__sparks = { state: (S && S.sparksState) || 'stopped', active: 0, cap: 0, poolMain: 0, poolCore: 0, poolReach: 0, frameMsEMA: 0,
       nodesSparked: 0, nodesTotal: 0, coveragePct: 0, cycle: 0, boltsRun: 0, strikesRun: 0,
-      eventPackets: eventPacketsFiredTotal };
+      eventPackets: eventPacketsFiredTotal,
+      ambientCap: 0, ambientActive: 0, lastFrameAt: 0, ambientGated: false, frameAgeMs: null, hidden: false };
   }
 
   function sparksStop(tearDown) {
@@ -4192,6 +4193,12 @@ function matchScore(text, query) {
       SP.raf = 0;
       SP.last = 0;
       sparksFrame();
+    } else if (!SP.raf) {
+      // Dead-loop recovery: SP.raf === 0 here means sparksFrame disarmed itself on a
+      // hidden frame and the visibilitychange restart was missed. Re-arm once; the
+      // !SP.raf guard makes repeat ticks no-ops until the frame runs.
+      SP.last = 0;
+      SP.raf = requestAnimationFrame(sparksFrame);
     }
     const act = SP.state.active;
     let w = 0; // drop sparks whose edge left the rendered set
@@ -4221,6 +4228,21 @@ function matchScore(text, query) {
       a.legs = 0;
       a.glow = SP.ctx.fresh.has(a.s + '|' + a.t + '|' + a.type) ? 1.6 : 1;
       a.rgb = sparksHexRgb(a.pool === 'core' ? SPARKS_CORE_COLOR : (TYPE_COLORS[a.type] || FALLBACK_LINK));
+    }
+    const tnow = performance.now();
+    if (tnow - (SP.tickPubAt || 0) > 1000) {
+      SP.tickPubAt = tnow;
+      if (window.__sparks && window.__sparks.state === 'running') {
+        Object.assign(window.__sparks, {
+          active: SP.state.active.length,
+          ambientCap: Math.min(AMBIENT_CAP, SP.liveCap),
+          ambientActive: SP.state.active.length,
+          lastFrameAt: SP.lastFrameAt || 0,
+          ambientGated: !!(S.focusSet || S.hovered || S.selected),
+          frameAgeMs: SP.lastFrameAt ? Math.round(tnow - SP.lastFrameAt) : null,
+          hidden: !!document.hidden,
+        });
+      }
     }
   }
 
@@ -4275,6 +4297,7 @@ function matchScore(text, query) {
     const now = performance.now();
     const raw = SP.last ? now - SP.last : 16;
     SP.last = now;
+    SP.lastFrameAt = now;
     const dt = Math.min(raw, 50);
     SP.clock += dt;
     SP.ema += (Math.min(raw, 200) - SP.ema) * 0.05;
@@ -4318,7 +4341,13 @@ function matchScore(text, query) {
         nodesSparked: sparked, nodesTotal: total, nodesUnreachable: SP.unreachable,
         coveragePct: total ? Math.round((sparked / total) * 1000) / 10 : 0,
         cycle: SP.state.bagCycle, boltsRun: SP.boltsRun, strikesRun: SP.strikesRun,
-        eventPackets: eventPacketsFiredTotal };
+        eventPackets: eventPacketsFiredTotal,
+        ambientCap: Math.min(AMBIENT_CAP, SP.liveCap),
+        ambientActive: act.length,
+        lastFrameAt: SP.lastFrameAt,
+        ambientGated: !!(S.focusSet || S.hovered || S.selected),
+        frameAgeMs: 0,
+        hidden: !!document.hidden };
     }
     SP.raf = requestAnimationFrame(sparksFrame);
   }
