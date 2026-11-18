@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=5af863b');
-        await loadScriptOnce('universe.js?v=5af863b');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=47ffef8');
+        await loadScriptOnce('universe.js?v=47ffef8');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6399,7 +6399,45 @@ function expandQueryVariants(q, groups) {
     for (const [key, label] of [['nodes', 'Nodes'], ['edges', 'Relations']]) {
       legend.push({ key, label, from: rows[reg.start][key], to: rows[reg.end][key] });
     }
-    return { breakIndex, facts, segments, legend };
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const fmtShort = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? '' : MONTHS[t.getUTCMonth()] + ' ' + t.getUTCDate(); };
+    const fmtLong = (iso) => { const t = new Date(iso); return Number.isNaN(t.getTime()) ? '' : MONTHS[t.getUTCMonth()] + ' ' + t.getUTCDate() + ', ' + t.getUTCFullYear(); };
+    const ticksFor = (min, max) => { const mid = Math.round((min + max) / 2); return (min < mid && mid < max) ? [min, mid, max] : [min, max]; };
+    const factsTicks = facts ? ticksFor(facts.min, facts.max) : null;
+    const segmentTicks = segments.map((s) => ticksFor(s.min, s.max));
+    let xTicks = [];
+    if (rows.length === 1) {
+      xTicks = [{ i: 0, at: rows[0].at, label: fmtShort(rows[0].at) }];
+    } else if (rows.length > 1) {
+      const n = rows.length;
+      const count = Math.min(5, n);
+      const candidates = [];
+      for (let k = 0; k < count; k++) {
+        const idx = Math.round(k * (n - 1) / (count - 1));
+        if (!candidates.includes(idx)) candidates.push(idx);
+      }
+      const multiYear = new Date(rows[0].at).getUTCFullYear() !== new Date(rows[n - 1].at).getUTCFullYear();
+      const lab = (i) => multiYear ? fmtLong(rows[i].at) : fmtShort(rows[i].at);
+      for (const i of candidates) {
+        const prev = xTicks[xTicks.length - 1];
+        if (prev && prev.label === lab(i)) {
+          if (i !== n - 1) continue;
+          xTicks.pop();
+        }
+        xTicks.push({ i, at: rows[i].at, label: lab(i) });
+      }
+    }
+    const axes = { factsTicks, segmentTicks, xTicks };
+    const NOTE = 'Nov 15 to 16 thing-node restructure: the scale restarts here';
+    const hover = rows.map((r, i) => ({ i, at: r.at, date: fmtLong(r.at),
+      beat: Number.isFinite(r.beat) ? r.beat : null,
+      values: [
+        { key: 'facts_live', label: 'Facts live', color: '--kb-green', value: (r.metrics && Number.isFinite(r.metrics.facts_live)) ? r.metrics.facts_live : null },
+        { key: 'facts_total', label: 'Facts in total', color: '--kb-blue', value: (r.metrics && Number.isFinite(r.metrics.facts_total)) ? r.metrics.facts_total : null },
+        { key: 'nodes', label: 'Nodes', color: '--text-2', value: r.nodes },
+        { key: 'edges', label: 'Relations', color: '--accent', value: r.edges } ],
+      note: (breakIndex > 0 && i >= breakIndex) ? NOTE : null }));
+    return { breakIndex, facts, segments, legend, axes, hover };
   }
 
   // Growth chart: nodes and relations per snapshot, drawn only from the
@@ -6466,7 +6504,10 @@ function expandQueryVariants(q, groups) {
         polys.push(el('polyline', { points: pts.join(' '), fill: 'none', style, 'stroke-width': '1.5' }));
       }
     }
-    const svg = el('svg', { class: 'kb-chart-svg', viewBox: '0 0 ' + W + ' ' + H, role: 'img',
+    const axisText = (x, y, anchor, txt) => el('text', { x: Number(x).toFixed(1), y: Number(y).toFixed(1), 'text-anchor': anchor, class: 'kb-chart-axis', style: 'fill:var(--text-3);font-size:9px' }, txt);
+    const tickLine = (x1, x2, y) => el('line', { x1, y1: Number(y).toFixed(1), x2, y2: Number(y).toFixed(1), class: 'kb-chart-tick', style: 'stroke:var(--text-3);opacity:.55', 'stroke-width': '1' });
+    const anchorFor = (i) => i === 0 ? 'start' : (i === rows.length - 1 ? 'end' : 'middle');
+    const svg = el('svg', { class: 'kb-chart-svg', viewBox: '-48 0 696 ' + H, role: 'img',
       'aria-label': 'Graph growth chart: nodes and relations per snapshot' }, ...polys);
     if (cm.breakIndex > 0) {
       const bx = xAt(cm.breakIndex).toFixed(1);
@@ -6487,9 +6528,17 @@ function expandQueryVariants(q, groups) {
       }
     }
     svg.append(...dots);
+    for (const v of cm.axes.segmentTicks[0]) svg.append(axisText(-6, yMain(cm.segments[0], v) + 3, 'end', nf.format(v)), tickLine(-5, 0, yMain(cm.segments[0], v)));
+    if (cm.segments.length > 1) {
+      const lastSeg = cm.segments[cm.segments.length - 1];
+      for (const v of cm.axes.segmentTicks[cm.segments.length - 1]) svg.append(axisText(606, yMain(lastSeg, v) + 3, 'start', nf.format(v)), tickLine(600, 605, yMain(lastSeg, v)));
+    }
+    for (const t of cm.axes.xTicks) svg.append(axisText(xAt(t.i), H - 4, anchorFor(t.i), t.label));
+    if (cm.breakIndex > 0) svg.append(axisText(xAt(cm.breakIndex) + 5, 20, 'start', 'scale restarts'));
     // Facts lane: its own short chart above the main one, drawn only from
     // the snapshots that actually carry the facts metrics.
     const factsEls = [];
+    let fsvg = null;
     if (cm.facts) {
       const f = cm.facts;
       const yF = (v) => FPT + (1 - (v - f.min) / (f.max - f.min)) * (FH - FPT - FPB);
@@ -6500,13 +6549,15 @@ function expandQueryVariants(q, groups) {
       const fpolys = FSER.filter((s) => s[0].length >= 2).map((s) => el('polyline', {
         points: s[0].map((p) => xAt(p.i).toFixed(1) + ',' + yF(p.v).toFixed(1)).join(' '),
         fill: 'none', style: 'stroke:var(' + s[1] + ')', 'stroke-width': '1.5' }));
-      const fsvg = el('svg', { class: 'kb-chart-svg', viewBox: '0 0 ' + W + ' ' + FH, role: 'img',
+      fsvg = el('svg', { class: 'kb-chart-svg', viewBox: '-48 0 696 ' + FH, role: 'img',
         'aria-label': 'Graph growth chart: facts per snapshot' }, ...fpolys);
       for (const [pts, colorVar, label] of FSER) {
         fsvg.append(...pts.map((p, k) => el('circle', { cx: xAt(p.i).toFixed(1), cy: yF(p.v).toFixed(1),
             r: k === pts.length - 1 ? '3.5' : '2.2', class: 'kb-chart-dot', style: 'fill:var(' + colorVar + ')' },
           el('title', {}, fmtDay(p.at) + ': ' + nf.format(p.v) + ' ' + label))));
       }
+      for (const v of cm.axes.factsTicks) fsvg.append(axisText(-6, yF(v) + 3, 'end', nf.format(v)), tickLine(-5, 0, yF(v)));
+      for (const t of cm.axes.xTicks) fsvg.append(axisText(xAt(t.i), FH - 3, anchorFor(t.i), t.label));
       factsEls.push(el('div', { class: 'kb-dash-line' }, 'Facts recorded from ' + fmtDay(f.since)), fsvg);
     }
     const legend = cm.legend.map((e) => e.label + ' ' + (e.from === e.to
@@ -6517,10 +6568,19 @@ function expandQueryVariants(q, groups) {
       + '. The sharp drop at the end is the Nov 15 to 16 thing-node restructure, when fact-level nodes folded into one node per thing.';
     if (cm.breakIndex > 0) caption += ' The scale restarts at the restructure mark; heights do not compare across it.';
     if (cm.facts) caption += ' Facts are recorded from ' + fmtDay(cm.facts.since) + '; the facts lines begin there.';
+    const tip = el('div', { class: 'kb-chart-tip', style: 'position:absolute;z-index:6;pointer-events:none;display:none;min-width:150px;max-width:230px;background:var(--surface);border:1px solid var(--line-glow);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,0.28);padding:8px 10px;font-size:12px;line-height:1.45' });
+    const wrap = el('div', { class: 'kb-chart-wrap', style: 'position:relative' }, ...factsEls, svg, tip);
+    let tipIndex = -1;
+    const fillTip = (p) => { tip.textContent = ''; tip.append(el('div', { style: 'font-weight:600;margin-bottom:4px' }, p.date + (p.beat != null ? ' · Beat ' + nf.format(p.beat) : ''))); for (const v of p.values) tip.append(el('div', {}, el('span', { style: 'display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(' + v.color + ')' }), v.label + ' ', el('b', {}, v.value == null ? 'no record' : nf.format(v.value)))); if (p.note) tip.append(el('div', { style: 'color:var(--text-3);margin-top:4px' }, p.note)); };
+    const indexAt = (svgEl, ev) => { const rect = svgEl.getBoundingClientRect ? svgEl.getBoundingClientRect() : null; if (!rect || !rect.width || typeof ev.clientX !== 'number') return -1; const ux = -48 + ((ev.clientX - rect.left) / rect.width) * 696; const i = Math.round(((ux - PL) / (W - PL - PR)) * (rows.length - 1)); return Math.max(0, Math.min(rows.length - 1, i)); };
+    const showAt = (svgEl, ev, i) => { fillTip(cm.hover[i]); tip.style.display = 'block'; const wr = wrap.getBoundingClientRect ? wrap.getBoundingClientRect() : null; if (wr && typeof ev.clientY === 'number') { const cw = tip.offsetWidth || 180, ch = tip.offsetHeight || 110; let left = ev.clientX - wr.left + 14; let top = ev.clientY - wr.top + 14; if (left + cw > wr.width) left = ev.clientX - wr.left - cw - 10; if (top + ch > wr.height) top = ev.clientY - wr.top - ch - 10; tip.style.left = Math.max(0, left) + 'px'; tip.style.top = Math.max(0, top) + 'px'; } tipIndex = i; };
+    const hideTip = () => { tip.style.display = 'none'; tipIndex = -1; };
+    const addHit = (svgEl, h) => { svgEl.append(el('rect', { x: '-48', y: '0', width: '696', height: String(h), class: 'kb-chart-hit', style: 'fill:rgba(0,0,0,0)', onpointermove: (ev) => { const i = indexAt(svgEl, ev); if (i >= 0) showAt(svgEl, ev, i); }, onpointerdown: (ev) => { const i = indexAt(svgEl, ev); if (i < 0) return; if (tip.style.display !== 'none' && tipIndex === i) hideTip(); else showAt(svgEl, ev, i); }, onpointerleave: () => hideTip() })); };
+    addHit(svg, H);
+    if (fsvg) addHit(fsvg, FH);
     return el('div', { class: 'kb-chart', id: 'kb-sec-growth' },
       el('div', { class: 'kb-dash-block-title' }, 'Growth'),
-      ...factsEls,
-      svg,
+      wrap,
       el('div', { class: 'kb-chart-legend' }, legend),
       el('div', { class: 'kb-chart-caption' }, caption));
   }
