@@ -2634,7 +2634,9 @@ function matchScore(text, query) {
   // Appearance is driven by st.window (the backend's window block: state
   // off/idle/active). Live-layer meshes are raycast-off by construction,
   // so hover/click run on a screen-space hit test (outwardHit) against the
-  // projected position, and a DOM label rides the node.
+  // projected position. There is no projected label: the hover affordance
+  // lives on the node itself (pointer cursor + mesh highlight), and a tap
+  // or click opens the panel.
   function membraneFx(st) {
     const L = S && S.live;
     if (!L || !st) return;
@@ -2647,13 +2649,6 @@ function matchScore(text, query) {
     mesh.position.set(d.x * R, d.y * R, d.z * R);
     scene.add(mesh);
     const m = L.membrane = { inbox, win: st.window || null, hover: false, proj: null };
-    const label = document.createElement('button');
-    label.type = 'button';
-    label.className = 'outward-node-label';
-    label.textContent = 'Outward window';
-    label.setAttribute('aria-label', 'Open the outward window panel');
-    label.addEventListener('click', () => { if (S.api && typeof S.api.onOutwardClick === 'function') S.api.onOutwardClick(); });
-    m.label = label;
     const outwardHit = (cx, cy) => {
       if (!m.proj) return false;
       const dx = cx - m.proj.x, dy = cy - m.proj.y;
@@ -2662,11 +2657,10 @@ function matchScore(text, query) {
     m.hit = outwardHit;
     const dom = S.graph && typeof S.graph.renderer === 'function' ? S.graph.renderer().domElement : null;
     if (dom) {
-      (dom.parentNode || document.body).appendChild(label);
       let downAt = null;
       dom.addEventListener('pointermove', (ev) => {
         const hit = outwardHit(ev.clientX, ev.clientY);
-        if (hit !== m.hover) { m.hover = hit; dom.style.cursor = hit ? 'pointer' : ''; label.classList.toggle('hover', hit); }
+        if (hit !== m.hover) { m.hover = hit; dom.style.cursor = hit ? 'pointer' : ''; }
       });
       dom.addEventListener('pointerdown', (ev) => { downAt = outwardHit(ev.clientX, ev.clientY) ? [ev.clientX, ev.clientY] : null; });
       dom.addEventListener('pointerup', (ev) => {
@@ -2675,8 +2669,7 @@ function matchScore(text, query) {
         }
         downAt = null;
       });
-    } else {
-      document.body.appendChild(label);
+      dom.addEventListener('pointerleave', () => { if (m.hover) { m.hover = false; dom.style.cursor = ''; } });
     }
     L.fx.push({
       update(now) {
@@ -2686,7 +2679,7 @@ function matchScore(text, query) {
         const state = win && win.state ? win.state : null;
         const pulse = fxReduced() ? 1 : 0.8 + 0.2 * Math.sin((2 * Math.PI * now) / (FX_PULSE_S * 1000));
         mesh.material.color.set(state === 'active' ? '#7fd4a8' : state === 'idle' ? '#8fa3b8' : state === 'off' ? '#5a6672' : STREAK_KNOWLEDGE);
-        mesh.material.opacity = (state === 'active' ? 0.5 : state ? 0.35 : FX_MEMBRANE_ALPHA) * pulse;
+        mesh.material.opacity = Math.min(0.9, (state === 'active' ? 0.5 : state ? 0.35 : FX_MEMBRANE_ALPHA) * pulse * (m.hover ? 1.4 : 1));
         mesh.scale.setScalar((5 + 9 * Math.min(1, m.inbox / 40)) * (m.hover ? 1.25 : 1));
         try {
           const rect = dom ? dom.getBoundingClientRect() : null;
@@ -2695,14 +2688,11 @@ function matchScore(text, query) {
             const x = rect.left + (v.x * 0.5 + 0.5) * rect.width;
             const y = rect.top + (-v.y * 0.5 + 0.5) * rect.height;
             m.proj = { x, y, r: Math.max(16, mesh.scale.x * 2.4) };
-            label.hidden = false;
-            label.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px) translate(-50%,-170%)';
-            label.textContent = 'Outward window' + (state ? ' · ' + state : '');
-          } else { m.proj = null; label.hidden = true; }
+          } else { m.proj = null; }
         } catch (e) { m.proj = null; }
         return true;
       },
-      dispose(sc) { (sc || scene).remove(mesh); mesh.material.dispose(); if (m.label) m.label.remove(); },
+      dispose(sc) { (sc || scene).remove(mesh); mesh.material.dispose(); },
     });
   }
 

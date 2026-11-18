@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=22d7cb7');
-        await loadScriptOnce('universe.js?v=22d7cb7');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c7db6b0');
+        await loadScriptOnce('universe.js?v=c7db6b0');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1487,6 +1487,8 @@ function expandQueryVariants(q, groups) {
   };
   let lastActivitySparkKey = '';
 
+  let outwardBeatSeen = -1;
+
   // The outward panel model (tonight chain item 7): renders exactly the
   // window block the backend reports (backend/window-block.mjs). No block
   // reported yet is an honest "Not reported", never a fabricated state.
@@ -1509,7 +1511,22 @@ function expandQueryVariants(q, groups) {
     const panel = $('#outward-panel');
     if (!panel) return;
     const st = (liveSseState && liveSseState.st) || liveStateFloor || null;
-    const model = outwardPanelModel(st && st.window);
+    renderOutwardPanel(st && st.window);
+    if (st && typeof st.beat === 'number') outwardBeatSeen = st.beat;
+    panel.hidden = false;
+  }
+
+  function outwardOnLiveState(st) {
+    const panel = $('#outward-panel');
+    if (!panel || panel.hidden || !st) return;
+    if (st.window === undefined) return;
+    if (typeof st.beat === 'number' && st.beat < outwardBeatSeen) return;
+    renderOutwardPanel(st.window);
+    if (typeof st.beat === 'number') outwardBeatSeen = st.beat;
+  }
+
+  function renderOutwardPanel(win) {
+    const model = outwardPanelModel(win);
     $('#outward-state').textContent = model.stateWord;
     $('#outward-why').textContent = model.why;
     const pullsEl = $('#outward-pulls');
@@ -1537,7 +1554,6 @@ function expandQueryVariants(q, groups) {
       li.textContent = q.text;
       qEl.appendChild(li);
     });
-    panel.hidden = false;
   }
 
   function storeSseState(b) {
@@ -1547,6 +1563,7 @@ function expandQueryVariants(q, groups) {
     // The KB dashboard's Live Feed updates off the same stream while
     // its panel is open (kbOnLiveState checks and no-ops when closed).
     try { kbOnLiveState(b); } catch (err) {}
+    try { outwardOnLiveState(b); } catch (err) {}
     // Fire the activity packets once per new entry (state re-deliveries
     // must not refire). Doorbell events carry no node or fid, so they
     // honestly earn no packet — inventing an edge for them would be fake.
@@ -1808,6 +1825,7 @@ function expandQueryVariants(q, groups) {
     }
     // Keep-the-max: an older payload (e.g. the baked snapshot) never regresses the floor.
     liveStateFloor = fresherLiveState(liveStateFloor, st);
+    try { outwardOnLiveState(liveStateFloor); } catch (err) {}
     return liveStateFloor || st;
   }
 
