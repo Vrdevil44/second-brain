@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=70c84b3');
-        await loadScriptOnce('universe.js?v=70c84b3');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=570d276');
+        await loadScriptOnce('universe.js?v=570d276');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -7378,6 +7378,7 @@ function expandQueryVariants(q, groups) {
   const QUOTE_TEXT_MAX = 300;
   const QUOTE_CHIP_MAX = 120;
   askBar.thread = [];
+  askBar.liveId = null;
   askBar.pendingTurn = null;
   askBar.quote = null;
 
@@ -7533,9 +7534,11 @@ function expandQueryVariants(q, groups) {
       if (!rec) return;
       if (!rec.id) { rec.id = askBar.legacyThreadId(rec, index); assigned = true; }
       if (!rec.ts) { rec.ts = (Date.now() - total) + index; assigned = true; }
+      if (!rec.archived) { rec.archived = true; assigned = true; }
       askBar.thread.push(rec);
       box.appendChild(askBar.buildArchivedTurn(rec));
     });
+    askBar.liveId = null;
     if (assigned) askBar.saveThread();
   };
 
@@ -7602,6 +7605,10 @@ function expandQueryVariants(q, groups) {
       if (clearedAt > 0) remote = remote.filter((r) => (r.ts || 0) > clearedAt);
       if (clearedAt > 0) local = local.filter((r) => (r.ts || 0) > clearedAt);
       const merged = askBar.mergeThreadRecords(local, remote);
+      merged.forEach((r) => {
+        if (askBar.liveId && r.id === askBar.liveId) r.archived = false;
+        else if (!r.archived) r.archived = true;
+      });
       const changed = merged.length !== askBar.thread.length || merged.some((r, i) => r !== askBar.thread[i]);
       askBar.thread = merged;
       if (changed) {
@@ -7693,12 +7700,13 @@ function expandQueryVariants(q, groups) {
   };
 
   askBar.archiveLive = function () {
-    const last = askBar.thread[askBar.thread.length - 1];
-    if (last && !last.archived) {
-      last.archived = true;
-      $('#askbar-thread').appendChild(askBar.buildArchivedTurn(last));
+    const live = askBar.liveId ? askBar.thread.find((r) => r.id === askBar.liveId) : null;
+    if (live && !live.archived) {
+      live.archived = true;
+      $('#askbar-thread').appendChild(askBar.buildArchivedTurn(live));
       askBar.saveThread();
     }
+    askBar.liveId = null;
     $('#askbar-question').textContent = '';
     $('#askbar-question').hidden = true;
     $('#askbar-answer').textContent = '';
@@ -7736,6 +7744,7 @@ function expandQueryVariants(q, groups) {
     if (pending.quote) rec.quote = pending.quote;
     rec.tags = askBar.turnTags(rec);
     askBar.thread.push(rec);
+    askBar.liveId = rec.id;
     askBar.saveThread();
     return rec;
   };
@@ -7890,6 +7899,7 @@ function expandQueryVariants(q, groups) {
   askBar.clearThread = function () {
     if (askBar.pushTimer) { clearTimeout(askBar.pushTimer); askBar.pushTimer = null; }
     askBar.thread = [];
+    askBar.liveId = null;
     askBar.pendingTurn = null;
     $('#askbar-thread').textContent = '';
     try { localStorage.removeItem(GOD_THREAD_KEY); } catch (e) { /* storage unavailable */ }

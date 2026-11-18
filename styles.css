@@ -2050,6 +2050,27 @@ body:not(.view-3d) .onebar-toggle { bottom: 172px; right: 18px; }
 .askbar-quote-btn { font-size: 0.8em; padding: 2px 0; text-decoration: underline; }
 .askbar-filethis-btn { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; opacity: 0.75; font-size: 0.8em; padding: 2px 0 2px 10px; text-decoration: underline; }
 .askbar-modal-close { background: none; border: 0; color: inherit; cursor: pointer; font: inherit; opacity: 0.75; font-size: 0.8em; padding: 2px 0 2px 10px; text-decoration: underline; }
+.askbar-turn-modal .askbar-actions .askbar-quote-btn,
+.askbar-turn-modal .askbar-actions .askbar-filethis-btn,
+.askbar-turn-modal .askbar-actions .askbar-modal-close {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.85em;
+  padding: 6px 12px;
+  text-decoration: none;
+  opacity: 1;
+}
+.askbar-turn-modal .askbar-actions .askbar-quote-btn:hover,
+.askbar-turn-modal .askbar-actions .askbar-filethis-btn:hover,
+.askbar-turn-modal .askbar-actions .askbar-modal-close:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+.askbar-turn-modal .askbar-actions .askbar-filethis-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .askbar-filethis-btn:disabled { opacity: 0.4; cursor: default; text-decoration: none; }
 .askbar-turn-quote { margin: 0 0 2px; font-size: 0.8em; opacity: 0.7; }
 
