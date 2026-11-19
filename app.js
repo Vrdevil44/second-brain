@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=6ae934c');
-        await loadScriptOnce('universe.js?v=6ae934c');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=7b311a5');
+        await loadScriptOnce('universe.js?v=7b311a5');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -4864,6 +4864,30 @@ function expandQueryVariants(q, groups) {
     const semanticFeed = semRaw ? {
       rows: num(semRaw.rows), facts: num(semRaw.facts), stamp: str(semRaw.stamp), at: str(semRaw.at),
     } : null;
+    const learnRaw = obj(feed && feed.learn);
+    let learnFeed = null;
+    if (learnRaw) {
+      const gp = obj(learnRaw.gaps) || {};
+      const cn = obj(learnRaw.contradictions) || {};
+      const wk = obj(learnRaw.weak) || {};
+      const strs = (x) => Array.isArray(x) ? x.filter((v) => typeof v === 'string' && v) : [];
+      const cnt = (x) => { const o = obj(x); return o ? num(o.count) : null; };
+      learnFeed = {
+        at: str(learnRaw.generated_at),
+        domains: (Array.isArray(gp.domains) ? gp.domains : [])
+          .map((d) => { const o = obj(d); return o && str(o.domain) ? { domain: o.domain, nodes: num(o.nodes), facts: num(o.facts) } : null; })
+          .filter(Boolean),
+        thinDomains: strs(gp.thin_domains),
+        stubCount: cnt(gp.stub_nodes), stubIds: strs(obj(gp.stub_nodes) && gp.stub_nodes.ids),
+        missingCount: cnt(gp.missing_places), missingNames: strs(obj(gp.missing_places) && gp.missing_places.names),
+        supersededCount: cnt(cn.superseded_wired), supersededIds: strs(obj(cn.superseded_wired) && cn.superseded_wired.fact_ids),
+        parkedCount: cnt(cn.parked_questions),
+        lowGravity: Array.isArray(wk.low_gravity)
+          ? wk.low_gravity.map((e) => { const o = obj(e); return o && str(o.id) && num(o.gravity) !== null ? { id: o.id, gravity: o.gravity } : null; }).filter(Boolean)
+          : null,
+        relationlessCount: cnt(wk.relationless_nodes),
+      };
+    }
     const askRaw = obj(feed && feed.ask);
     const askFeed = askRaw ? {
       lastAt: str(askRaw.last_at), lastTotalMs: num(askRaw.last_total_ms),
@@ -5122,7 +5146,7 @@ function expandQueryVariants(q, groups) {
 
     return {
       flow, flowActive, loop, loopStep, facts, relations, health, hasLiveState: !!st,
-      merge, gateFeed, semanticFeed, askFeed, processes, trainingFeed, windowFeed,
+      merge, gateFeed, semanticFeed, learnFeed, askFeed, processes, trainingFeed, windowFeed,
       findings, log, feed: feedEntries, tracker, library, audit: null,
       liveness, stages, history,
     };
@@ -5550,6 +5574,33 @@ function expandQueryVariants(q, groups) {
         .map((name) => el('span', { class: 'kb-dash-chip' }, name))));
     dash.append(section('system', 'System', 'system',
       'Under the floorboards: the engine room gauges, read straight off the machines, nothing estimated.', sysKids));
+
+    const learn = m.learnFeed;
+    if (learn) {
+      const lk = [];
+      if (learn.domains.length) {
+        lk.push(line('Domains: ' + learn.domains.map((d) => d.domain + ' ' + (d.facts === null ? 'unknown' : nf.format(d.facts)) + ' facts').join(' · ')));
+      }
+      if (learn.thinDomains.length) lk.push(line('Thin domains: ' + learn.thinDomains.join(' · ')));
+      if (learn.stubCount !== null) {
+        const heading = line('');
+        heading.textContent = 'Stub nodes: ' + nf.format(learn.stubCount) + (learn.stubIds.length ? ' · ' + learn.stubIds.join(' · ') : '');
+        lk.push(heading);
+      }
+      if (learn.missingCount !== null) {
+        lk.push(line('Places never written up: ' + nf.format(learn.missingCount) + (learn.missingNames.length ? ' · ' + learn.missingNames.join(' · ') : '')));
+      }
+      if (learn.supersededCount !== null) {
+        lk.push(line('Superseded but still wired: ' + nf.format(learn.supersededCount) + (learn.supersededIds.length ? ' · ' + learn.supersededIds.join(' · ') : '')));
+      }
+      if (learn.parkedCount !== null) lk.push(line('Parked questions: ' + nf.format(learn.parkedCount)));
+      if (learn.lowGravity && learn.lowGravity.length) {
+        lk.push(line('Lowest gravity: ' + learn.lowGravity.map((e) => e.id + ' ' + e.gravity.toFixed(2)).join(' · ')));
+      }
+      if (learn.relationlessCount !== null) lk.push(line('Nodes with no relations: ' + nf.format(learn.relationlessCount)));
+      dash.append(section('learn', 'What the brain does not know yet', 'system',
+        'The brain names its own blind spots: thin domains, stub nodes, places never written up, and facts it retired but never unwired. Ids and counts only.', lk));
+    }
 
     // ---- Activity Monitoring: liveness and what the loops have done ----
     if (typeof kbRenderActivity === 'function') {
