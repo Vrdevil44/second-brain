@@ -1,6 +1,6 @@
 {
   "v": 2,
-  "at": "2026-11-19T08:38:20Z",
+  "at": "2026-11-19T12:38:19Z",
   "state": "idle",
   "words": "All synced \u2014 watching for new arrivals",
   "dial": {
@@ -13,13 +13,13 @@
     "peek": []
   },
   "last": {
-    "at": "2026-11-19T08:38:20Z",
+    "at": "2026-11-19T12:38:19Z",
     "captures": 0,
     "bytes": 0,
     "duration_s": 1
   },
   "estimate": {
-    "avg_bps": 65,
+    "avg_bps": 61,
     "eta_words": "-"
   },
   "watch": {
