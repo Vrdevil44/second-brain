@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=181f222');
-        await loadScriptOnce('universe.js?v=181f222');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=d6c81d6');
+        await loadScriptOnce('universe.js?v=d6c81d6');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -6401,7 +6401,15 @@ function expandQueryVariants(q, groups) {
   // Each side of the break is a regime segment with its own min/max over
   // nodes and edges. Facts series come only from snapshots whose metrics
   // carry a finite number, so the facts lines start where the record does.
-  function kbChartModel(rows) {
+  // The last snapshot can lag the live graph by a beat, so when liveCounts
+  // carries finite nodes and edges the last row is reconciled (on a copy) to
+  // them; everything below derives from that reconciled series.
+  function kbChartModel(rowsIn, liveCounts) {
+    let rows = rowsIn;
+    if (rowsIn.length && liveCounts && Number.isFinite(liveCounts.nodes) && Number.isFinite(liveCounts.edges)) {
+      rows = rowsIn.slice();
+      rows[rows.length - 1] = { ...rows[rows.length - 1], nodes: liveCounts.nodes, edges: liveCounts.edges };
+    }
     const cut = Date.parse('2026-11-16T00:00:00Z');
     let breakIndex = -1;
     for (let i = 1; i < rows.length; i++) {
@@ -6488,7 +6496,7 @@ function expandQueryVariants(q, groups) {
         { key: 'nodes', label: 'Nodes', color: '--text-2', value: r.nodes },
         { key: 'edges', label: 'Relations', color: '--accent', value: r.edges } ],
       note: (breakIndex > 0 && i >= breakIndex) ? NOTE : null }));
-    return { breakIndex, facts, segments, legend, axes, hover };
+    return { breakIndex, facts, segments, legend, axes, hover, series: rows };
   }
 
   // Growth chart: nodes and relations per snapshot, drawn only from the
@@ -6527,7 +6535,11 @@ function expandQueryVariants(q, groups) {
       }
       return null;
     }
-    const cm = kbChartModel(rows);
+    const liveCounts = (typeof graphData !== 'undefined' && graphData && Array.isArray(graphData.nodes) && Array.isArray(graphData.edges))
+      ? { nodes: graphData.nodes.length, edges: graphData.edges.length }
+      : null;
+    const cm = kbChartModel(rows, liveCounts);
+    const series = cm.series;
     const W = 600, PL = 8, PR = 8;
     const H = 170, PT = 10, PB = 18;
     const FH = 96, FPT = 8, FPB = 16;
@@ -6550,7 +6562,7 @@ function expandQueryVariants(q, groups) {
       for (const [key, style] of LINES) {
         const pts = [];
         for (let i = seg.start; i <= seg.end; i++) {
-          pts.push(xAt(i).toFixed(1) + ',' + yMain(seg, rows[i][key]).toFixed(1));
+          pts.push(xAt(i).toFixed(1) + ',' + yMain(seg, series[i][key]).toFixed(1));
         }
         polys.push(el('polyline', { points: pts.join(' '), fill: 'none', style, 'stroke-width': '1.5' }));
       }
@@ -6572,9 +6584,9 @@ function expandQueryVariants(q, groups) {
     for (const seg of cm.segments) {
       for (const [key, colorVar, label] of [['edges', '--accent', 'relations'], ['nodes', '--text-2', 'nodes']]) {
         for (let i = seg.start; i <= seg.end; i++) {
-          dots.push(el('circle', { cx: xAt(i).toFixed(1), cy: yMain(seg, rows[i][key]).toFixed(1),
+          dots.push(el('circle', { cx: xAt(i).toFixed(1), cy: yMain(seg, series[i][key]).toFixed(1),
               r: i === rows.length - 1 ? '3.5' : '2.2', class: 'kb-chart-dot', style: 'fill:var(' + colorVar + ')' },
-            el('title', {}, fmtDay(rows[i].at) + ': ' + nf.format(rows[i][key]) + ' ' + label)));
+            el('title', {}, fmtDay(rows[i].at) + ': ' + nf.format(series[i][key]) + ' ' + label)));
         }
       }
     }
