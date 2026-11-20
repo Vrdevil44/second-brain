@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=2ccbcd7');
-        await loadScriptOnce('universe.js?v=2ccbcd7');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=dcefd6f');
+        await loadScriptOnce('universe.js?v=dcefd6f');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -991,6 +991,16 @@ function expandQueryVariants(q, groups) {
       await renderView();
       kickWindowSession();
       loadCensus(hashText); // after first paint; same failure discipline: any failure -> no census
+      // T3.4: the backend is the live source. With a portal token in hand,
+      // converge the just-unlocked graph to the box-served graph now
+      // instead of waiting for the next beat to notice the hash differs.
+      if (portalToken && liveApiBase()) {
+        try {
+          const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(hashText));
+          pageGraphHash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+          convergeGraph(true, pageGraphHash);
+        } catch { /* no hashing available: the beat-driven converge still applies */ }
+      }
       status.textContent = '';
       status.classList.remove('error');
       if (!Array.isArray(data && data.nodes) || !data.nodes.length) status.textContent = 'The graph is empty. Dump something and the nightly organizer will fill it in.';
@@ -1152,6 +1162,16 @@ function expandQueryVariants(q, groups) {
     const b = liveApiBase();
     return b ? b + '/graph-history.jsonl' : '';
   }
+  function devProgressLiveUrl() {
+    const b = liveApiBase();
+    return b ? b + '/dev-progress' : '';
+  }
+
+  // T3.4 source pick: the backend URL wins only in LIVE mode; any other
+  // mode word (or no usable live URL) keeps the baked file.
+  function kbLiveSource(word, liveUrl, bakedName) {
+    return (word === 'LIVE' && typeof liveUrl === 'string' && liveUrl) ? liveUrl : bakedName;
+  }
 
   // Server-side portal auth. The bearer token lives in this variable ONLY
   // (never localStorage/sessionStorage); a reload drops it and the lock screen
@@ -1302,7 +1322,7 @@ function expandQueryVariants(q, groups) {
   // The live-state, stream, history and portal-ask calls stay as they are; they
   // are authenticated here, in one place. Only requests to the live API's gated
   // routes are touched, and the auth call itself is never rewritten.
-  const LIVE_GATED_PATHS = ['/live-state', '/stream', '/graph-history.jsonl', '/api/portal-ask', '/sync-status.json', '/api/window', '/api/gate-queue', '/api/graph-delta', '/graph-delta', '/api/graph', '/graph', '/thread'];
+  const LIVE_GATED_PATHS = ['/live-state', '/stream', '/graph-history.jsonl', '/dev-progress', '/api/portal-ask', '/sync-status.json', '/api/window', '/api/gate-queue', '/api/graph-delta', '/graph-delta', '/api/graph', '/graph', '/thread'];
   function liveGatedPath(url) {
     const base = liveApiBase();
     if (!base || typeof url !== 'string' || url.indexOf(base) !== 0) return '';
@@ -1400,6 +1420,21 @@ function expandQueryVariants(q, groups) {
       init.body = JSON.stringify(body);
     }
     return fetch(base + '/thread-op', init);
+  }
+
+  // One plain GET of a live-backend URL, response text or null. Lives
+  // outside the KB slice on purpose: the slice's D6 discipline forbids
+  // bare fetch there, so the KB loaders call this instead.
+  async function fetchLiveText(url) {
+    if (!url || typeof fetch !== 'function') return null;
+    try {
+      const ctl = new AbortController();
+      const ms = (window.BRAIN_CONFIG && window.BRAIN_CONFIG.LIVE_TIMEOUT_MS) || 2500;
+      const timer = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ms);
+      const res = await fetch(url, { cache: 'no-store', signal: ctl.signal });
+      clearTimeout(timer);
+      return res.ok ? await res.text() : null;
+    } catch (e) { return null; }
   }
 
   async function fetchLiveState() {
@@ -5710,9 +5745,15 @@ function expandQueryVariants(q, groups) {
   async function kbLoadHistory() {
     kbHistoryState = 'loading';
     try {
-      const res = await guardedFetch('graph-history.jsonl', { cache: 'no-store' });
-      if (!res.ok) { kbHistoryState = 'failed'; kbRenderDashboard(); return; }
-      const text = await res.text();
+      const src = (typeof kbLiveSource === 'function' && typeof liveModeWord === 'function' && typeof historyLiveUrl === 'function')
+        ? kbLiveSource(liveModeWord(), historyLiveUrl(), '') : '';
+      let text = null;
+      if (src && typeof fetchLiveText === 'function') text = await fetchLiveText(src);
+      if (text === null) {
+        const res = await guardedFetch('graph-history.jsonl', { cache: 'no-store' });
+        if (!res.ok) { kbHistoryState = 'failed'; kbRenderDashboard(); return; }
+        text = await res.text();
+      }
       const rows = [];
       for (const line of text.split('\n')) {
         if (!line.trim()) continue;
@@ -6041,9 +6082,15 @@ function expandQueryVariants(q, groups) {
     if (kbDevFetching) return;
     kbDevFetching = true;
     try {
-      const res = await guardedFetch('dev-progress.json', { cache: 'no-store' });
-      if (!res.ok) return;
-      const text = await res.text();
+      const src = (typeof kbLiveSource === 'function' && typeof liveModeWord === 'function' && typeof devProgressLiveUrl === 'function')
+        ? kbLiveSource(liveModeWord(), devProgressLiveUrl(), '') : '';
+      let text = null;
+      if (src && typeof fetchLiveText === 'function') text = await fetchLiveText(src);
+      if (text === null) {
+        const res = await guardedFetch('dev-progress.json', { cache: 'no-store' });
+        if (!res.ok) return;
+        text = await res.text();
+      }
       const body = JSON.parse(text);
       const model = kbDevProgressModel(body, kbTodayIso());
       if (!model) return;
