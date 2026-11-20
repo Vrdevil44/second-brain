@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=fddd9db');
-        await loadScriptOnce('universe.js?v=fddd9db');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=2e89b64');
+        await loadScriptOnce('universe.js?v=2e89b64');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -7205,6 +7205,7 @@ function expandQueryVariants(q, groups) {
   const ASK_TIMEOUT_MS = 125000;
   const ASK_UNVERIFIED_WORDS = 'unverified against retrieval';
   const ASK_THINKER_WORDS = "answered by the brain's small local model, from its own notes";
+  const ASK_SELF_STATE_WORDS = "answered by the brain's live state";
   const ASK_REFUSAL_WORDS = {
     empty_question: 'Ask me something first.',
     rate_limited: 'One question per 10 seconds, please.',
@@ -7245,6 +7246,21 @@ function expandQueryVariants(q, groups) {
   askBar.refusalWords = function (body) {
     const key = body && typeof body === 'object' ? String(body.refusal_reason || body.error || '') : '';
     return Object.prototype.hasOwnProperty.call(ASK_REFUSAL_WORDS, key) ? ASK_REFUSAL_WORDS[key] : ASK_FALLBACK_WORDS;
+  };
+
+  // Which thinker labels count as an answer the portal may show: the
+  // local model, or the deterministic self-state path (date, time, beat,
+  // counts, greeting — answered from live state, no model involved).
+  // Any other label (e.g. 'seat') is not shown as an answer. Mirrors
+  // portalThinkerAllowed in backend/server.mjs.
+  askBar.thinkerAnswered = function (thinker) {
+    return thinker === 'localmind' || thinker === 'self_state';
+  };
+
+  // The truthful caption for an answered turn, by who actually answered:
+  // a self-state answer came from live state, not from the local model.
+  askBar.thinkerWords = function (thinker) {
+    return thinker === 'self_state' ? ASK_SELF_STATE_WORDS : ASK_THINKER_WORDS;
   };
 
   askBar.warningWords = function (w) {
@@ -7392,7 +7408,7 @@ function expandQueryVariants(q, groups) {
     const timingLine = askBar.stageLine(body.timings);
     askBar.setCaption('looked at ' + hitRows.length + ' notes' + (earlier > 0 ? ' · answered with ' + earlier + ' earlier turn' + (earlier === 1 ? '' : 's') + ' in mind' : '') + (timingLine ? ' · ' + timingLine : ''), false);
     $('#askbar-answer').textContent = body.answer;
-    $('#askbar-thinker').textContent = ASK_THINKER_WORDS;
+    $('#askbar-thinker').textContent = askBar.thinkerWords(body.thinker);
     const warnList = $('#askbar-warnings');
     warnList.textContent = '';
     (Array.isArray(body.warnings) ? body.warnings : []).forEach((w) => {
@@ -7574,12 +7590,12 @@ function expandQueryVariants(q, groups) {
   // so the same single call clears the lights and nothing is lit.
   askBar.onResponse = function (ok, body) {
     const answered = ok && body && typeof body === 'object' && !body.refusal_reason && !body.error
-      && typeof body.answer === 'string' && body.thinker === 'localmind';
+      && typeof body.answer === 'string' && askBar.thinkerAnswered(body.thinker);
     const plan = askBar.planLighting(answered ? body : null, askBar.graphIds());
     if (answered) {
       askBar.lastAnswer = body;
       askBar.renderAnswer(body, plan);
-      askBar.completeTurn({ kind: 'ask', answer: body.answer, thinker: ASK_THINKER_WORDS, body: body, plan: plan });
+      askBar.completeTurn({ kind: 'ask', answer: body.answer, thinker: askBar.thinkerWords(body.thinker), body: body, plan: plan });
       askBar.clearQuote();
     } else {
       askBar.showWords(askBar.refusalWords(body));
