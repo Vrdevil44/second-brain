@@ -22,7 +22,7 @@
    "id": "g3",
    "label": "Direct live channel — graph, tile and history served box to web in LIVE mode; publish cycle for code releases only",
    "phase": "3",
-   "status": "pending"
+   "status": "running"
   },
   {
    "id": "g4",
