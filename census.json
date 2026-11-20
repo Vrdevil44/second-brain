@@ -1,12 +1,12 @@
 {
-  "generatedFrom": "2629b39b8b152de66c4ff52835965e76cbae58a3f5607ac3a67d8bb26f83cd20",
+  "generatedFrom": "ee87c2ac6ad9c00e61a5da444286490b824464a80dac069288b56fb1cf717c87",
   "facts": {
-    "total": 2459,
-    "active": 1653,
+    "total": 2464,
+    "active": 1656,
     "contested": 0,
-    "superseded": 580,
+    "superseded": 582,
     "dormant": 226,
-    "live": 1653
+    "live": 1656
   },
   "graph": {
     "nodes": 123,
@@ -19,9 +19,9 @@
       "dictionaries": 0,
       "questions": 0
     },
-    "factsAsNodes": 1471,
+    "factsAsNodes": 1474,
     "things": 105,
-    "factsInThings": 1471
+    "factsInThings": 1474
   },
   "droppedEdges": 0
 }
