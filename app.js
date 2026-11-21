@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=0048a5c');
-        await loadScriptOnce('universe.js?v=0048a5c');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=f8617a0');
+        await loadScriptOnce('universe.js?v=f8617a0');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -1529,7 +1529,7 @@ function expandQueryVariants(q, groups) {
   // reported yet is an honest "Not reported", never a fabricated state.
   function outwardPanelModel(win) {
     if (!win || typeof win !== 'object') {
-      return { reported: false, stateWord: 'Not reported', why: 'The brain has not reported its outward window state yet.', pulls: [], questions: [], questionsOpen: 0 };
+      return { reported: false, stateWord: 'Not reported', why: 'The brain has not reported its outward window state yet.', pulls: [], steps: [], questions: [], questionsOpen: 0 };
     }
     const words = { off: 'Off', idle: 'Idle', active: 'Active' };
     return {
@@ -1537,6 +1537,7 @@ function expandQueryVariants(q, groups) {
       stateWord: words[win.state] || 'Unknown',
       why: typeof win.why === 'string' ? win.why : '',
       pulls: Array.isArray(win.pulls) ? win.pulls : [],
+      steps: Array.isArray(win.steps) ? win.steps : [],
       questions: Array.isArray(win.questions) ? win.questions : [],
       questionsOpen: Number.isInteger(win.questions_open) ? win.questions_open : 0,
     };
@@ -1576,6 +1577,24 @@ function expandQueryVariants(q, groups) {
       li.textContent = (p.at ? String(p.at).slice(0, 10) + ' · ' : '') + p.source + (p.outcome ? ' · ' + p.outcome : '');
       pullsEl.appendChild(li);
     });
+    const panel = $('#outward-panel');
+    if (panel) {
+      let stepsEl = renderOutwardPanel._stepsEl || $('#outward-steps');
+      if (!stepsEl) {
+        stepsEl = document.createElement('ul');
+        stepsEl.id = 'outward-steps';
+        stepsEl.className = 'outward-list';
+        panel.appendChild(stepsEl);
+        renderOutwardPanel._stepsEl = stepsEl;
+      }
+      stepsEl.textContent = '';
+      stepsEl.hidden = !model.steps.length;
+      model.steps.forEach((s) => {
+        const li = document.createElement('li');
+        li.textContent = (s.at ? String(s.at).slice(11, 19) + ' · ' : '') + s.step + (s.source ? ' · ' + s.source : '') + (s.detail ? ' · ' + s.detail : '');
+        stepsEl.appendChild(li);
+      });
+    }
     $('#outward-qcount').textContent = model.questionsOpen ? '(' + model.questionsOpen + ' open)' : '';
     const qEl = $('#outward-questions');
     qEl.textContent = '';
@@ -1742,7 +1761,7 @@ function expandQueryVariants(q, groups) {
     else { buildGraph(graphData); graph2dBuilt = true; }
   }
 
-  // Merge a delta into graphData in place. Returns { addedIds, updatedIds }.
+  // Merge a delta into graphData in place. Returns { addedIds, updatedIds, addedEdges }.
   function applyGraphDelta(d) {
     const removedSet = new Set((d.removed_ids || []).map(String));
     const removedEdgeKeys = new Set(d.removed_edge_keys || []);
@@ -1767,16 +1786,18 @@ function expandQueryVariants(q, groups) {
       addedIds.push(String(n.id));
     }
     const keys = new Set(edges.map(edgeKeyOf));
+    const addedEdges = [];
     for (const e of (d.added_edges || [])) {
       if (!e || !have.has(endOf(e, 'source', 'from')) || !have.has(endOf(e, 'target', 'to'))) continue;
       const k = edgeKeyOf(e);
       if (keys.has(k)) continue;
       keys.add(k);
       edges.push(e);
+      addedEdges.push(e);
     }
     graphData.nodes = nodes;
     graphData.edges = edges;
-    return { addedIds: addedIds, updatedIds: updatedIds };
+    return { addedIds: addedIds, updatedIds: updatedIds, addedEdges: addedEdges };
   }
 
   // Best real edge touching a node: prefer non-DOMAIN, then highest numeric strength, else first.
@@ -1809,6 +1830,7 @@ function expandQueryVariants(q, groups) {
       let resultingHash;
       let addedIds = [];
       let updatedIds = [];
+      let addedEdges = [];
       if (delta.resync) {
         const full = await fetchGraphJson('/api/graph');
         if (!full || !Array.isArray(full.nodes)) { scheduleConvergeRetry(silent, targetHash); return; }
@@ -1820,6 +1842,7 @@ function expandQueryVariants(q, groups) {
         const r = applyGraphDelta(delta);
         addedIds = r.addedIds;
         updatedIds = r.updatedIds;
+        addedEdges = r.addedEdges || [];
         resultingHash = delta.hash || targetHash;
       }
       renderGraphMeta();
@@ -1832,12 +1855,19 @@ function expandQueryVariants(q, groups) {
           if (addedIds.length && typeof BrainUniverse.markFresh === 'function') BrainUniverse.markFresh(addedIds);
           if (addedIds.length && typeof BrainUniverse.syncDone === 'function') BrainUniverse.syncDone(addedIds.length, addedIds);
           if (updatedIds.length && typeof BrainUniverse.markFresh === 'function') BrainUniverse.markFresh(updatedIds);
-          if (addedIds.length && typeof BrainUniverse.eventPacket === 'function') {
+          const addedSet = new Set(addedIds);
+          const bornEdges = addedEdges.filter((e) => !addedSet.has(String(e.source ?? e.from)) && !addedSet.has(String(e.target ?? e.to)));
+          if (typeof BrainUniverse.eventPacket === 'function') {
             const packetEdges = addedIds.slice(0, 12).map(strongestEdgeFor).filter(Boolean);
+            const updatedPackets = updatedIds.slice(0, 12).map(strongestEdgeFor).filter(Boolean);
+            const bornPackets = bornEdges.slice(0, 12).map((e) => ({ source: String(e.source ?? e.from), target: String(e.target ?? e.to), type: String(e.type || '') }));
             // the rebuilt universe's spark layer needs a moment to start
             setTimeout(() => {
-              for (const pe of packetEdges) { try { BrainUniverse.eventPacket(pe); } catch (e) {} }
+              for (const pe of packetEdges.concat(updatedPackets, bornPackets)) { try { BrainUniverse.eventPacket(pe); } catch (e) {} }
             }, 700);
+          }
+          if ((updatedIds.length || bornEdges.length) && typeof BrainUniverse.growthEvent === 'function') {
+            BrainUniverse.growthEvent({ updated: updatedIds.length, born: bornEdges.length });
           }
         } catch (e) {}
       }
