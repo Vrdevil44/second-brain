@@ -3078,6 +3078,14 @@ function matchScore(text, query) {
       }
       return true;
     },
+    growthEvent: (counts) => {
+      if (!S) return false;
+      const updated = (counts && counts.updated) | 0;
+      const born = (counts && counts.born) | 0;
+      if (updated > 0) hudActivityLine('growth: ' + updated + ' thickened — facts settled into existing nodes');
+      if (born > 0) hudActivityLine('growth: ' + born + ' new relation' + (born === 1 ? '' : 's') + ' born');
+      return true;
+    },
     getOpacity: (id) => focusOpacity(id),
     getSelectedId: () => (S ? S.selected : null),
     // Force-sync dial: the portal Sync button drives the HUD dial directly
@@ -3469,7 +3477,7 @@ function matchScore(text, query) {
   const STRIKE_GLOW_MS = 900;     // a lit network decays over this long (per-entry expiry)
   const LINGER_MS = 3600;         // an edge a spark arrived on / the pointer left lingers this long, easing out
   const LINGER_FINE_STEPS = 20;   // lingering edges fade in 1/20 steps (strikes stay in quarters)
-  const AMBIENT_CAP = 6;         // ambient sparks alive at once (owner 2026-11-17: ~3-6, subtle)
+  const AMBIENT_CAP = 0;         // ambient lane retired: Phase 7 events-only law (owner 2026-11-19 real-sparks requirement supersedes the 2026-11-17 interim re-enable)
   const HOVER_PACKET_COOLDOWN_MS = 4000; // per-relation quiet period for hover packets (events keep 60 s)
   const BOLT_GAP_MIN_MS = 600;    // storm: one bolt event every 600-1200 ms
   const BOLT_GAP_MAX_MS = 1200;   // (each event fires 2-3 staggered bolts)
@@ -4212,14 +4220,9 @@ function matchScore(text, query) {
       if (!ss[i].dead && SP.keys.has(ss[i].key) && !s5uHidden(ss[i].s) && !s5uHidden(ss[i].t)) ss[w++] = ss[i];
     }
     ss.length = w;
-    // Ambient lane RE-ENABLED on the owner's 2026-11-17 amendment (it was turned off deliberately on
-    // 2026-11-12, the calm target). Simulated ambient flow is approved until real event wiring lands:
-    // a few subtle sparks alive at once (AMBIENT_CAP, not the 180 scheduler max), at most one new per
-    // tick, none while a node is hovered/selected (their pulses own the view). Event packets
-    // (fireEventPacket) are unchanged and ride the separate strike buffer.
+    // Events-only law: the tick never spawns sparks; it only prunes sparks whose edges left the
+    // rendered set or became S5-hidden, and keeps the diagnostics publish honest.
     SP.ctx.fresh = sparksFreshSet();
-    SP.ctx.cap = (S.focusSet || S.hovered || S.selected || sparksDrawnEmpty()) ? 0 : Math.min(AMBIENT_CAP, SP.liveCap, act.length + 1);
-    sparksStep(SP.state, SP.ctx);
     if (SP.state.bagCycle !== SP.cycleSeen) { SP.cycleSeen = SP.state.bagCycle; SP.sparked.clear(); }
     for (const a of act) {
       if (a.t0 !== undefined) continue;
