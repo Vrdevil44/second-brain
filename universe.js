@@ -3688,6 +3688,16 @@ function matchScore(text, query) {
 
   function sparksOn() { return !!(S && S.sparks && S.sparks.running); }
 
+  // Owner rule: a spark is a real update on a real node, so an empty drawn set draws no sparks.
+  // Drawn = S.s5vis intersect current graph node ids (history rows hold ids the graph may not have).
+  function sparksDrawnEmpty() {
+    if (!S || !S.s5vis) return false; // live view: no filter, guard off
+    const nodes = (S.graph && S.graph.graphData) ? S.graph.graphData().nodes : null;
+    if (!nodes) return false;
+    for (const n of nodes) if (S.s5vis.has(String(n.id))) return false;
+    return true;
+  }
+
   // Shimmer shows while sparks run, and statically under reduced motion.
   function sparksShimmerActive() { return sparksOn() || sparksReducedMotion(); }
 
@@ -4193,13 +4203,13 @@ function matchScore(text, query) {
     const act = SP.state.active;
     let w = 0; // drop sparks whose edge left the rendered set
     for (let i = 0; i < act.length; i++) {
-      if (SP.keys.has(act[i].s + '|' + act[i].t + '|' + act[i].type)) act[w++] = act[i];
+      if (SP.keys.has(act[i].s + '|' + act[i].t + '|' + act[i].type) && !s5uHidden(act[i].s) && !s5uHidden(act[i].t)) act[w++] = act[i];
     }
     act.length = w;
     const ss = SP.strikeSparks;
     w = 0;
     for (let i = 0; i < ss.length; i++) {
-      if (!ss[i].dead && SP.keys.has(ss[i].key)) ss[w++] = ss[i];
+      if (!ss[i].dead && SP.keys.has(ss[i].key) && !s5uHidden(ss[i].s) && !s5uHidden(ss[i].t)) ss[w++] = ss[i];
     }
     ss.length = w;
     // Ambient lane RE-ENABLED on the owner's 2026-11-17 amendment (it was turned off deliberately on
@@ -4208,7 +4218,7 @@ function matchScore(text, query) {
     // tick, none while a node is hovered/selected (their pulses own the view). Event packets
     // (fireEventPacket) are unchanged and ride the separate strike buffer.
     SP.ctx.fresh = sparksFreshSet();
-    SP.ctx.cap = (S.focusSet || S.hovered || S.selected) ? 0 : Math.min(AMBIENT_CAP, SP.liveCap, act.length + 1);
+    SP.ctx.cap = (S.focusSet || S.hovered || S.selected || sparksDrawnEmpty()) ? 0 : Math.min(AMBIENT_CAP, SP.liveCap, act.length + 1);
     sparksStep(SP.state, SP.ctx);
     if (SP.state.bagCycle !== SP.cycleSeen) { SP.cycleSeen = SP.state.bagCycle; SP.sparked.clear(); }
     for (const a of act) {
@@ -4301,6 +4311,13 @@ function matchScore(text, query) {
       SP.fast = 0;
       if (SP.trailSegs < SPARKS_TRAIL_SEGS) SP.trailSegs++;
       else if (SP.liveCap < SPARKS_MAX_ACTIVE) SP.liveCap++;
+    }
+    if (sparksDrawnEmpty()) { // nothing drawn: clear sparks already in flight
+      SP.layer.geo.setDrawRange(0, 0);
+      SP.layer.posA.needsUpdate = true;
+      SP.layer.colA.needsUpdate = true;
+      SP.raf = requestAnimationFrame(sparksFrame);
+      return;
     }
     const act = SP.state.active;
     const lifeMs = SPARKS_TICK_MS;
