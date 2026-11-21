@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=dcefd6f');
-        await loadScriptOnce('universe.js?v=dcefd6f');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=cac892b');
+        await loadScriptOnce('universe.js?v=cac892b');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -3990,6 +3990,7 @@ function expandQueryVariants(q, groups) {
     askBar.thread.push(rec);
     const box = $('#askbar-thread');
     if (box) box.appendChild(askBar.buildArchivedTurn(rec));
+    askBar.scrollThreadToLatest();
     askBar.saveThread();
   }
 
@@ -7411,6 +7412,36 @@ function expandQueryVariants(q, groups) {
   askBar.openPanel = function () { $('#askbar-panel').hidden = false; };
   askBar.closePanel = function () { $('#askbar-panel').hidden = true; askBar.userClosedPanel = true; if (askBar.micStop) askBar.micStop(); };
   askBar.sessionRevealed = false;
+  askBar.threadPinned = true;
+  askBar.threadNearBottom = function (box) {
+    if (!box) return true;
+    return (box.scrollHeight - box.scrollTop - box.clientHeight) < 24;
+  };
+  askBar.noteThreadScroll = function () {
+    const box = $('#askbar-thread');
+    if (box) askBar.threadPinned = askBar.threadNearBottom(box);
+  };
+  askBar.wireThreadScroll = function () {
+    const box = $('#askbar-thread');
+    if (!box || box._threadScrollWired) return;
+    box._threadScrollWired = true;
+    box.addEventListener('scroll', () => { askBar.noteThreadScroll(); }, { passive: true });
+  };
+  askBar.scrollThreadToLatest = function (force) {
+    const box = $('#askbar-thread');
+    if (!box) return;
+    if (force || askBar.threadPinned) {
+      box.scrollTop = box.scrollHeight;
+      askBar.threadPinned = true;
+    }
+  };
+  askBar.inputKeydown = function (e) {
+    if (!e || e.key !== 'Enter') return;
+    if (e.shiftKey) return;
+    if (e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    askBar.submit();
+  };
   askBar.userClosedPanel = false;
   askBar.syncPromise = null;
   askBar.revealThread = function (opts) {
@@ -7420,6 +7451,7 @@ function expandQueryVariants(q, groups) {
       if (fromSession && askBar.sessionRevealed) return;
       if (askBar.thread.length > 0) {
         askBar.openPanel();
+        askBar.scrollThreadToLatest(true);
         if (fromSession) askBar.sessionRevealed = true;
       }
     };
@@ -7827,6 +7859,7 @@ function expandQueryVariants(q, groups) {
     try { raw = JSON.parse(localStorage.getItem(GOD_THREAD_KEY) || 'null'); } catch (e) { raw = null; }
     if (!Array.isArray(raw)) return;
     const box = $('#askbar-thread');
+    askBar.wireThreadScroll();
     const stored = raw.slice(-GOD_THREAD_MAX);
     const total = stored.length;
     let assigned = false;
@@ -7841,6 +7874,7 @@ function expandQueryVariants(q, groups) {
     });
     askBar.liveId = null;
     if (assigned) askBar.saveThread();
+    askBar.scrollThreadToLatest(true);
   };
 
   // Deterministic FNV-1a 32-bit hash, so a legacy record gets the same id on every device.
@@ -7917,6 +7951,7 @@ function expandQueryVariants(q, groups) {
         const box = $('#askbar-thread');
         box.textContent = '';
         merged.forEach((r) => { if (r.archived) box.appendChild(askBar.buildArchivedTurn(r)); });
+        askBar.scrollThreadToLatest();
       }
       const remoteIds = {};
       remote.forEach((r) => { if (r.id) remoteIds[r.id] = true; });
@@ -7966,6 +8001,7 @@ function expandQueryVariants(q, groups) {
     if (box) {
       box.textContent = '';
       askBar.thread.forEach((r) => { if (r.archived) box.appendChild(askBar.buildArchivedTurn(r)); });
+      askBar.scrollThreadToLatest();
     }
   };
 
@@ -7998,6 +8034,7 @@ function expandQueryVariants(q, groups) {
     const q = $('#askbar-question');
     q.textContent = askBar.pendingTurn.question;
     q.hidden = !askBar.pendingTurn.question;
+    askBar.scrollThreadToLatest(true);
   };
 
   askBar.archiveLive = function () {
@@ -8005,6 +8042,7 @@ function expandQueryVariants(q, groups) {
     if (live && !live.archived) {
       live.archived = true;
       $('#askbar-thread').appendChild(askBar.buildArchivedTurn(live));
+      askBar.scrollThreadToLatest();
       askBar.saveThread();
     }
     askBar.liveId = null;
@@ -8611,6 +8649,7 @@ function expandQueryVariants(q, groups) {
       fileInput.value = '';
     });
     input.addEventListener('input', () => { askBar.onInput(); askBar.invalidateFileSession(); });
+    input.addEventListener('keydown', (e) => { askBar.inputKeydown(e); });
     input.addEventListener('paste', (e) => {
       const files = e.clipboardData && e.clipboardData.files;
       if (files && files.length) { e.preventDefault(); askBar.addAttachments(files, { clipboard: true }); }

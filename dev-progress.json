@@ -22,19 +22,19 @@
    "id": "g3",
    "label": "Direct live channel — graph, tile and history served box to web in LIVE mode; publish cycle for code releases only",
    "phase": "3",
-   "status": "running"
+   "status": "done"
   },
   {
    "id": "g4",
    "label": "24x7 self-watch — heartbeat actually read; daemon supervisor with self-restart + incident Findings; beat-stall alarm; health.learn block must render on the portal (old registry said done, no block renders — reconciled here, not retired)",
    "phase": "4",
-   "status": "pending"
+   "status": "done"
   },
   {
    "id": "g5",
    "label": "Local model distillation, cycle 1 — behaviour-only LoRA on the winning base (1.5B vs 3B baseline); everyday curriculum; frozen-eval gate; acceptance on the local model alone + tab re-test",
    "phase": "5",
-   "status": "pending"
+   "status": "done"
   },
   {
    "id": "g6",
