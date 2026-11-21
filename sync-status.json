@@ -1,1 +1,31 @@
-{"v": 2, "at": "2026-11-21T04:38:21Z", "state": "idle", "words": "All synced \u2014 watching for new arrivals", "dial": {"percent": 100, "label": "synced"}, "pending": {"captures": 0, "bytes": 0, "peek": []}, "last": {"at": "2026-11-21T04:38:21Z", "captures": 0, "bytes": 0, "duration_s": 1}, "estimate": {"avg_bps": 61, "eta_words": "-"}, "watch": {"mode": "continuous", "check_every": "15m", "trigger": "doorbell + scheduled peek"}, "step": "idle"}
+{
+  "at": "2026-11-21T12:38:54Z",
+  "dial": {
+    "label": "synced",
+    "percent": 100
+  },
+  "estimate": {
+    "avg_bps": 61,
+    "eta_words": "-"
+  },
+  "last": {
+    "at": "2026-11-21T12:38:54Z",
+    "bytes": 0,
+    "captures": 0,
+    "duration_s": 1
+  },
+  "pending": {
+    "bytes": 0,
+    "captures": 0,
+    "peek": []
+  },
+  "state": "idle",
+  "step": "idle",
+  "v": 2,
+  "watch": {
+    "check_every": "15m",
+    "mode": "continuous",
+    "trigger": "doorbell + scheduled peek"
+  },
+  "words": "All synced \u2014 watching for new arrivals"
+}

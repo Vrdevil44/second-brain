@@ -748,8 +748,8 @@ function expandQueryVariants(q, groups) {
     const box = $('#universe');
     if (viewMode === '3d') {
       try {
-        await loadScriptOnce('vendor/3d-force-graph.min.js?v=c40b648');
-        await loadScriptOnce('universe.js?v=c40b648');
+        await loadScriptOnce('vendor/3d-force-graph.min.js?v=838237c');
+        await loadScriptOnce('universe.js?v=838237c');
         if (!window.BrainUniverse) throw new Error('3D module unavailable');
         document.body.classList.add('view-3d');
         box.hidden = false;
@@ -7418,20 +7418,28 @@ function expandQueryVariants(q, groups) {
     return (box.scrollHeight - box.scrollTop - box.clientHeight) < 24;
   };
   askBar.noteThreadScroll = function () {
-    const box = $('#askbar-thread');
-    if (box) askBar.threadPinned = askBar.threadNearBottom(box);
+    const scroller = $('#askbar-panel') || $('#askbar-thread');
+    if (scroller) askBar.threadPinned = askBar.threadNearBottom(scroller);
   };
   askBar.wireThreadScroll = function () {
     const box = $('#askbar-thread');
-    if (!box || box._threadScrollWired) return;
-    box._threadScrollWired = true;
-    box.addEventListener('scroll', () => { askBar.noteThreadScroll(); }, { passive: true });
+    if (box && !box._threadScrollWired) {
+      box._threadScrollWired = true;
+      box.addEventListener('scroll', () => { askBar.noteThreadScroll(); }, { passive: true });
+    }
+    const panel = $('#askbar-panel');
+    if (panel && !panel._panelScrollWired) {
+      panel._panelScrollWired = true;
+      panel.addEventListener('scroll', () => { askBar.noteThreadScroll(); }, { passive: true });
+    }
   };
   askBar.scrollThreadToLatest = function (force) {
     const box = $('#askbar-thread');
-    if (!box) return;
+    const panel = $('#askbar-panel');
+    if (!box && !panel) return;
     if (force || askBar.threadPinned) {
-      box.scrollTop = box.scrollHeight;
+      if (box) box.scrollTop = box.scrollHeight;
+      if (panel) panel.scrollTop = panel.scrollHeight;
       askBar.threadPinned = true;
     }
   };
@@ -8085,6 +8093,9 @@ function expandQueryVariants(q, groups) {
     askBar.thread.push(rec);
     askBar.liveId = rec.id;
     askBar.saveThread();
+    // A completed turn re-pins the view to the latest — guarded by
+    // threadPinned, so a user who scrolled up to read history is not yanked.
+    askBar.scrollThreadToLatest();
     return rec;
   };
 

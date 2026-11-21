@@ -40,7 +40,7 @@
    "id": "g6",
    "label": "Consolidation lifecycle — merge on confirmation: provisional sibling notes auto-merge into the thing's one node; growth without garbage",
    "phase": "6",
-   "status": "pending"
+   "status": "done"
   },
   {
    "id": "g7",
